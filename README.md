@@ -1,8 +1,8 @@
-#Python scripts to facilitate molecular docking
+# Python scripts to facilitate molecular docking
 
 This scripts can be used as standalone applications or by importing the key functions to other software. Scripts should support dask and distributed execution.
 
-###Dependencies
+### Dependencies
 
 from conda
 ```
@@ -15,5 +15,5 @@ pip install vina
 pip install git+https://github.com/forlilab/Meeko@7b1a60d9451eabaeb16b08a4a497cf8e695acc63
 ```
 
-###Licence
+### Licence
 CC BY-NC-SA 4.0
