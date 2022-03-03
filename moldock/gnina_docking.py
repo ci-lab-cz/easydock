@@ -12,7 +12,7 @@ import random, string
 from os import system
 from dask import bag
 from dask.distributed import Lock as daskLock, Client
-from preparation_for_docking import create_db, save_sdf, add_protonation, ligand_preparation, \
+from moldock.preparation_for_docking import create_db, save_sdf, add_protonation, ligand_preparation, \
     fix_pdbqt, pdbqt2molblock, cpu_type, filepath_type
 
 

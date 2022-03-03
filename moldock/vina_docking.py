@@ -14,7 +14,8 @@ import dask
 from dask import bag
 from dask.distributed import Lock as daskLock, Client
 from vina import Vina
-from preparation_for_docking import create_db, save_sdf, add_protonation, ligand_preparation, \
+from moldock import read_input
+from moldock.preparation_for_docking import create_db, save_sdf, add_protonation, ligand_preparation, \
     fix_pdbqt, pdbqt2molblock, cpu_type, filepath_type
 
 
@@ -77,7 +78,7 @@ def process_mol_docking(mol_id, smi, receptor_pdbqt_fname, center, box_size, dbn
     return mol_id
 
 
-def iter_docking(dbname, receptor_pdbqt_fname, protein_setup, protonation, exhaustiveness, seed, n_poses, ncpu, use_dask,
+def iter_docking(dbname, table_name, receptor_pdbqt_fname, protein_setup, protonation, exhaustiveness, seed, n_poses, ncpu, use_dask,
                  add_sql=None):
     '''
     This function should update output db with docked poses and scores. Docked poses should be stored as pdbqt (source)
@@ -109,10 +110,11 @@ def iter_docking(dbname, receptor_pdbqt_fname, protein_setup, protonation, exhau
                            (config['size_x'], config['size_y'], config['size_z'])
         return center, box_size
 
+
     with sqlite3.connect(dbname) as conn:
         cur = conn.cursor()
         smi_field_name = 'smi_protonated' if protonation else 'smi'
-        sql = f"SELECT id, {smi_field_name} FROM mols WHERE docking_score IS NULL"
+        sql = f"SELECT id, {smi_field_name} FROM {table_name} WHERE docking_score IS NULL AND {smi_field_name} != ''"
         if isinstance(add_sql, str) and add_sql:
             sql += f" AND {add_sql}"
         smiles_dict = dict(cur.execute(sql))
@@ -232,7 +234,9 @@ def main():
     setup.flush()
     protonation = list(conn.execute('SELECT protonation FROM setup'))[0][0]
 
-    iter_docking(dbname=args.output, receptor_pdbqt_fname=protein.name, protein_setup=setup.name,
+    table_name = 'mols'
+
+    iter_docking(dbname=args.output, table_name=table_name, receptor_pdbqt_fname=protein.name, protein_setup=setup.name,
                  protonation=protonation, exhaustiveness=args.exhaustiveness, seed=args.seed, n_poses=args.n_poses, ncpu=args.ncpu,
                  use_dask=args.hostfile is not None)
 
