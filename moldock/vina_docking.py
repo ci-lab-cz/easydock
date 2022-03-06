@@ -43,11 +43,11 @@ def docking(ligands_pdbqt_string, receptor_pdbqt_fname, center, box_size, exhaus
 
 
 def process_mol_docking(mol_id, smi, receptor_pdbqt_fname, center, box_size, dbname, seed, exhaustiveness, n_poses, ncpu,
-                        lock=None):
+                        table_name, lock=None):
 
-    def insert_data(dbname, pdbqt_out, score, mol_block, mol_id):
+    def insert_data(dbname, pdbqt_out, score, mol_block, mol_id, table_name='mols'):
         with sqlite3.connect(dbname) as conn:
-            conn.execute("""UPDATE mols
+            conn.execute(f"""UPDATE {table_name}
                                SET pdb_block = ?,
                                    docking_score = ?,
                                    mol_block = ?,
@@ -70,10 +70,10 @@ def process_mol_docking(mol_id, smi, receptor_pdbqt_fname, center, box_size, dbn
 
     if lock is not None:  # multiprocessing
         with lock:
-            insert_data(dbname, pdbqt_out, score, mol_block, mol_id)
+            insert_data(dbname, pdbqt_out, score, mol_block, mol_id, table_name)
     else:  # dask
         with daskLock(dbname):
-            insert_data(dbname, pdbqt_out, score, mol_block, mol_id)
+            insert_data(dbname, pdbqt_out, score, mol_block, mol_id, table_name)
 
     return mol_id
 
@@ -129,7 +129,7 @@ def iter_docking(dbname, table_name, receptor_pdbqt_fname, protein_setup, proton
         for i, mol_id in enumerate(b.starmap(process_mol_docking,
                                              receptor_pdbqt_fname=receptor_pdbqt_fname, center=center,
                                              box_size=box_size, dbname=dbname, exhaustiveness=exhaustiveness,
-                                             seed=seed, n_poses=n_poses, ncpu=1).compute(),
+                                             seed=seed, n_poses=n_poses, table_name=table_name, ncpu=1).compute(),
                                    1):
             if i % 100 == 0:
                 sys.stderr.write(f'\r{i} molecules were docked')
@@ -141,9 +141,9 @@ def iter_docking(dbname, table_name, receptor_pdbqt_fname, protein_setup, proton
         lock = manager.Lock()
         i = 0
         for i, mol_id in enumerate(pool.starmap(partial(process_mol_docking, dbname=dbname,
-                                                        receptor_pdbqt_fname=receptor_pdbqt_fname,
-                                                        center=center, box_size=box_size, seed=seed,
-                                                        exhaustiveness=exhaustiveness, n_poses=n_poses, ncpu=1, lock=lock),
+                                                        receptor_pdbqt_fname=receptor_pdbqt_fname, center=center,
+                                                        box_size=box_size, seed=seed, exhaustiveness=exhaustiveness,
+                                                        table_name=table_name, n_poses=n_poses, ncpu=1, lock=lock),
                                                 smiles_dict.items()), 1):
             if i % 100 == 0:
                 sys.stderr.write(f'\r{i} molecules were docked')
@@ -210,6 +210,8 @@ def main():
                         help='number of cpus.')
     parser.add_argument('-v', '--verbose', action='store_true', default=False,
                         help='print progress to STDERR.')
+    parser.add_argument('--table_name', metavar='STRING', required=False, default='mols', choices=['mols', 'tautomers'],
+                        help='name of table in database.')
 
     args = parser.parse_args()
 
@@ -234,9 +236,9 @@ def main():
     setup.flush()
     protonation = list(conn.execute('SELECT protonation FROM setup'))[0][0]
 
-    table_name = 'mols'
+    # table_name = 'mols'
 
-    iter_docking(dbname=args.output, table_name=table_name, receptor_pdbqt_fname=protein.name, protein_setup=setup.name,
+    iter_docking(dbname=args.output, table_name=args.table_name, receptor_pdbqt_fname=protein.name, protein_setup=setup.name,
                  protonation=protonation, exhaustiveness=args.exhaustiveness, seed=args.seed, n_poses=args.n_poses, ncpu=args.ncpu,
                  use_dask=args.hostfile is not None)
 

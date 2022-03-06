@@ -43,11 +43,11 @@ def get_pdbqt_and_score(ligand_out_fname):
 
 
 def process_mol_docking(mol_id, smi, script_file, tmpdir, receptor_pdbqt_fname, protein_setup, dbname, seed, exhaustiveness,
-                        scoring, addH, cnn_scoring, cnn, ncpu, lock=None):
+                        scoring, addH, cnn_scoring, cnn, ncpu, table_name, lock=None):
 
-    def insert_data(dbname, pdbqt_out, score, mol_block, mol_id):
+    def insert_data(dbname, pdbqt_out, score, mol_block, mol_id, table_name='mols'):
         with sqlite3.connect(dbname) as conn:
-            conn.execute("""UPDATE mols
+            conn.execute(f"""UPDATE {table_name}
                                SET pdb_block = ?,
                                    docking_score = ?,
                                    mol_block = ?,
@@ -80,15 +80,15 @@ def process_mol_docking(mol_id, smi, script_file, tmpdir, receptor_pdbqt_fname, 
 
     if lock is not None:  # multiprocessing
         with lock:
-            insert_data(dbname, pdbqt_out, score, mol_block, mol_id)
+            insert_data(dbname, pdbqt_out, score, mol_block, mol_id, table_name)
     else:  # dask
         with daskLock(dbname):
-            insert_data(dbname, pdbqt_out, score, mol_block, mol_id)
+            insert_data(dbname, pdbqt_out, score, mol_block, mol_id, table_name)
 
     return mol_id
 
 
-def iter_docking(script_file, tmpdir, dbname, receptor_pdbqt_fname, protein_setup, protonation, exhaustiveness, seed,
+def iter_docking(script_file, tmpdir, dbname, table_name, receptor_pdbqt_fname, protein_setup, protonation, exhaustiveness, seed,
                  scoring, addH, cnn_scoring, cnn, ncpu, use_dask, add_sql=None):
     '''
     This function should update output db with docked poses and scores. Docked poses should be stored as pdbqt (source)
@@ -113,7 +113,7 @@ def iter_docking(script_file, tmpdir, dbname, receptor_pdbqt_fname, protein_setu
     with sqlite3.connect(dbname) as conn:
         cur = conn.cursor()
         smi_field_name = 'smi_protonated' if protonation else 'smi'
-        sql = f"SELECT id, {smi_field_name} FROM mols WHERE docking_score IS NULL"
+        sql = f"SELECT id, {smi_field_name} FROM {table_name} WHERE docking_score IS NULL"
         if isinstance(add_sql, str) and add_sql:
             sql += f" AND {add_sql}"
         smiles_dict = dict(cur.execute(sql))
@@ -125,8 +125,8 @@ def iter_docking(script_file, tmpdir, dbname, receptor_pdbqt_fname, protein_setu
         b = bag.from_sequence(smiles_dict.items(), npartitions=len(smiles_dict))
         for i, mol_id in enumerate(b.starmap(process_mol_docking, script_file=script_file, tmpdir=tmpdir,
                                              receptor_pdbqt_fname=receptor_pdbqt_fname, protein_setup=protein_setup,
-                                             dbname=dbname, exhaustiveness=exhaustiveness,
-                                             seed=seed, scoring=scoring, addH=addH, ncpu=1).compute(),
+                                             dbname=dbname, exhaustiveness=exhaustiveness, seed=seed, scoring=scoring,
+                                             cnn_scoring=cnn_scoring, cnn=cnn, addH=addH, table_name=table_name, ncpu=1).compute(),
                                    1):
             if i % 100 == 0:
                 sys.stderr.write(f'\r{i} molecules were docked')
@@ -140,7 +140,7 @@ def iter_docking(script_file, tmpdir, dbname, receptor_pdbqt_fname, protein_setu
         for i, mol_id in enumerate(pool.starmap(partial(process_mol_docking, script_file=script_file, tmpdir=tmpdir, dbname=dbname,
                                                         receptor_pdbqt_fname=receptor_pdbqt_fname, protein_setup=protein_setup,
                                                         seed=seed, exhaustiveness=exhaustiveness, scoring=scoring, addH=addH,
-                                                        cnn_scoring=cnn_scoring, cnn=cnn, ncpu=1, lock=lock),
+                                                        cnn_scoring=cnn_scoring, cnn=cnn, table_name=table_name, ncpu=1, lock=lock),
                                                 smiles_dict.items()), 1):
             if i % 100 == 0:
                 sys.stderr.write(f'\r{i} molecules were docked')
@@ -218,10 +218,11 @@ def main():
                         help='type of CNN scoring.')
     parser.add_argument('--cnn', metavar='STRING', required=False, default='dense_ensemble', choices=['crossdock_default2018_ensemble', 'dense_ensemble'],
                         help='type of built-in model to use.')
+    parser.add_argument('--table_name', metavar='STRING', required=False, default='mols', choices=['mols', 'tautomers'],
+                        help='name of table in database.')
 
 
     args = parser.parse_args()
-
 
     gnina_script_dir = os.path.join(args.install_dir, 'gnina')
 
@@ -250,8 +251,9 @@ def main():
     setup.flush()
     protonation = list(conn.execute('SELECT protonation FROM setup'))[0][0]
 
-    iter_docking(script_file=gnina_script_dir, tmpdir=tmpdir, dbname=args.output, receptor_pdbqt_fname=protein.name, protein_setup=setup.name,
-                 protonation=protonation, exhaustiveness=args.exhaustiveness, seed=args.seed, scoring=args.scoring, addH=args.addH,
+    iter_docking(script_file=gnina_script_dir, tmpdir=tmpdir, dbname=args.output, table_name=args.table_name,
+                 receptor_pdbqt_fname=protein.name, protein_setup=setup.name, protonation=protonation,
+                 exhaustiveness=args.exhaustiveness, seed=args.seed, scoring=args.scoring, addH=args.addH,
                  cnn_scoring=args.cnn_scoring, cnn=args.cnn, ncpu=args.ncpu, use_dask=args.hostfile is not None)
 
     if args.sdf:
