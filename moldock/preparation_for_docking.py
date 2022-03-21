@@ -114,8 +114,13 @@ def ligand_preparation(smi, seed=0):
         AllChem.UFFOptimizeMolecule(m, maxIters=100)
         return Chem.MolToMolBlock(m)
 
-    mol = Chem.MolFromSmiles(smi)
-    mol_conf_sdf = convert2mol(mol)
+    try:
+        mol = Chem.MolFromSmiles(smi)
+        mol_conf_sdf = convert2mol(mol)
+    except TypeError:
+        sys.stderr.write(f'incorrect SMILES {smi} for converting to molecule\n')
+        return None
+
     if mol_conf_sdf is None:
         return None
     mol_conf_pdbqt = mk_prepare_ligand_string(mol_conf_sdf,
