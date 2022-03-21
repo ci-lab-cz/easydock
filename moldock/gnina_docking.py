@@ -113,7 +113,7 @@ def iter_docking(script_file, tmpdir, dbname, table_name, receptor_pdbqt_fname, 
     with sqlite3.connect(dbname) as conn:
         cur = conn.cursor()
         smi_field_name = 'smi_protonated' if protonation else 'smi'
-        sql = f"SELECT id, {smi_field_name} FROM {table_name} WHERE docking_score IS NULL"
+        sql = f"SELECT id, {smi_field_name} FROM {table_name} WHERE docking_score IS NULL AND {smi_field_name} != ''"
         if isinstance(add_sql, str) and add_sql:
             sql += f" AND {add_sql}"
         smiles_dict = dict(cur.execute(sql))
