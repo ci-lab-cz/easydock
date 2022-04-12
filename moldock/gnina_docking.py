@@ -216,9 +216,9 @@ def main():
                         help='type of scoring function.')
     parser.add_argument('--addH', action='store_true', default=False,
                         help='add hydrogens in ligands.')
-    parser.add_argument('--cnn_scoring', metavar='STRING', required=True, default='rescore', choices=['none', 'rescore', 'refinement', 'all'],
+    parser.add_argument('--cnn_scoring', metavar='STRING', default='rescore', choices=['none', 'rescore', 'refinement', 'all'],
                         help='type of CNN scoring.')
-    parser.add_argument('--cnn', metavar='STRING', required=True, default='dense_ensemble', choices=['crossdock_default2018_ensemble', 'dense_ensemble'],
+    parser.add_argument('--cnn', metavar='STRING', default='dense_ensemble', choices=['crossdock_default2018_ensemble', 'dense_ensemble'],
                         help='type of built-in model to use.')
     parser.add_argument('--num_modes', metavar='INTEGER', required=False, type=int, default=9,
                         help='maximum number of binding modes to generate.')
