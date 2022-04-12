@@ -214,9 +214,9 @@ def main():
                         help='type of scoring function.')
     parser.add_argument('--addH', action='store_true', default=False,
                         help='add hydrogens in ligands.')
-    parser.add_argument('--cnn_scoring', metavar='STRING', required=False, default='rescore', choices=['None', 'rescore', 'refinement', 'all'],
+    parser.add_argument('--cnn_scoring', metavar='STRING', required=True, choices=['none', 'rescore', 'refinement', 'all'],
                         help='type of CNN scoring.')
-    parser.add_argument('--cnn', metavar='STRING', required=False, default='dense_ensemble', choices=['crossdock_default2018_ensemble', 'dense_ensemble'],
+    parser.add_argument('--cnn', metavar='STRING', required=True, choices=['crossdock_default2018_ensemble', 'dense_ensemble'],
                         help='type of built-in model to use.')
     parser.add_argument('--table_name', metavar='STRING', required=False, default='mols', choices=['mols', 'tautomers'],
                         help='name of table in database.')
