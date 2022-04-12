@@ -28,41 +28,45 @@ def filepath_type(x):
         return x
 
 
-def add_protonation(conn, table_name='mols'):
+def add_protonation(db_fname):
     '''
     Protonate SMILES by Chemaxon cxcalc utility to get molecule ionization states at pH 7.4.
-    Parse output and update db.
+    Parse console output and update db.
     :param conn:
-    :param table_name:
     :return:
     '''
-    cur = conn.cursor()
-    smiles_list = list(cur.execute(f"SELECT smi, id FROM {table_name} WHERE docking_score is NULL AND "
-                                   f"smi_protonated is NULL"))
-    if not smiles_list:
-        sys.stderr.write('no molecules to protonate in database\n')
-        return
+    conn = sqlite3.connect(db_fname)
 
-    smiles, mol_ids = zip(*smiles_list)
+    try:
+        cur = conn.cursor()
+        protonate, done = list(cur.execute('SELECT protonation, protonation_done FROM setup'))[0]
 
-    with tempfile.NamedTemporaryFile(suffix='.smi', mode='w', encoding='utf-8') as tmp:
-        fd, output = tempfile.mkstemp()   # use output file to avoid overflow of stdout is extreme cases
-        try:
-            tmp.writelines(['\n'.join(smiles)])
-            tmp.flush()
-            cmd_run = f"cxcalc majormicrospecies -H 7.4 -f smiles -M -K '{tmp.name}' > '{output}'"
-            subprocess.call(cmd_run, shell=True)
-            smiles_protonated = open(output).read().split('\n')
-        finally:
-            os.remove(output)
+        if protonate and not done:
+            smiles_dict = cur.execute('SELECT smi, id FROM mols')
+            if not smiles_dict:
+                sys.stderr.write(f'no molecules to protonate')
+                return
 
-    for mol_id, smi_protonated in zip(mol_ids, smiles_protonated):
-        cur.execute(f"""UPDATE {table_name}
-                       SET smi_protonated = ?
-                       WHERE
-                           id = ?
-                    """, (Chem.MolToSmiles(Chem.MolFromSmiles(smi_protonated), isomericSmiles=True), mol_id))
-    conn.commit()
+            smiles, mol_ids = zip(*smiles_dict)
+
+            with tempfile.NamedTemporaryFile(suffix='.smi', mode='w', encoding='utf-8') as tmp:
+                tmp.writelines(['\n'.join(smiles)])
+                tmp.seek(0)
+                cmd_run = f"cxcalc majormicrospecies -H 7.4 -f smiles -M -K '{tmp.name}'"
+                smiles_protonated = subprocess.check_output(cmd_run, shell=True).decode().split()
+
+            for mol_id, smi_protonated in zip(mol_ids, smiles_protonated):
+                cur.execute("""UPDATE mols
+                               SET smi_protonated = ?
+                               WHERE
+                                   id = ?
+                            """, (Chem.MolToSmiles(Chem.MolFromSmiles(smi_protonated), isomericSmiles=True), mol_id))
+            conn.commit()
+            cur.execute('UPDATE setup SET protonation_done = 1')
+            conn.commit()
+
+    finally:
+        conn.close()
 
 
 def mk_prepare_ligand_string(molecule_string, build_macrocycle=True, add_water=False, merge_hydrogen=True,

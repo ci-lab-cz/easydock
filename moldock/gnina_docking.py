@@ -28,12 +28,12 @@ def save_pdbqt_to_file(pdbqt, mol_id, dir_name):
 
 
 def docking(script_file, ligand_pdbqt_file, ligand_out_fname, receptor_pdbqt_fname, protein_setup, exhaustiveness, seed,
-            scoring, addH, cnn_scoring, cnn, ncpu):
+            scoring, addH, cnn_scoring, cnn, num_modes, ncpu):
 
     system(
         f'{script_file} --receptor {receptor_pdbqt_fname} --ligand {ligand_pdbqt_file} --out {ligand_out_fname} '
         f'--config {protein_setup} --exhaustiveness {exhaustiveness} --seed {seed} --scoring {scoring} --cpu {ncpu} '
-        f'--addH {addH} --cnn_scoring {cnn_scoring} --cnn {cnn}')
+        f'--addH {addH} --cnn_scoring {cnn_scoring} --cnn {cnn} --num_modes {num_modes}')
 
 
 def get_pdbqt_and_score(ligand_out_fname):
@@ -241,12 +241,14 @@ def main():
         dask.config.set({'distributed.scheduler.allowed-failures': 30})
         dask_client = Client(open(args.hostfile).readline().strip() + ':8786')
 
+
     if not os.path.isfile(args.output):
         create_db(args.output, args.input, not args.no_protonation, args.protein, args.protein_setup, args.prefix)
 
     add_protonation(args.output)
 
     conn = sqlite3.connect(args.output)
+
     protein = tempfile.NamedTemporaryFile(suffix='.pdbqt', mode='w', encoding='utf-8')
     protein.write(list(conn.execute('SELECT protein_pdbqt FROM setup'))[0][0])
     protein.flush()
