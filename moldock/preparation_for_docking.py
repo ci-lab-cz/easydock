@@ -4,6 +4,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import traceback
 from multiprocessing import Pool, Manager, cpu_count
 
 
@@ -84,7 +85,12 @@ def mk_prepare_ligand_string(molecule_string, build_macrocycle=True, add_water=F
                                      hydrate=add_water, amide_rigid=amide_rigid)
                                      #additional parametrs
                                      #rigidify_bonds_smarts=[], rigidify_bonds_indices=[])
-    preparator.prepare(mol)
+    try:
+        preparator.prepare(mol)
+    except Exception:
+        sys.stderr.write('Warning. Incorrect mol object to convert to pdbqt. Continue. \n')
+        traceback.print_exc()
+        return None
     if verbose:
         preparator.show_setup()
 
