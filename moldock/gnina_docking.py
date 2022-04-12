@@ -211,16 +211,16 @@ def main():
                         help='print progress to STDERR.')
     parser.add_argument('--install_dir', metavar='DIRNAME', type=filepath_type, required=True,
                         help='path to the dir with installed GNINA.')
-    parser.add_argument('--scoring', metavar='STRING', required=True,
+    parser.add_argument('--scoring', metavar='STRING', required=True, default='default',
                         choices=['ad4_scoring', 'default', 'dkoes_fast', 'dkoes_scoring', 'dkoes_scoring_old', 'vina', 'vinardo'],
                         help='type of scoring function.')
     parser.add_argument('--addH', action='store_true', default=False,
                         help='add hydrogens in ligands.')
-    parser.add_argument('--cnn_scoring', metavar='STRING', required=True, choices=['none', 'rescore', 'refinement', 'all'],
+    parser.add_argument('--cnn_scoring', metavar='STRING', required=True, default='rescore', choices=['none', 'rescore', 'refinement', 'all'],
                         help='type of CNN scoring.')
-    parser.add_argument('--cnn', metavar='STRING', required=True, choices=['crossdock_default2018_ensemble', 'dense_ensemble'],
+    parser.add_argument('--cnn', metavar='STRING', required=True, default='dense_ensemble', choices=['crossdock_default2018_ensemble', 'dense_ensemble'],
                         help='type of built-in model to use.')
-    parser.add_argument('--num_modes', metavar='INTEGER', required=False, default=9,
+    parser.add_argument('--num_modes', metavar='INTEGER', required=False, type=int, default=9,
                         help='maximum number of binding modes to generate.')
     parser.add_argument('--table_name', metavar='STRING', required=False, default='mols', choices=['mols', 'tautomers'],
                         help='name of table in database.')
