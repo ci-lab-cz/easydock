@@ -27,5 +27,6 @@ setuptools.setup(
         'rdkit': ['rdkit>=2017.09'],
     },
     entry_points={'console_scripts':
-                      ['vina_dock = moldock.vina_dock:main']}
+                      ['vina_dock = moldock.vina_dock:main',
+                       'gnina_dock = moldock.gnina_dock:main']}
 )
