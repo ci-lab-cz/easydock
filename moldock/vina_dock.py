@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# authors: Aleksandra Nikonenko, Pavel Polishchuk
+# authors: Aleksandra Nikonenko, Guzel Minibaeva, Pavel Polishchuk
 
 import argparse
 import os
