@@ -36,9 +36,9 @@ def docking(ligands_pdbqt_string, receptor_pdbqt_fname, center, box_size, exhaus
     v.set_receptor(rigid_pdbqt_filename=receptor_pdbqt_fname)
     v.set_ligand_from_string(ligands_pdbqt_string)
     v.compute_vina_maps(center=center, box_size=box_size, spacing=1)
-    v.dock(exhaustiveness=exhaustiveness, n_poses=n_poses)
-
-    return v.energies(n_poses=1)[0][0], v.poses(n_poses=1)
+    v.dock(exhaustiveness=exhaustiveness, n_poses=50 if n_poses < 50 else n_poses) #number of poses fixed for optimal search,
+                                                                                   #but if a user want to generate more poses, the number will be changed
+    return v.energies(n_poses=n_poses)[0][0], v.poses(n_poses=n_poses)
 
 
 def process_mol_docking(mol_id, smi, receptor_pdbqt_fname, center, box_size, dbname, seed, exhaustiveness, n_poses, ncpu,
