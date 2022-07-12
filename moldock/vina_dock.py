@@ -36,9 +36,9 @@ def docking(ligands_pdbqt_string, receptor_pdbqt_fname, center, box_size, exhaus
     v.set_receptor(rigid_pdbqt_filename=receptor_pdbqt_fname)
     v.set_ligand_from_string(ligands_pdbqt_string)
     v.compute_vina_maps(center=center, box_size=box_size, spacing=1)
-    v.dock(exhaustiveness=exhaustiveness, n_poses=n_poses)
+    v.dock(exhaustiveness=exhaustiveness, n_poses=50) #number of poses fixed for optimal search
 
-    return v.energies(n_poses=1)[0][0], v.poses(n_poses=1)
+    return v.energies(n_poses=n_poses)[0][0], v.poses(n_poses=n_poses)
 
 
 def process_mol_docking(mol_id, smi, receptor_pdbqt_fname, center, box_size, dbname, seed, exhaustiveness, n_poses, ncpu,
@@ -213,6 +213,9 @@ def main():
                         help='name of table in database.')
 
     args = parser.parse_args()
+
+    if args.n_poses > 50:
+        raise ValueError(f'Incorrect number of poses, should saving less than or equal 50 poses\n')
 
     if args.tmpdir is not None:
         tempfile.tempdir = args.tmpdir
