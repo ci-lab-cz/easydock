@@ -36,8 +36,8 @@ def docking(ligands_pdbqt_string, receptor_pdbqt_fname, center, box_size, exhaus
     v.set_receptor(rigid_pdbqt_filename=receptor_pdbqt_fname)
     v.set_ligand_from_string(ligands_pdbqt_string)
     v.compute_vina_maps(center=center, box_size=box_size, spacing=1)
-    v.dock(exhaustiveness=exhaustiveness, n_poses=50) #number of poses fixed for optimal search
-
+    v.dock(exhaustiveness=exhaustiveness, n_poses=50 if n_poses < 50 else n_poses) #number of poses fixed for optimal search,
+                                                                                   #but if user want to generate more poses, number will change
     return v.energies(n_poses=n_poses)[0][0], v.poses(n_poses=n_poses)
 
 
@@ -214,8 +214,6 @@ def main():
 
     args = parser.parse_args()
 
-    if args.n_poses > 50:
-        raise ValueError(f'Incorrect number of poses, should saving less than or equal 50 poses\n')
 
     if args.tmpdir is not None:
         tempfile.tempdir = args.tmpdir
