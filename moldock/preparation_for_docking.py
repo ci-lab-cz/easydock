@@ -124,10 +124,9 @@ def ligand_preparation(smi, seed=0):
         AllChem.UFFOptimizeMolecule(m, maxIters=100)
         # checking for the presence of boron in the molecule
         idx_boron = [idx for idx, atom in enumerate(m.GetAtoms()) if atom.GetAtomicNum() == 5]
-        if idx_boron:
-            for id_ in idx_boron:
-                m.GetAtomWithIdx(id_).SetAtomicNum(6)
-                m.UpdatePropertyCache()
+        for id_ in idx_boron:
+            m.GetAtomWithIdx(id_).SetAtomicNum(6)
+            # m.UpdatePropertyCache() # uncomment if necessary
         return Chem.MolToMolBlock(m)
 
     try:
@@ -171,8 +170,7 @@ def fix_pdbqt(pdbqt_block):
     return '\n'.join(pdbqt_fixed)
 
 
-def assign_bonds_from_template(template_smi, mol):
-    template_mol = Chem.MolFromSmiles(template_smi)
+def assign_bonds_from_template(template_mol, mol):
     # explicit hydrogends are removed from carbon atoms (chiral hydrogens) to match pdbqt mol,
     # e.g. [NH3+][C@H](C)C(=O)[O-]
     template_mol = Chem.AddHs(template_mol, explicitOnly=True,
@@ -184,37 +182,35 @@ def assign_bonds_from_template(template_smi, mol):
     return mol
 
 
-def boron_reduction(smi_B, mol):
-    mol_B = Chem.MolFromSmiles(smi_B)
+def boron_reduction(mol_B, mol):
     idx_boron = [idx for idx, atom in enumerate(mol_B.GetAtoms()) if atom.GetAtomicNum() == 5]
     for id_ in idx_boron:
         mol_B.GetAtomWithIdx(id_).SetAtomicNum(6)
-    smi_new = Chem.MolToSmiles(mol_B)
-    mol = assign_bonds_from_template(smi_new, mol)
+    mol = assign_bonds_from_template(mol_B, mol)
 
     mcs = rdFMCS.FindMCS((mol_B, mol)).queryMol
     mcs1, mcs2 = mol_B.GetSubstructMatches(mcs), mol.GetSubstructMatches(mcs)
     if len(mcs1) > 1 or len(mcs2) > 1:
         sys.stderr.write(f'MCS has multiple mappings in one of these structures: smi with boron'
-                         f'{smi_B} or smi without boron {smi_new}.\n')
+                         f'{Chem.MolToSmiles(mol)} or smi without boron {Chem.MolToSmiles(mol_B)}.\n')
     mcs1, mcs2 = mcs1[0], mcs2[0]
     matched_ids = {i: j for i, j in zip(mcs1, mcs2)}
     for id_ in idx_boron:
         mol.GetAtomWithIdx(matched_ids[id_]).SetAtomicNum(5)
-        mol.UpdatePropertyCache()
+        #mol.UpdatePropertyCache() # uncomment if necessary
     return mol
 
 
 def pdbqt2molblock(pdbqt_block, smi, mol_id):
     mol_block = None
     mol = Chem.MolFromPDBBlock('\n'.join([i[:66] for i in pdbqt_block.split('MODEL')[1].split('\n')]), removeHs=False, sanitize=False)
+    template_mol = Chem.MolFromSmiles(smi)
     if mol:
         try:
-            if 'B' in [atom.GetSymbol() for atom in Chem.MolFromSmiles(smi).GetAtoms()]:
-                print('yes')
-                mol = boron_reduction(smi, mol)
+            if 5 in [atom.GetAtomicNum() for atom in template_mol.GetAtoms()]:
+                mol = boron_reduction(template_mol, mol)
             else:
-                mol = assign_bonds_from_template(smi, mol)
+                mol = assign_bonds_from_template(template_mol, mol)
             mol.SetProp('_Name', mol_id)
             mol_block = Chem.MolToMolBlock(mol)
         except Exception:
