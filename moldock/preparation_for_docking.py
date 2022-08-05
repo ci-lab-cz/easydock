@@ -122,6 +122,11 @@ def ligand_preparation(smi, seed=0):
             if conf_stat == -1:
                 return None
         AllChem.UFFOptimizeMolecule(m, maxIters=100)
+        # checking for the presence of boron in the molecule
+        idx_boron = [idx for idx, atom in enumerate(m.GetAtoms()) if atom.GetAtomicNum() == 5]
+        for id_ in idx_boron:
+            m.GetAtomWithIdx(id_).SetAtomicNum(6)
+            # m.UpdatePropertyCache() # uncomment if necessary
         return Chem.MolToMolBlock(m)
 
     try:
@@ -165,20 +170,45 @@ def fix_pdbqt(pdbqt_block):
     return '\n'.join(pdbqt_fixed)
 
 
+def assign_bonds_from_template(template_mol, mol):
+    # explicit hydrogends are removed from carbon atoms (chiral hydrogens) to match pdbqt mol,
+    # e.g. [NH3+][C@H](C)C(=O)[O-]
+    template_mol = Chem.AddHs(template_mol, explicitOnly=True,
+                              onlyOnAtoms=[a.GetIdx() for a in template_mol.GetAtoms() if
+                                           a.GetAtomicNum() != 6])
+    mol = AllChem.AssignBondOrdersFromTemplate(template_mol, mol)
+    Chem.SanitizeMol(mol)
+    Chem.AssignStereochemistry(mol, cleanIt=True, force=True, flagPossibleStereoCenters=True)
+    return mol
+
+
+def boron_reduction(mol_B, mol):
+    idx_boron = [idx for idx, atom in enumerate(mol_B.GetAtoms()) if atom.GetAtomicNum() == 5]
+    for id_ in idx_boron:
+        mol_B.GetAtomWithIdx(id_).SetAtomicNum(6)
+    mol = assign_bonds_from_template(mol_B, mol)
+    idx = mol.GetSubstructMatches(mol_B)
+    mol_idx_boron = [tuple(sorted(ids[i] for i in idx_boron)) for ids in idx]
+    mol_idx_boron = list(set(mol_idx_boron)) # retrieve all ids matched possible boron atom positions
+    if len(mol_idx_boron) == 1: # check whether this set of ids is unique
+        for i in mol_idx_boron[0]:
+            mol.GetAtomWithIdx(i).SetAtomicNum(5)
+    else: #if not - several equivalent mappings exist
+        sys.stderr.write('different mappings was detected. The structure cannot be recostructed automatically.')
+        return None
+    return mol
+
+
 def pdbqt2molblock(pdbqt_block, smi, mol_id):
     mol_block = None
     mol = Chem.MolFromPDBBlock('\n'.join([i[:66] for i in pdbqt_block.split('MODEL')[1].split('\n')]), removeHs=False, sanitize=False)
+    template_mol = Chem.MolFromSmiles(smi)
     if mol:
         try:
-            template_mol = Chem.MolFromSmiles(smi)
-            # explicit hydrogends are removed from carbon atoms (chiral hydrogens) to match pdbqt mol,
-            # e.g. [NH3+][C@H](C)C(=O)[O-]
-            template_mol = Chem.AddHs(template_mol, explicitOnly=True,
-                                      onlyOnAtoms=[a.GetIdx() for a in template_mol.GetAtoms() if
-                                                   a.GetAtomicNum() != 6])
-            mol = AllChem.AssignBondOrdersFromTemplate(template_mol, mol)
-            Chem.SanitizeMol(mol)
-            Chem.AssignStereochemistry(mol, cleanIt=True, force=True, flagPossibleStereoCenters=True)
+            if 5 in [atom.GetAtomicNum() for atom in template_mol.GetAtoms()]:
+                mol = boron_reduction(template_mol, mol)
+            else:
+                mol = assign_bonds_from_template(template_mol, mol)
             mol.SetProp('_Name', mol_id)
             mol_block = Chem.MolToMolBlock(mol)
         except Exception:
