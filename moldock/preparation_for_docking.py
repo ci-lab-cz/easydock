@@ -187,17 +187,14 @@ def boron_reduction(mol_B, mol):
     for id_ in idx_boron:
         mol_B.GetAtomWithIdx(id_).SetAtomicNum(6)
     mol = assign_bonds_from_template(mol_B, mol)
-
-    mcs = rdFMCS.FindMCS((mol_B, mol)).queryMol
-    mcs1, mcs2 = mol_B.GetSubstructMatches(mcs), mol.GetSubstructMatches(mcs)
-    if len(mcs1) > 1 or len(mcs2) > 1:
-        sys.stderr.write(f'MCS has multiple mappings in one of these structures: smi with boron'
-                         f'{Chem.MolToSmiles(mol)} or smi without boron {Chem.MolToSmiles(mol_B)}.\n')
-    mcs1, mcs2 = mcs1[0], mcs2[0]
-    matched_ids = {i: j for i, j in zip(mcs1, mcs2)}
-    for id_ in idx_boron:
-        mol.GetAtomWithIdx(matched_ids[id_]).SetAtomicNum(5)
-        #mol.UpdatePropertyCache() # uncomment if necessary
+    idx = mol.GetSubstructMatches(mol_B)
+    mol_idx_boron = [tuple(sorted(ids[i] for i in idx_boron)) for ids in idx]
+    mol_idx_boron = list(set(mol_idx_boron))
+    if len(mol_idx_boron) == 1:
+        for i in mol_idx_boron[0]:
+            mol.GetAtomWithIdx(i).SetAtomicNum(5)
+    else:
+        print('different mappings was detected. The structure cannot be recostructed automatically.')
     return mol
 
 
