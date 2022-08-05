@@ -12,7 +12,7 @@ from meeko import MoleculePreparation
 from meeko import obutils
 from openbabel import openbabel as ob
 from rdkit import Chem
-from rdkit.Chem import AllChem, rdFMCS
+from rdkit.Chem import AllChem
 from moldock import read_input
 # from read_input import read_input
 
@@ -189,12 +189,13 @@ def boron_reduction(mol_B, mol):
     mol = assign_bonds_from_template(mol_B, mol)
     idx = mol.GetSubstructMatches(mol_B)
     mol_idx_boron = [tuple(sorted(ids[i] for i in idx_boron)) for ids in idx]
-    mol_idx_boron = list(set(mol_idx_boron))
-    if len(mol_idx_boron) == 1:
+    mol_idx_boron = list(set(mol_idx_boron)) # retrieve all ids matched possible boron atom positions
+    if len(mol_idx_boron) == 1: # check whether this set of ids is unique
         for i in mol_idx_boron[0]:
             mol.GetAtomWithIdx(i).SetAtomicNum(5)
-    else:
-        print('different mappings was detected. The structure cannot be recostructed automatically.')
+    else: #if not - several equivalent mappings exist
+        sys.stderr.write('different mappings was detected. The structure cannot be recostructed automatically.')
+        return None
     return mol
 
 
