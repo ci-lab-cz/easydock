@@ -6,7 +6,7 @@ This scripts can be used as standalone applications or by importing the key func
 
 from conda
 ```
-conda install -c conda-forge python=3.9 rdkit openbabel dask distributed
+conda install -c conda-forge python=3.9 rdkit scipy openbabel dask distributed
 ```
 
 from pypi/github
