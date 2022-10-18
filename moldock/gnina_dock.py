@@ -76,11 +76,6 @@ def process_mol_docking(mol_id, smi, script_file, tmpdir, receptor_pdbqt_fname, 
     score, pdbqt_out = get_pdbqt_and_score(ligand_out_fname)
 
     mol_block = pdbqt2molblock(pdbqt_out, smi, mol_id)
-    if mol_block is None:
-        pdbqt_out = fix_pdbqt(pdbqt_out)
-        mol_block = pdbqt2molblock(pdbqt_out, smi, mol_id)
-        if mol_block:
-            sys.stderr.write('PDBQT was fixed\n')
 
     if lock is not None:  # multiprocessing
         with lock:

@@ -199,11 +199,18 @@ def boron_reduction(mol_B, mol):
     return mol
 
 
-def pdbqt2molblock(pdbqt_block, smi, mol_id):
+def pdbqt2molblock(pdbqt_block, template_mol, mol_id):
+    """
+
+    :param pdbqt_block: a single string with a single PDBQT block (a single pose)
+    :param template_mol: Mol of a reference structure to assign bond orders
+    :param mol_id: name of a molecule which will be added as a title in the output MOL block
+    :return: a single string with a MOL block, if conversion failed returns None
+    """
     mol_block = None
-    mol = Chem.MolFromPDBBlock('\n'.join([i[:66] for i in pdbqt_block.split('MODEL')[1].split('\n')]), removeHs=False, sanitize=False)
-    template_mol = Chem.MolFromSmiles(smi)
-    if mol:
+    fixed = False
+    while mol_block is None:
+        mol = Chem.MolFromPDBBlock('\n'.join([i[:66] for i in pdbqt_block.split('\n')]), removeHs=False, sanitize=False)
         try:
             if 5 in [atom.GetAtomicNum() for atom in template_mol.GetAtoms()]:
                 mol = boron_reduction(template_mol, mol)
@@ -212,7 +219,12 @@ def pdbqt2molblock(pdbqt_block, smi, mol_id):
             mol.SetProp('_Name', mol_id)
             mol_block = Chem.MolToMolBlock(mol)
         except Exception:
-            sys.stderr.write(f'Could not assign bond orders while parsing PDB: {mol_id}\n')
+            if fixed:  # if a molecule was already fixed and the error persists - simply break and return None
+                sys.stderr.write(f'Parsing PDB was failed (fixing did not help): {mol_id}\n')
+                break
+            sys.stderr.write(f'Could not assign bond orders while parsing PDB: {mol_id}. Trying to fix.\n')
+            pdbqt_block = fix_pdbqt(pdbqt_block)
+            fixed = True
     return mol_block
 
 
