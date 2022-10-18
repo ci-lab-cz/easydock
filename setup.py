@@ -28,5 +28,6 @@ setuptools.setup(
     },
     entry_points={'console_scripts':
                       ['vina_dock = moldock.vina_dock:main',
-                       'gnina_dock = moldock.gnina_dock:main']}
+                       'gnina_dock = moldock.gnina_dock:main',
+                       'get_sdf_from_dock_db = moldock.get_sdf_from_dock_db:main']}
 )
