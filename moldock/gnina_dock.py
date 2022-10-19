@@ -16,6 +16,7 @@ import random, string
 from os import system
 from dask import bag
 from dask.distributed import Lock as daskLock, Client
+from rdkit import Chem
 from moldock.preparation_for_docking import create_db, save_sdf, add_protonation, ligand_preparation, \
     fix_pdbqt, pdbqt2molblock, cpu_type, filepath_type
 
@@ -75,7 +76,7 @@ def process_mol_docking(mol_id, smi, script_file, tmpdir, receptor_pdbqt_fname, 
 
     score, pdbqt_out = get_pdbqt_and_score(ligand_out_fname)
 
-    mol_block = pdbqt2molblock(pdbqt_out, smi, mol_id)
+    mol_block = pdbqt2molblock(pdbqt_out.split('MODEL')[1], Chem.MolFromSmiles(smi), mol_id)
 
     if lock is not None:  # multiprocessing
         with lock:

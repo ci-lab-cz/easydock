@@ -13,9 +13,10 @@ from multiprocessing import Pool, Manager, cpu_count
 import dask
 from dask import bag
 from dask.distributed import Lock as daskLock, Client
+from rdkit import Chem
 from vina import Vina
 from moldock.preparation_for_docking import create_db, save_sdf, add_protonation, ligand_preparation, \
-    fix_pdbqt, pdbqt2molblock, cpu_type, filepath_type
+     pdbqt2molblock, cpu_type, filepath_type
 
 
 class RawTextArgumentDefaultsHelpFormatter(argparse.RawTextHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
@@ -60,7 +61,7 @@ def process_mol_docking(mol_id, smi, receptor_pdbqt_fname, center, box_size, dbn
         return mol_id
     score, pdbqt_out = docking(ligands_pdbqt_string=ligand_pdbqt, receptor_pdbqt_fname=receptor_pdbqt_fname,
                                center=center, box_size=box_size, exhaustiveness=exhaustiveness, seed=seed, n_poses=n_poses, ncpu=ncpu)
-    mol_block = pdbqt2molblock(pdbqt_out, smi, mol_id)
+    mol_block = pdbqt2molblock(pdbqt_out.split('MODEL')[1], Chem.MolFromSmiles(smi), mol_id)
 
     if lock is not None:  # multiprocessing
         with lock:
