@@ -95,6 +95,9 @@ def main():
                 mol_block = item[0]
                 poses = list(args.poses)
                 if 1 in poses or not poses:
+                    if 1 in poses:
+                        q = mol_block.split('\n', 1)
+                        mol_block = q[0] + '_1\n' + q[1]
                     f.write(mol_block)
                     for prop_name, prop_value in zip(args.fields, item[1:]):
                         if prop_name != 'pdb_block':
