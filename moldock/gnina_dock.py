@@ -141,12 +141,12 @@ def iter_docking(script_file, tmpdir, dbname, table_name, receptor_pdbqt_fname, 
               f"WHERE docking_score IS NULL AND ({smi_field_name} != '' AND {smi_field_name} IS NOT NULL)"
         if isinstance(add_sql, str) and add_sql:
             sql += f" AND {add_sql}"
-            data_dict = {}  # {id: smi or mol_block}
-            for mol_id, smi, mol_block in cur.execute(sql):
-                if mol_block is None:
-                    data_dict[mol_id] = smi
-                else:
-                    data_dict[mol_id] = mol_block
+        data_dict = {}  # {id: smi or mol_block}
+        for mol_id, smi, mol_block in cur.execute(sql):
+            if mol_block is None:
+                data_dict[mol_id] = smi
+            else:
+                data_dict[mol_id] = mol_block
         if not data_dict:
             return
 
