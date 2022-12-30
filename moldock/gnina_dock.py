@@ -18,7 +18,7 @@ from dask import bag
 from dask.distributed import Lock as daskLock, Client
 from rdkit import Chem
 from moldock.preparation_for_docking import create_db, save_sdf, add_protonation, ligand_preparation, \
-    fix_pdbqt, pdbqt2molblock, cpu_type, filepath_type
+    fix_pdbqt, pdbqt2molblock, cpu_type, filepath_type, mol_from_smi_or_molblock
 
 
 class RawTextArgumentDefaultsHelpFormatter(argparse.RawTextHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
@@ -47,8 +47,30 @@ def get_pdbqt_and_score(ligand_out_fname):
     return score, pdbqt_out
 
 
-def process_mol_docking(mol_id, smi, script_file, tmpdir, receptor_pdbqt_fname, protein_setup, dbname, seed, exhaustiveness,
-                        scoring, addH, cnn_scoring, cnn, num_modes, ncpu, table_name, lock=None):
+def process_mol_docking(mol_id, ligand_string, script_file, tmpdir, receptor_pdbqt_fname, protein_setup, dbname, seed,
+                        exhaustiveness, scoring, addH, cnn_scoring, cnn, num_modes, ncpu, table_name, lock=None):
+
+    """
+
+    :param mol_id:
+    :param ligand_string: either SMILES or mol block
+    :param script_file:
+    :param tmpdir:
+    :param receptor_pdbqt_fname:
+    :param protein_setup:
+    :param dbname:
+    :param seed:
+    :param exhaustiveness:
+    :param scoring:
+    :param addH:
+    :param cnn_scoring:
+    :param cnn:
+    :param num_modes:
+    :param ncpu:
+    :param table_name:
+    :param lock:
+    :return:
+    """
 
     def insert_data(dbname, pdbqt_out, score, mol_block, mol_id, table_name='mols'):
         with sqlite3.connect(dbname) as conn:
@@ -61,7 +83,7 @@ def process_mol_docking(mol_id, smi, script_file, tmpdir, receptor_pdbqt_fname, 
                                    id = ?
                             """, (pdbqt_out, score, mol_block, mol_id))
 
-    ligand_pdbqt = ligand_preparation(smi, seed)
+    ligand_pdbqt = ligand_preparation(ligand_string, seed)
     if ligand_pdbqt is None:
         return mol_id
 
@@ -76,7 +98,7 @@ def process_mol_docking(mol_id, smi, script_file, tmpdir, receptor_pdbqt_fname, 
 
     score, pdbqt_out = get_pdbqt_and_score(ligand_out_fname)
 
-    mol_block = pdbqt2molblock(pdbqt_out.split('MODEL')[1], Chem.MolFromSmiles(smi), mol_id)
+    mol_block = pdbqt2molblock(pdbqt_out.split('MODEL')[1], mol_from_smi_or_molblock(ligand_string), mol_id)
 
     if lock is not None:  # multiprocessing
         with lock:
@@ -113,16 +135,24 @@ def iter_docking(script_file, tmpdir, dbname, table_name, receptor_pdbqt_fname, 
     with sqlite3.connect(dbname) as conn:
         cur = conn.cursor()
         smi_field_name = 'smi_protonated' if protonation else 'smi'
-        sql = f"SELECT id, {smi_field_name} FROM {table_name} WHERE docking_score IS NULL AND {smi_field_name} != ''"
+        mol_block_field_name = 'source_mol_block_protonated' if protonation else 'source_mol_block'
+        sql = f"SELECT id, {smi_field_name}, {mol_block_field_name} " \
+              f"FROM {table_name} " \
+              f"WHERE docking_score IS NULL AND ({smi_field_name} != '' AND {smi_field_name} IS NOT NULL)"
         if isinstance(add_sql, str) and add_sql:
             sql += f" AND {add_sql}"
-        smiles_dict = dict(cur.execute(sql))
-    if not smiles_dict:
-        return
+            data_dict = {}  # {id: smi or mol_block}
+            for mol_id, smi, mol_block in cur.execute(sql):
+                if mol_block is None:
+                    data_dict[mol_id] = smi
+                else:
+                    data_dict[mol_id] = mol_block
+        if not data_dict:
+            return
 
     if use_dask:
         i = 0
-        b = bag.from_sequence(smiles_dict.items(), npartitions=len(smiles_dict))
+        b = bag.from_sequence(data_dict.items(), npartitions=len(data_dict))
         for i, mol_id in enumerate(b.starmap(process_mol_docking, script_file=script_file, tmpdir=tmpdir,
                                              receptor_pdbqt_fname=receptor_pdbqt_fname, protein_setup=protein_setup,
                                              dbname=dbname, exhaustiveness=exhaustiveness, seed=seed, scoring=scoring,
@@ -143,7 +173,7 @@ def iter_docking(script_file, tmpdir, dbname, table_name, receptor_pdbqt_fname, 
                                                         seed=seed, exhaustiveness=exhaustiveness, scoring=scoring, addH=addH,
                                                         cnn_scoring=cnn_scoring, cnn=cnn, num_modes=num_modes, table_name=table_name,
                                                         ncpu=1, lock=lock),
-                                                smiles_dict.items()), 1):
+                                                data_dict.items()), 1):
             if i % 100 == 0:
                 sys.stderr.write(f'\r{i} molecules were docked')
         sys.stderr.write(f'\r{i} molecules were docked\n')
