@@ -43,7 +43,10 @@ def docking(script_file, ligand_pdbqt_file, ligand_out_fname, receptor_pdbqt_fna
 
 def get_pdbqt_and_score(ligand_out_fname):
     pdbqt_out = open(ligand_out_fname).read()
-    score = round(float(pdbqt_out.split(' ')[7].split('REMARK')[0]), 3) #get CNNaffinity
+    if 'CNNscore' in pdbqt_out:
+        score = round(float(pdbqt_out.split(' ')[7].split('REMARK')[0]), 3) #get CNNaffinity
+    else:
+        score = round(float(pdbqt_out.split(' ')[3].split('REMARK')[0]), 3)
     return score, pdbqt_out
 
 
