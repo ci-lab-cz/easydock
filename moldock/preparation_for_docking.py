@@ -119,7 +119,7 @@ def add_protonation(db_fname):
         conn.close()
 
 
-def mk_prepare_ligand_string(mol, verbose=False):
+def mk_prepare_ligand(mol, verbose=False):
     preparator = MoleculePreparation(keep_nonpolar_hydrogens=False, hydrate=False, flexible_amides=False,
                                      rigid_macrocycles=False, min_ring_size=7, max_ring_size=33)
     try:
@@ -180,7 +180,7 @@ def ligand_preparation(ligand_string, seed=0):
 
     if mol is None:
         return None
-    mol_conf_pdbqt = mk_prepare_ligand_string(mol, verbose=False)
+    mol_conf_pdbqt = mk_prepare_ligand(mol, verbose=False)
     return mol_conf_pdbqt
 
 
