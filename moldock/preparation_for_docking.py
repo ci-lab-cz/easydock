@@ -9,7 +9,6 @@ from multiprocessing import Pool, Manager, cpu_count
 
 
 from meeko import MoleculePreparation
-from meeko import obutils
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from moldock import read_input
