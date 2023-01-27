@@ -10,7 +10,6 @@ from multiprocessing import Pool, Manager, cpu_count
 
 from meeko import MoleculePreparation
 from meeko import obutils
-from openbabel import openbabel as ob
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from moldock import read_input
@@ -121,26 +120,9 @@ def add_protonation(db_fname):
         conn.close()
 
 
-def mk_prepare_ligand_string(molecule_string, build_macrocycle=True, add_water=False, merge_hydrogen=True,
-                             add_hydrogen=False, pH_value=None, verbose=False, mol_format='SDF'):
-
-    mol = obutils.load_molecule_from_string(molecule_string, molecule_format=mol_format)
-
-    if pH_value is not None:
-        mol.CorrectForPH(float(pH_value))
-
-    if add_hydrogen:
-        mol.AddHydrogens()
-        charge_model = ob.OBChargeModel.FindType("Gasteiger")
-        charge_model.ComputeCharges(mol)
-
-    m = Chem.MolFromMolBlock(molecule_string)
-    amide_rigid = len(m.GetSubstructMatch(Chem.MolFromSmarts('[C;!R](=O)[#7]([!#1])[!#1]'))) == 0
-
-    preparator = MoleculePreparation(merge_hydrogens=merge_hydrogen, macrocycle=build_macrocycle,
-                                     hydrate=add_water, amide_rigid=amide_rigid)
-                                     #additional parametrs
-                                     #rigidify_bonds_smarts=[], rigidify_bonds_indices=[])
+def mk_prepare_ligand_string(mol, verbose=False):
+    preparator = MoleculePreparation(keep_nonpolar_hydrogens=False, hydrate=False, flexible_amides=True,
+                                     rigid_macrocycles=False, min_ring_size=7, max_ring_size=33)
     try:
         preparator.prepare(mol)
     except Exception:
@@ -188,23 +170,18 @@ def ligand_preparation(ligand_string, seed=0):
         for id_ in idx_boron:
             m.GetAtomWithIdx(id_).SetAtomicNum(6)
             # m.UpdatePropertyCache() # uncomment if necessary
-        return Chem.MolToMolBlock(m)
+        return m
 
     try:
         mol = mol_from_smi_or_molblock(ligand_string)
-        mol_conf_mol_block = convert2mol(mol)
+        mol = convert2mol(mol)
     except TypeError:
         sys.stderr.write(f'incorrect SMILES {ligand_string} for converting to molecule\n')
         return None
 
-    if mol_conf_mol_block is None:
+    if mol is None:
         return None
-    mol_conf_pdbqt = mk_prepare_ligand_string(mol_conf_mol_block,
-                                              build_macrocycle=False,
-                                              # can do it True, but there is some problem with >=7-chains mols
-                                              add_water=False, merge_hydrogen=True, add_hydrogen=False,
-                                              # pH_value=7.4, can use this opt but some results are different in comparison to chemaxon
-                                              verbose=False, mol_format='SDF')
+    mol_conf_pdbqt = mk_prepare_ligand_string(mol, verbose=False)
     return mol_conf_pdbqt
 
 
