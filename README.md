@@ -6,13 +6,12 @@ This scripts can be used as standalone applications or by importing the key func
 
 from conda
 ```
-conda install -c conda-forge python=3.9 rdkit scipy openbabel dask distributed
+conda install -c conda-forge python=3.9 numpy=1.20 rdkit scipy dask distributed
 ```
 
 from pypi/github
 ```
-pip install vina
-pip install git+https://github.com/forlilab/Meeko@7b1a60d9451eabaeb16b08a4a497cf8e695acc63
+pip install vina meeko
 ```
 
 ### Licence
