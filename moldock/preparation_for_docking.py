@@ -120,7 +120,7 @@ def add_protonation(db_fname):
 
 
 def mk_prepare_ligand_string(mol, verbose=False):
-    preparator = MoleculePreparation(keep_nonpolar_hydrogens=False, hydrate=False, flexible_amides=True,
+    preparator = MoleculePreparation(keep_nonpolar_hydrogens=False, hydrate=False, flexible_amides=False,
                                      rigid_macrocycles=False, min_ring_size=7, max_ring_size=33)
     try:
         preparator.prepare(mol)
