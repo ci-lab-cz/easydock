@@ -23,7 +23,7 @@ def main():
                         help='retrieve only the first entry of each molecule from the database.')
     parser.add_argument('--add_sql', default=None, type=str,
                         help='sql string which will be added to the sql query to select data. This may be useful '
-                             'to make additonal filtering of database compounds, e.g. iteration > 0.')
+                             'to make additional filtering of database compounds, e.g. iteration > 0.')
     parser.add_argument('--fields', default=[], type=str, nargs="*",
                         help='names of fields in database to additionally retrieve.')
     parser.add_argument('--poses', default=[], type=int, nargs="*",
