@@ -112,8 +112,9 @@ def process_mol_docking(mol_id, ligand_string, script_file, tmpdir, receptor_pdb
     return mol_id
 
 
-def iter_docking(script_file, tmpdir, dbname, table_name, receptor_pdbqt_fname, protein_setup, protonation, exhaustiveness, seed,
-                 scoring, addH, cnn_scoring, cnn, num_modes, ncpu, use_dask, add_sql=None):
+def iter_docking(script_file, tmpdir, dbname, receptor_pdbqt_fname, protein_setup, scoring, cnn_scoring, cnn,
+                 num_modes=9, table_name='mols', protonation=False, exhaustiveness=8, seed=0, addH=False, ncpu=1,
+                 use_dask=False, add_sql=None):
     '''
     This function should update output db with docked poses and scores. Docked poses should be stored as pdbqt (source)
     and mol block. All other post-processing will be performed separately.
@@ -122,10 +123,17 @@ def iter_docking(script_file, tmpdir, dbname, table_name, receptor_pdbqt_fname, 
     :param dbname:
     :param receptor_pdbqt_fname:
     :param protein_setup: text file with vina grid box parameters
-    :param protonation: True or False
+    :param scoring: type of scoring, one of 'ad4_scoring', 'default', 'dkoes_fast', 'dkoes_scoring',
+                    'dkoes_scoring_old', 'vina', 'vinardo'
+    :param cnn_scoring:
+    :param cnn:
+    :param num_modes: maximum number of poses to return
+    :param table_name: name of a table where take molecules for docking
+    :param protonation: True or False, indicate whether to use protonated molecules or not (protonated forms should be
+                        created in advance)
     :param exhaustiveness: int
     :param seed: int
-    :param scoring: type of scoring, for example: 'vina'
+    :param addH: bool
     :param ncpu: int
     :param use_dask: indicate whether or not using dask cluster
     :type use_dask: bool
@@ -289,7 +297,8 @@ def main():
     iter_docking(script_file=gnina_script_dir, tmpdir=tmpdir, dbname=args.output, table_name=args.table_name,
                  receptor_pdbqt_fname=protein.name, protein_setup=setup.name, protonation=protonation,
                  exhaustiveness=args.exhaustiveness, seed=args.seed, scoring=args.scoring, addH=args.addH,
-                 cnn_scoring=args.cnn_scoring, cnn=args.cnn, num_modes=args.num_modes, ncpu=args.ncpu, use_dask=args.hostfile is not None)
+                 cnn_scoring=args.cnn_scoring, cnn=args.cnn, num_modes=args.num_modes, ncpu=args.ncpu,
+                 use_dask=args.hostfile is not None)
 
     if args.sdf:
         save_sdf(args.output)
