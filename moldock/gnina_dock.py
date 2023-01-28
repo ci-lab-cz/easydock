@@ -16,9 +16,8 @@ import random, string
 from os import system
 from dask import bag
 from dask.distributed import Lock as daskLock, Client
-from rdkit import Chem
 from moldock.preparation_for_docking import create_db, save_sdf, add_protonation, ligand_preparation, \
-    fix_pdbqt, pdbqt2molblock, cpu_type, filepath_type, mol_from_smi_or_molblock
+    pdbqt2molblock, cpu_type, filepath_type, mol_from_smi_or_molblock
 
 
 class RawTextArgumentDefaultsHelpFormatter(argparse.RawTextHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
@@ -96,9 +95,8 @@ def process_mol_docking(mol_id, ligand_string, script_file, tmpdir, receptor_pdb
     print('ligand_out_fname', ligand_out_fname)
 
     docking(script_file=script_file, ligand_pdbqt_file=ligand_pdbqt_file, ligand_out_fname=ligand_out_fname,
-                               receptor_pdbqt_fname=receptor_pdbqt_fname, protein_setup=protein_setup,
-                               exhaustiveness=exhaustiveness, seed=seed, scoring=scoring, addH=addH,
-                               cnn_scoring=cnn_scoring, cnn=cnn, num_modes=num_modes, ncpu=ncpu)
+            receptor_pdbqt_fname=receptor_pdbqt_fname, protein_setup=protein_setup, exhaustiveness=exhaustiveness,
+            seed=seed, scoring=scoring, addH=addH, cnn_scoring=cnn_scoring, cnn=cnn, num_modes=num_modes, ncpu=ncpu)
 
     score, pdbqt_out = get_pdbqt_and_score(ligand_out_fname)
 
@@ -195,8 +193,7 @@ def main():
                                                  'possible problems during installation, for example, version "CXXABI_1.3.8" not found (required by ./gnina)\n'
                                                  'you need install libstdc++.so.6 and add way to this file in .bashrc\n'
                                                  'for example: export LD_LIBRARY_PATH="$LD_LIBRARY_PATH":/lib64/\n'
-                                                 '  - openbabel - conda install -c conda-forge openbabel\n'
-                                                 '  - meeko - pip install git+https://github.com/forlilab/Meeko@7b1a60d9451eabaeb16b08a4a497cf8e695acc63\n'
+                                                 '  - meeko - pip install meeko\n'
                                                  '  - Chemaxon cxcalc utility\n\n'
                                                  'To run on a single machine:\n'
                                                  '  gnina_docking.py -i input.smi -o output.db -p protein.pdbqt -s config.txt -c 4 -v\n\n'
@@ -256,9 +253,8 @@ def main():
                         help='type of built-in model to use.')
     parser.add_argument('--num_modes', metavar='INTEGER', required=False, type=int, default=9,
                         help='maximum number of binding modes to generate.')
-    parser.add_argument('--table_name', metavar='STRING', required=False, default='mols', choices=['mols', 'tautomers'],
+    parser.add_argument('--table_name', metavar='STRING', required=False, default='mols',
                         help='name of table in database.')
-
 
     args = parser.parse_args()
 
@@ -274,7 +270,6 @@ def main():
     if args.hostfile is not None:
         dask.config.set({'distributed.scheduler.allowed-failures': 30})
         dask_client = Client(open(args.hostfile).readline().strip() + ':8786')
-
 
     if not os.path.isfile(args.output):
         create_db(args.output, args.input, not args.no_protonation, args.protein, args.protein_setup, args.prefix)
@@ -300,7 +295,7 @@ def main():
         save_sdf(args.output)
 
     if args.tmpdir is None:
-        shutil.rmtree(tmpdir, ignore_errors=True) # to delete temporary dir with files adter docking
+        shutil.rmtree(tmpdir, ignore_errors=True)  # to delete temporary dir with files after docking
 
 
 if __name__ == '__main__':
