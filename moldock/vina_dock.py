@@ -89,14 +89,15 @@ def process_mol_docking(mol_id, ligand_string, receptor_pdbqt_fname, center, box
     return mol_id
 
 
-def iter_docking(dbname, table_name, receptor_pdbqt_fname, protein_setup, protonation, exhaustiveness, seed, n_poses, ncpu, use_dask,
-                 add_sql=None):
+def iter_docking(dbname, receptor_pdbqt_fname, protein_setup, table_name='mols', protonation=False, exhaustiveness=8,
+                 seed=0, n_poses=10, ncpu=1, use_dask=False, add_sql=None):
     '''
     This function should update output db with docked poses and scores. Docked poses should be stored as pdbqt (source)
     and mol block. All other post-processing will be performed separately.
-    :param dbname:
-    :param receptor_pdbqt_fname:
+    :param dbname: file name of output DB
+    :param receptor_pdbqt_fname: protein file in pDbQT format
     :param protein_setup: text file with vina grid box parameters
+    :param table_name: name of the table where to take molecules for docking
     :param protonation: True or False
     :param exhaustiveness: int
     :param seed: int
@@ -252,11 +253,9 @@ def main():
     setup.flush()
     protonation = list(conn.execute('SELECT protonation FROM setup'))[0][0]
 
-    # table_name = 'mols'
-
-    iter_docking(dbname=args.output, table_name=args.table_name, receptor_pdbqt_fname=protein.name, protein_setup=setup.name,
-                 protonation=protonation, exhaustiveness=args.exhaustiveness, seed=args.seed, n_poses=args.n_poses, ncpu=args.ncpu,
-                 use_dask=args.hostfile is not None)
+    iter_docking(dbname=args.output, table_name=args.table_name, receptor_pdbqt_fname=protein.name,
+                 protein_setup=setup.name, protonation=protonation, exhaustiveness=args.exhaustiveness,
+                 seed=args.seed, n_poses=args.n_poses, ncpu=args.ncpu, use_dask=args.hostfile is not None)
 
     if args.sdf:
         save_sdf(args.output)
