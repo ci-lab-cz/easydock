@@ -59,6 +59,10 @@ Retrieve top poses for compounds with docking score less then -10:
 get_sdf_from_db -i output.db -o out.sdf --fields docking_score --poses 1 --add_sql 'docking_score < -10' 
 ```
 
+### Changelog
+
+**0.1.2**
+- (bugfix) docking of macrocycles is rigid (in future may be changed)
 
 ### Licence
 CC BY-NC-SA 4.0
