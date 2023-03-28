@@ -28,7 +28,7 @@ def main():
                         help='names of fields in database to additionally retrieve.')
     parser.add_argument('--poses', default=[], type=int, nargs="*",
                         help='list of pose numbers to retrieve, starting from 1. If specified, poses will be retrieved '
-                             'from PDB block.')
+                             'from PDB block and a trailing pose id will be added to each molecule name.')
 
     args = parser.parse_args()
 
@@ -97,8 +97,9 @@ def main():
                 if 1 in poses or not poses:
                     if 1 in poses:
                         q = mol_block.split('\n', 1)
-                        mol_block = q[0] + '_1\n' + q[1]
-                    f.write(mol_block)
+                        f.write(q[0] + '_1\n' + q[1])  # add trailing pose id
+                    else:
+                        f.write(mol_block)  # write original mol block without pose id
                     for prop_name, prop_value in zip(args.fields, item[1:]):
                         if prop_name != 'pdb_block':
                             f.write(f'>  <{prop_name}>\n')
