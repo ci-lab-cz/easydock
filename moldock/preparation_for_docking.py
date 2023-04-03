@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import sqlite3
@@ -6,7 +7,7 @@ import sys
 import tempfile
 import traceback
 from multiprocessing import Pool, Manager, cpu_count
-
+from copy import deepcopy
 
 from meeko import MoleculePreparation
 from rdkit import Chem
@@ -265,7 +266,16 @@ def pdbqt2molblock(pdbqt_block, template_mol, mol_id):
     return mol_block
 
 
-def create_db(db_fname, input_fname, protonation, pdbqt_fname, protein_setup_fname, prefix):
+def create_db(db_fname, args, args_to_fields=('protein', 'protein_setup')):
+    """
+    Create empty database structure and the setup table, which is filled with values
+    :param db_fname: file name of output DB
+    :param args: argparse namespace
+    :param args_to_fields: list of arg names which values are file names which content should be stored as separate
+                           fields in setup table
+    :return:
+    """
+    os.makedirs(os.path.dirname(os.path.abspath(db_fname)), exist_ok=True)
     conn = sqlite3.connect(db_fname)
     cur = conn.cursor()
     cur.execute("""CREATE TABLE IF NOT EXISTS mols
@@ -280,35 +290,101 @@ def create_db(db_fname, input_fname, protonation, pdbqt_fname, protein_setup_fna
              mol_block TEXT,
              time TEXT
             )""")
-    conn.commit()
-    data_smi = []  # non 3D structures
-    data_mol = []  # 3D structures
-    for mol, mol_name in read_input.read_input(input_fname):
-        smi = Chem.MolToSmiles(mol, isomericSmiles=True)
-        if prefix:
-            mol_name = f'{prefix}-{mol_name}'
-        if mol_is_3d(mol):
-            data_mol.append((mol_name, smi, Chem.MolToMolBlock(mol)))
-        else:
-            data_smi.append((mol_name, smi))
-    cur.executemany(f'INSERT INTO mols (id, smi) VALUES(?, ?)', data_smi)
-    cur.executemany(f'INSERT INTO mols (id, smi, source_mol_block) VALUES(?, ?, ?)', data_mol)
+
+    # this will create a setup table with the first item in JSON format which contains all input args, and additional
+    # fields with names identical to selected arg names pointed out on text files (e.g protein.pdbqt, protein setup
+    # file, etc). These additional fields will store content of those files as TEXT
+    if isinstance(args_to_fields, (list, tuple, set)):
+        args_to_fields = ['json'] + list(args_to_fields)
+    else:
+        args_to_fields = ['json']
+    sql = f"CREATE TABLE IF NOT EXISTS setup ({', '.join(v + ' TEXT' for v in args_to_fields)})"
+    cur.execute(sql)
     conn.commit()
 
-    cur.execute("""CREATE TABLE IF NOT EXISTS setup
-            (
-             protonation INTEGER,
-             protonation_done INTEGER DEFAULT 0,
-             protein_pdbqt TEXT,
-             protein_setup TEXT
-            )""")
-    conn.commit()
-    pdbqt_string = open(pdbqt_fname).read()
-    setup_string = open(protein_setup_fname).read()
-    cur.execute('INSERT INTO setup VALUES (?,?,?,?)', (int(protonation), 0, pdbqt_string, setup_string))
+    d = deepcopy(args.__dict__)
+    values = []
+    for v in args_to_fields[1:]:
+        if d[v] is not None:
+            values.append(open(d[v]).read())
+            d[v] = f'<<{os.path.splitext(d[v])[1]}>>'  # this is a special substitution to designate which args should be loaded from the table, the value is the file extention
+        else:
+            values.append(None)
+    values = [json.dumps(d, sort_keys=True, indent=2)] + values
+    cur.execute(f"INSERT INTO setup VALUES ({','.join('?' * len(values))})", values)
     conn.commit()
 
     conn.close()
+
+
+def restore_setup_from_db(db_fname):
+    """
+    Reads stored JSON and creates temporary text files from additional fields in the setup table.
+    Returns a dictionary of args and values to be assigned to argparse namespace
+    :param db_fname: SQLite DB file name
+    :return: dictionary of arguments and their values
+    """
+    conn = sqlite3.connect(db_fname)
+    cur = conn.cursor()
+    res = cur.execute('SELECT * FROM setup')
+    colnames = [d[0] for d in res.description]
+    values = [v for v in res][0]
+    for colname, value in zip(colnames, values):
+        if colname == 'json':
+            d = json.loads(value)
+        else:
+            tmppath = tempfile.NamedTemporaryFile(suffix=d[colname][2:-2], mode='w', encoding='utf-8')
+            tmppath.write(value)
+            tmppath.flush()
+            d[colname] = tmppath.name
+    conn.close()
+    return d
+
+
+# def create_db(db_fname, input_fname, protonation, pdbqt_fname, protein_setup_fname, prefix):
+#     conn = sqlite3.connect(db_fname)
+#     cur = conn.cursor()
+#     cur.execute("""CREATE TABLE IF NOT EXISTS mols
+#             (
+#              id TEXT PRIMARY KEY,
+#              smi TEXT,
+#              smi_protonated TEXT,
+#              source_mol_block TEXT,
+#              source_mol_block_protonated TEXT,
+#              docking_score REAL,
+#              pdb_block TEXT,
+#              mol_block TEXT,
+#              time TEXT
+#             )""")
+#     conn.commit()
+#     data_smi = []  # non 3D structures
+#     data_mol = []  # 3D structures
+#     for mol, mol_name in read_input.read_input(input_fname):
+#         smi = Chem.MolToSmiles(mol, isomericSmiles=True)
+#         if prefix:
+#             mol_name = f'{prefix}-{mol_name}'
+#         if mol_is_3d(mol):
+#             data_mol.append((mol_name, smi, Chem.MolToMolBlock(mol)))
+#         else:
+#             data_smi.append((mol_name, smi))
+#     cur.executemany(f'INSERT INTO mols (id, smi) VALUES(?, ?)', data_smi)
+#     cur.executemany(f'INSERT INTO mols (id, smi, source_mol_block) VALUES(?, ?, ?)', data_mol)
+#     conn.commit()
+#
+#     cur.execute("""CREATE TABLE IF NOT EXISTS setup
+#             (
+#              protonation INTEGER,
+#              protonation_done INTEGER DEFAULT 0,
+#              protein_pdbqt TEXT,
+#              protein_setup TEXT
+#             )""")
+#     conn.commit()
+#     pdbqt_string = open(pdbqt_fname).read()
+#     setup_string = open(protein_setup_fname).read()
+#     cur.execute('INSERT INTO setup VALUES (?,?,?,?)', (int(protonation), 0, pdbqt_string, setup_string))
+#     conn.commit()
+#
+#     conn.close()
 
 
 def save_sdf(db_fname):

@@ -14,7 +14,7 @@ import dask
 from dask import bag
 from dask.distributed import Lock as daskLock, Client
 from vina import Vina
-from moldock.preparation_for_docking import create_db, save_sdf, add_protonation, ligand_preparation, \
+from moldock.preparation_for_docking import create_db, restore_setup_from_db, save_sdf, add_protonation, ligand_preparation, \
      pdbqt2molblock, cpu_type, filepath_type, mol_from_smi_or_molblock
 
 
@@ -232,15 +232,17 @@ def main():
 
     args = parser.parse_args()
 
+    if not os.path.isfile(args.output):
+        create_db(args.output, args)
+    else:
+        args.__dict__ = restore_setup_from_db(args.output)
+
     if args.tmpdir is not None:
         tempfile.tempdir = args.tmpdir
 
     if args.hostfile is not None:
         dask.config.set({'distributed.scheduler.allowed-failures': 30})
         dask_client = Client(open(args.hostfile).readline().strip() + ':8786')
-
-    if not os.path.isfile(args.output):
-        create_db(args.output, args.input, not args.no_protonation, args.protein, args.protein_setup, args.prefix)
 
     add_protonation(args.output)
 
