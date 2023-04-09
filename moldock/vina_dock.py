@@ -10,7 +10,7 @@ from multiprocessing import Pool
 
 from vina import Vina
 from moldock.preparation_for_docking import ligand_preparation, pdbqt2molblock, mol_from_smi_or_molblock, \
-    get_protonation_arg_value
+    select_mols_to_dock
 
 
 class RawTextArgumentDefaultsHelpFormatter(argparse.RawTextHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
@@ -97,21 +97,7 @@ def iter_docking(db_fname, config_fname, table_name='mols', ncpu=1, add_sql=None
                            (config['size_x'], config['size_y'], config['size_z'])
         return center, box_size
 
-    protonation_status = get_protonation_arg_value(db_fname)
-
-    with sqlite3.connect(db_fname) as conn:
-        cur = conn.cursor()
-        smi_field_name = 'smi_protonated' if protonation_status else 'smi'
-        mol_field_name = 'source_mol_block_protonated' if protonation_status else 'source_mol_block'
-
-        sql = f"""SELECT id, {smi_field_name}, {mol_field_name}
-                  FROM {table_name}
-                  WHERE docking_score IS NULL AND 
-                        (({smi_field_name} IS NOT NULL AND {smi_field_name != ''}) OR 
-                         ({mol_field_name} IS NOT NULL AND {mol_field_name != ''})) """
-        if isinstance(add_sql, str) and add_sql:
-            sql += add_sql
-        data = [(mol_id, smi) if mol_block is None else (mol_id, mol_block) for mol_id, smi, mol_block in cur.execute(sql)]
+    data = select_mols_to_dock(db_fname, table_name, add_sql)
 
     if not data:
         raise StopIteration
