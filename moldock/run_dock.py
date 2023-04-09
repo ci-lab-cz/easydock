@@ -5,9 +5,6 @@ import os
 import sys
 import tempfile
 
-# import dask
-# from dask import bag
-# from dask.distributed import Lock as daskLock, Client
 from moldock.preparation_for_docking import create_db, restore_setup_from_db, init_db, save_sdf, add_protonation, \
     cpu_type, filepath_type, update_db
 
@@ -92,9 +89,14 @@ def main():
             del args_dict['output']
             args.__dict__.update(args_dict)
 
-        # if args.hostfile is not None:
-        #     dask.config.set({'distributed.scheduler.allowed-failures': 30})
-        #     dask_client = Client(open(args.hostfile).readline().strip() + ':8786')
+        if args.hostfile is not None:
+            import dask
+            from dask.distributed import Client
+            dask.config.set({'distributed.scheduler.allowed-failures': 30})
+            dask_client = Client(open(args.hostfile).readline().strip() + ':8786')
+            # dask_client = Client()
+        else:
+            dask_client = None
 
         add_protonation(args.output)
 
@@ -106,7 +108,7 @@ def main():
             raise ValueError(f'Illegal program argument was supplied: {args.program}')
 
         i = 0
-        for i, (mol_id, res) in enumerate(iter_docking(args.output, args.config, ncpu=args.ncpu), 1):
+        for i, (mol_id, res) in enumerate(iter_docking(args.output, args.config, ncpu=args.ncpu, dask_client=dask_client), 1):
             update_db(args.output, mol_id, res)
             if args.verbose and i % 100 == 0:
                 sys.stderr.write(f'\r{i} molecules were docked')

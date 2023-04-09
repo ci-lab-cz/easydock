@@ -3,7 +3,6 @@
 # authors: Aleksandra Nikonenko, Guzel Minibaeva, Pavel Polishchuk
 
 import argparse
-import sqlite3
 import yaml
 from functools import partial
 from multiprocessing import Pool
@@ -36,8 +35,12 @@ def docking(ligands_pdbqt_string, receptor_pdbqt_fname, center, box_size, exhaus
     return v.energies(n_poses=n_poses)[0][0], v.poses(n_poses=n_poses)
 
 
-def process_mol_docking(input_tuple, receptor_pdbqt_fname, center, box_size, dbname, seed, exhaustiveness,
-                        n_poses, ncpu, table_name):
+def process_mol_docking_mp(input_tuple, receptor_pdbqt_fname, center, box_size, seed, exhaustiveness, n_poses, ncpu):
+    mol_id, ligand_string = input_tuple
+    return process_mol_docking(mol_id, ligand_string, receptor_pdbqt_fname, center, box_size, seed, exhaustiveness, n_poses, ncpu)
+
+
+def process_mol_docking(mol_id, ligand_string, receptor_pdbqt_fname, center, box_size, seed, exhaustiveness, n_poses, ncpu):
     """
 
     :param mol_id:
@@ -55,7 +58,6 @@ def process_mol_docking(input_tuple, receptor_pdbqt_fname, center, box_size, dbn
     :return:
     """
 
-    mol_id, ligand_string = input_tuple
     ligand_pdbqt = ligand_preparation(ligand_string, seed)
     if ligand_pdbqt is None:
         return mol_id
@@ -69,7 +71,7 @@ def process_mol_docking(input_tuple, receptor_pdbqt_fname, center, box_size, dbn
                     'mol_block': mol_block}
 
 
-def iter_docking(db_fname, config_fname, table_name='mols', ncpu=1, add_sql=None, use_dask=False):
+def iter_docking(db_fname, config_fname, table_name='mols', ncpu=1, add_sql=None, dask_client=None):
 
     '''
     This function should return a molecule is and a corresponding dict of column names and values of docking outputs to
@@ -80,8 +82,7 @@ def iter_docking(db_fname, config_fname, table_name='mols', ncpu=1, add_sql=None
     :param ncpu: int
     :param add_sql: additional SQL query which is appended the SQL query which returns molecules for docking,
                     e.g. "AND iteration=MAX(iteration)"
-    :param use_dask: indicate whether or not using dask cluster
-    :type use_dask: bool
+    :param dask_client: dask client for distributed computing
     :return:
     '''
 
@@ -106,14 +107,30 @@ def iter_docking(db_fname, config_fname, table_name='mols', ncpu=1, add_sql=None
 
     center, box_size = get_param_from_config(config['protein_setup'])
 
-    pool = Pool(ncpu)
-    for mol_id, res in pool.imap_unordered(partial(process_mol_docking, dbname=db_fname,
-                                                   receptor_pdbqt_fname=config['protein'],
-                                                   center=center, box_size=box_size, seed=config['seed'],
-                                                   exhaustiveness=config['exhaustiveness'],
-                                                   table_name=table_name, n_poses=config['n_poses'],
-                                                   ncpu=1),
-                                           data,
-                                           chunksize=1):
-        yield mol_id, res
+    if dask_client is not None:
+        from dask.distributed import as_completed
+        for future, (mol_id, res) in as_completed(dask_client.map(process_mol_docking,
+                                                                  *tuple(zip(*data)),
+                                                                  receptor_pdbqt_fname=config['protein'],
+                                                                  center=center,
+                                                                  box_size=box_size,
+                                                                  seed=config['seed'],
+                                                                  exhaustiveness=config['exhaustiveness'],
+                                                                  n_poses=config['n_poses'],
+                                                                  ncpu=1),
+                                                  with_results=True):
+            yield mol_id, res
+    else:
+        pool = Pool(ncpu)
+        for mol_id, res in pool.imap_unordered(partial(process_mol_docking_mp,
+                                                       receptor_pdbqt_fname=config['protein'],
+                                                       center=center,
+                                                       box_size=box_size,
+                                                       seed=config['seed'],
+                                                       exhaustiveness=config['exhaustiveness'],
+                                                       n_poses=config['n_poses'],
+                                                       ncpu=1),
+                                               data,
+                                               chunksize=1):
+            yield mol_id, res
 

@@ -61,7 +61,7 @@ def add_protonation(db_fname, table_name='mols', add_sql=''):
 
         data_list = list(cur.execute(sql))
         if not data_list:
-            sys.stderr.write(f'no molecules to protonate')
+            sys.stderr.write(f'no molecules to protonate\n')
             return
 
         smi_ids = []
