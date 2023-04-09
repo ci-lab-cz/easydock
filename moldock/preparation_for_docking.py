@@ -474,3 +474,29 @@ def save_sdf(db_fname):
             w.write(f'>  <docking_score>\n{score}\n\n')
             w.write('$$$$\n')
         sys.stderr.write(f'Best poses were saved to {sdf_fname}\n')
+
+
+def select_mols_to_dock(db_fname, table_name='mols', add_sql=None):
+    """
+    Select molecules for docking from a given table using additional selection conditions
+    :param db_fname:
+    :param table_name:
+    :param add_sql:
+    :return: list of tuples (mol_id, smi) or (mol_id, mol_block). They can be mixed if the DB is not consistently
+             filled, but this is not an issue if use proper parsing function
+    """
+    protonation_status = get_protonation_arg_value(db_fname)
+    with sqlite3.connect(db_fname) as conn:
+        cur = conn.cursor()
+        smi_field_name = 'smi_protonated' if protonation_status else 'smi'
+        mol_field_name = 'source_mol_block_protonated' if protonation_status else 'source_mol_block'
+
+        sql = f"""SELECT id, {smi_field_name}, {mol_field_name}
+                  FROM {table_name}
+                  WHERE docking_score IS NULL AND 
+                        (({smi_field_name} IS NOT NULL AND {smi_field_name != ''}) OR 
+                         ({mol_field_name} IS NOT NULL AND {mol_field_name != ''})) """
+        if isinstance(add_sql, str) and add_sql:
+            sql += add_sql
+        data = [(mol_id, smi) if mol_block is None else (mol_id, mol_block) for mol_id, smi, mol_block in cur.execute(sql)]
+    return data
