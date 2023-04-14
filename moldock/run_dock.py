@@ -93,6 +93,9 @@ def main():
             import dask
             from dask.distributed import Client
             dask.config.set({'distributed.scheduler.allowed-failures': 30})
+            dask.config.set({'distributed.worker.lifetime.restart': True})
+            dask.config.set({'distributed.comm.timeouts.connect': 300})
+            dask.config.set({'distributed.comm.timeouts.tcp': 300})
             dask_client = Client(open(args.hostfile).readline().strip() + ':8786')
             # dask_client = Client()
         else:
