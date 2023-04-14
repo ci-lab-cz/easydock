@@ -6,7 +6,7 @@ import sys
 import tempfile
 
 from moldock.preparation_for_docking import create_db, restore_setup_from_db, init_db, save_sdf, add_protonation, \
-    cpu_type, filepath_type, update_db
+    cpu_type, filepath_type, update_db, select_mols_to_dock
 
 
 class RawTextArgumentDefaultsHelpFormatter(argparse.RawTextHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
@@ -112,13 +112,15 @@ def main():
             raise ValueError(f'Illegal program argument was supplied: {args.program}')
 
         i = 0
-        for i, (mol_id, res) in enumerate(iter_docking(args.output, args.config, ncpu=args.ncpu, dask_client=dask_client), 1):
-            if res:
-                update_db(args.output, mol_id, res)
-            if args.verbose and i % 100 == 0:
-                sys.stderr.write(f'\r{i} molecules were docked')
-        if args.verbose:
-            sys.stderr.write(f'\n{i} molecules were docked\n')
+        data = select_mols_to_dock(args.output)
+        if data:
+            for i, (mol_id, res) in enumerate(iter_docking(data, args.config, ncpu=args.ncpu, dask_client=dask_client), 1):
+                if res:
+                    update_db(args.output, mol_id, res)
+                if args.verbose and i % 100 == 0:
+                    sys.stderr.write(f'\r{i} molecules were docked')
+            if args.verbose:
+                sys.stderr.write(f'\n{i} molecules were docked\n')
 
         if args.sdf:
             save_sdf(args.output)
