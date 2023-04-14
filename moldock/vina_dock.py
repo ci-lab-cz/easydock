@@ -36,15 +36,15 @@ def docking(ligands_pdbqt_string, receptor_pdbqt_fname, center, box_size, exhaus
 
 
 def process_mol_docking_mp(input_tuple, receptor_pdbqt_fname, center, box_size, seed, exhaustiveness, n_poses, ncpu):
-    mol_id, ligand_string = input_tuple
-    return process_mol_docking(mol_id, ligand_string, receptor_pdbqt_fname, center, box_size, seed, exhaustiveness, n_poses, ncpu)
+    mol_id, mol = input_tuple
+    return process_mol_docking(mol_id, mol, receptor_pdbqt_fname, center, box_size, seed, exhaustiveness, n_poses, ncpu)
 
 
-def process_mol_docking(mol_id, ligand_string, receptor_pdbqt_fname, center, box_size, seed, exhaustiveness, n_poses, ncpu):
+def process_mol_docking(mol_id, mol, receptor_pdbqt_fname, center, box_size, seed, exhaustiveness, n_poses, ncpu):
     """
 
     :param mol_id:
-    :param ligand_string: either SMILES or mol block
+    :param mol: either SMILES or mol block
     :param receptor_pdbqt_fname:
     :param center:
     :param box_size:
@@ -58,30 +58,27 @@ def process_mol_docking(mol_id, ligand_string, receptor_pdbqt_fname, center, box
     :return:
     """
 
-    ligand_pdbqt = ligand_preparation(ligand_string, seed)
+    ligand_pdbqt = ligand_preparation(mol, seed)
     if ligand_pdbqt is None:
         return mol_id, None
     score, pdbqt_out = docking(ligands_pdbqt_string=ligand_pdbqt, receptor_pdbqt_fname=receptor_pdbqt_fname,
                                center=center, box_size=box_size, exhaustiveness=exhaustiveness, seed=seed,
                                n_poses=n_poses, ncpu=ncpu)
-    mol_block = pdbqt2molblock(pdbqt_out.split('MODEL')[1], mol_from_smi_or_molblock(ligand_string), mol_id)
+    mol_block = pdbqt2molblock(pdbqt_out.split('MODEL')[1], mol, mol_id)
 
     return mol_id, {'docking_score': score,
                     'pdb_block': pdbqt_out,
                     'mol_block': mol_block}
 
 
-def iter_docking(db_fname, config_fname, table_name='mols', ncpu=1, add_sql=None, dask_client=None):
+def iter_docking(data, config_fname, ncpu=1, dask_client=None):
 
     '''
     This function should return a molecule is and a corresponding dict of column names and values of docking outputs to
     be inserted into the table.
-    :param db_fname: file name of output DB
+    :param data: list of tuples (mol_id, mol)
     :param config_fname: YAML file name with all arguments for docking
-    :param table_name: name of the table where to take molecules for docking
     :param ncpu: int
-    :param add_sql: additional SQL query which is appended the SQL query which returns molecules for docking,
-                    e.g. "AND iteration=MAX(iteration)"
     :param dask_client: dask client for distributed computing
     :return:
     '''
@@ -98,28 +95,25 @@ def iter_docking(db_fname, config_fname, table_name='mols', ncpu=1, add_sql=None
                            (config['size_x'], config['size_y'], config['size_z'])
         return center, box_size
 
-    data = select_mols_to_dock(db_fname, table_name, add_sql)
-
-    if not data:
-        raise StopIteration
-
     config = yaml.safe_load(open(config_fname))
 
     center, box_size = get_param_from_config(config['protein_setup'])
 
     if dask_client is not None:
-        from dask.distributed import as_completed
-        for future, (mol_id, res) in as_completed(dask_client.map(process_mol_docking,
-                                                                  *tuple(zip(*data)),
-                                                                  receptor_pdbqt_fname=config['protein'],
-                                                                  center=center,
-                                                                  box_size=box_size,
-                                                                  seed=config['seed'],
-                                                                  exhaustiveness=config['exhaustiveness'],
-                                                                  n_poses=config['n_poses'],
-                                                                  ncpu=1),
-                                                  with_results=True):
-            yield mol_id, res
+        from dask.distributed import as_completed, performance_report
+        import os
+        with performance_report(filename=os.path.abspath('dask-report.html')):
+            for future, (mol_id, res) in as_completed(dask_client.map(process_mol_docking,
+                                                                      *tuple(zip(*data)),
+                                                                      receptor_pdbqt_fname=config['protein'],
+                                                                      center=center,
+                                                                      box_size=box_size,
+                                                                      seed=config['seed'],
+                                                                      exhaustiveness=config['exhaustiveness'],
+                                                                      n_poses=config['n_poses'],
+                                                                      ncpu=1),
+                                                      with_results=True):
+                yield mol_id, res
     else:
         pool = Pool(ncpu)
         for mol_id, res in pool.imap_unordered(partial(process_mol_docking_mp,
