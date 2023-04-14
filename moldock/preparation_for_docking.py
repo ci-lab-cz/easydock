@@ -127,14 +127,15 @@ def mk_prepare_ligand(mol, verbose=False):
                                      rigid_macrocycles=True, min_ring_size=7, max_ring_size=33)
     try:
         preparator.prepare(mol)
+        pdbqt_string = preparator.write_pdbqt_string()
+        if verbose:
+            preparator.show_setup()
     except Exception:
         sys.stderr.write('Warning. Incorrect mol object to convert to pdbqt. Continue. \n')
         traceback.print_exc()
-        return None
-    if verbose:
-        preparator.show_setup()
+        pdbqt_string = None
 
-    return preparator.write_pdbqt_string()
+    return pdbqt_string
 
 
 def ligand_preparation(ligand_string, seed=0):

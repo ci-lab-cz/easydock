@@ -110,7 +110,8 @@ def main():
 
         i = 0
         for i, (mol_id, res) in enumerate(iter_docking(args.output, args.config, ncpu=args.ncpu, dask_client=dask_client), 1):
-            update_db(args.output, mol_id, res)
+            if res:
+                update_db(args.output, mol_id, res)
             if args.verbose and i % 100 == 0:
                 sys.stderr.write(f'\r{i} molecules were docked')
         if args.verbose:
