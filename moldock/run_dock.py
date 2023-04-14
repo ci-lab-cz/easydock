@@ -98,7 +98,8 @@ def main():
         else:
             dask_client = None
 
-        add_protonation(args.output)
+        if not args.no_protonation:
+            add_protonation(args.output)
 
         if args.program == 'vina':
             from moldock.vina_dock import iter_docking
