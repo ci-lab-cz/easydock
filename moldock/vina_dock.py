@@ -60,7 +60,7 @@ def process_mol_docking(mol_id, ligand_string, receptor_pdbqt_fname, center, box
 
     ligand_pdbqt = ligand_preparation(ligand_string, seed)
     if ligand_pdbqt is None:
-        return mol_id
+        return mol_id, None
     score, pdbqt_out = docking(ligands_pdbqt_string=ligand_pdbqt, receptor_pdbqt_fname=receptor_pdbqt_fname,
                                center=center, box_size=box_size, exhaustiveness=exhaustiveness, seed=seed,
                                n_poses=n_poses, ncpu=ncpu)
