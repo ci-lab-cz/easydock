@@ -86,7 +86,7 @@ def process_mol_docking(mol_id, ligand_string, script_file, tmpdir, receptor_pdb
                                    id = ?
                             """, (pdbqt_out, score, mol_block, mol_id))
 
-    ligand_pdbqt = ligand_preparation(ligand_string, seed)
+    ligand_pdbqt = ligand_preparation(ligand_string)
     if ligand_pdbqt is None:
         return mol_id
 
