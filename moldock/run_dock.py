@@ -13,6 +13,22 @@ class RawTextArgumentDefaultsHelpFormatter(argparse.RawTextHelpFormatter, argpar
     pass
 
 
+def get_supplied_args(parser):
+    # create a dict {'-c': '--ncpu', '--program': '--program', ...} and keep full (long) names of those args
+    # which are available in input command line string
+    all_args = [sorted(i.option_strings, reverse=True) for i in parser._actions]
+    all_args = [i + i if len(i) == 1 else i for i in all_args]
+    all_args = dict(all_args)
+    supplied_args = []
+    for item in sys.argv[1:]:
+        if item in all_args:
+            supplied_args.append(all_args[item])
+        elif item in all_args.values():
+            supplied_args.append(item)
+    supplied_args = [item.lstrip('-') for item in supplied_args]
+    return tuple(supplied_args)
+
+
 def main():
     parser = argparse.ArgumentParser(description='Perform docking of input molecules using Vina 1.2 or Gnina. '
                                                  'The script automates the whole pipeline: protonates molecules, '
@@ -28,7 +44,8 @@ def main():
                                                  '  $PBS_NODEFILE contains the list of addresses of servers\n'
                                                  'To continue interrupted calculations it is enough to run the script '
                                                  'with just output argument, all other arguments and data is stored '
-                                                 'in DB. All other arguments passed via command line will be ignored.',
+                                                 'in DB. If you supply other arguments they will have precedence over '
+                                                 'those ones stored in DB.',
                                      formatter_class=RawTextArgumentDefaultsHelpFormatter)
     parser.add_argument('-i', '--input', metavar='FILENAME', required=False, type=filepath_type,
                         help='input file with molecules (SMI, SDF, SDF.GZ, PKL). Maybe be omitted if output DB was '
@@ -73,6 +90,7 @@ def main():
     #                     help='name of the main table in a database.')
 
     args = parser.parse_args()
+    supplied_args = get_supplied_args(parser)
 
     if args.tmpdir is not None:
         tempfile.tempdir = args.tmpdir
@@ -86,7 +104,10 @@ def main():
             init_db(args.output, args.input, args.prefix)
         else:
             args_dict, tmpfiles = restore_setup_from_db(args.output)
-            del args_dict['output']
+            # this will ignore stored values of those args which were supplied via command line
+            # command line args have precedence over stored ones
+            for arg in supplied_args:
+                del args_dict[arg]
             args.__dict__.update(args_dict)
 
         if args.hostfile is not None:
