@@ -58,7 +58,7 @@ def process_mol_docking(mol_id, mol, receptor_pdbqt_fname, center, box_size, see
     :return:
     """
 
-    ligand_pdbqt = ligand_preparation(mol, seed)
+    ligand_pdbqt = ligand_preparation(mol)
     if ligand_pdbqt is None:
         return mol_id, None
     score, pdbqt_out = docking(ligands_pdbqt_string=ligand_pdbqt, receptor_pdbqt_fname=receptor_pdbqt_fname,
