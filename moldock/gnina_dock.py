@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-# authors: Guzel Minibaeva, Aleksandra Nikonenko, Pavel Polishchuk
-
 import argparse
 import os
 import sqlite3

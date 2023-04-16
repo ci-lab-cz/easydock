@@ -505,5 +505,7 @@ def select_mols_to_dock(db_fname, table_name='mols', add_sql=None):
                 mol = Chem.MolFromSmiles(smi)
             else:
                 mol = Chem.MolFromMolBlock(mol_block, removeHs=False)
-            data.append((mol_id, mol))
+            if mol:
+                mol.SetProp('_Name', mol_id)
+                data.append(mol)
     return data

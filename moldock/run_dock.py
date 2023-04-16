@@ -4,7 +4,10 @@ import argparse
 import os
 import sys
 import tempfile
+from functools import partial
+from multiprocessing import Pool
 
+from rdkit import Chem
 from moldock.preparation_for_docking import create_db, restore_setup_from_db, init_db, save_sdf, add_protonation, \
     cpu_type, filepath_type, update_db, select_mols_to_dock
 
@@ -27,6 +30,23 @@ def get_supplied_args(parser):
             supplied_args.append(item)
     supplied_args = [item.lstrip('-') for item in supplied_args]
     return tuple(supplied_args)
+
+
+def docking(mols, dock_func, dock_args, ncpu=1, dask_client=None):
+    Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
+    if dask_client is not None:
+        from dask.distributed import as_completed, performance_report
+        import os
+        with performance_report(filename=os.path.abspath('dask-report.html')):
+            for future, (mol_id, res) in as_completed(dask_client.map(dock_func,
+                                                                      mols,
+                                                                      **dock_args),
+                                                      with_results=True):
+                yield mol_id, res
+    else:
+        pool = Pool(ncpu)
+        for mol_id, res in pool.imap_unordered(partial(dock_func, **dock_args), mols, chunksize=1):
+            yield mol_id, res
 
 
 def main():
@@ -126,16 +146,22 @@ def main():
             add_protonation(args.output)
 
         if args.program == 'vina':
-            from moldock.vina_dock import iter_docking
+            from moldock.vina_dock import mol_dock, parse_config
         elif args.program == 'gnina':
-            from moldock.gnina_dock import iter_docking
+            from moldock.gnina_dock import mol_dock, parse_config
         else:
             raise ValueError(f'Illegal program argument was supplied: {args.program}')
+        dock_args = parse_config(args.config)  # create a dict of args to pass to mol_dock
 
         i = 0
-        data = select_mols_to_dock(args.output)
-        if data:
-            for i, (mol_id, res) in enumerate(iter_docking(data, args.config, ncpu=args.ncpu, dask_client=dask_client), 1):
+        mols = select_mols_to_dock(args.output)
+        if mols:
+            for i, (mol_id, res) in enumerate(docking(mols,
+                                                      dock_func=mol_dock,
+                                                      dock_args=dock_args,
+                                                      ncpu=args.ncpu,
+                                                      dask_client=dask_client),
+                                              1):
                 if res:
                     update_db(args.output, mol_id, res)
                 if args.verbose and i % 100 == 0:
