@@ -2,6 +2,11 @@
 
 import argparse
 import yaml
+import json
+import os
+import subprocess
+import sys
+import tempfile
 
 from vina import Vina
 from moldock.preparation_for_docking import ligand_preparation, pdbqt2molblock
@@ -30,13 +35,17 @@ def __docking(ligands_pdbqt_string, receptor_pdbqt_fname, center, box_size, exha
     return v.energies(n_poses=n_poses)[0][0], v.poses(n_poses=n_poses)
 
 
+def __docking_queued(queue, **kwargs):
+    queue.put(__docking(**kwargs))
+
+
 def mol_dock(mol, protein, center, box_size, seed, exhaustiveness, n_poses, ncpu):
     """
 
-    :param mol: RDKit Mol
+    :param mol: RDKit Mol with title
     :param protein: PDBQT file name
-    :param center:
-    :param box_size:
+    :param center: 3-tuple
+    :param box_size: 3-tuple
     :param seed:
     :param exhaustiveness:
     :param n_poses:
@@ -56,6 +65,90 @@ def mol_dock(mol, protein, center, box_size, seed, exhaustiveness, n_poses, ncpu
                     'pdb_block': pdbqt_out,
                     'mol_block': mol_block}
 
+
+def mol_dock2(mol, protein, center, box_size, seed, exhaustiveness, n_poses, ncpu):
+    """
+
+    :param mol: RDKit Mol with title
+    :param protein: PDBQT file name
+    :param center: 3-tuple
+    :param box_size: 3-tuple
+    :param seed:
+    :param exhaustiveness:
+    :param n_poses:
+    :param ncpu:
+    :return:
+    """
+    mol_id = mol.GetProp('_Name')
+    ligand_pdbqt = ligand_preparation(mol)
+    if ligand_pdbqt is None:
+        return mol_id, None
+
+    output_fname = tempfile.mkstemp(suffix='_output.json', text=True)[1]
+    ligand_fname = tempfile.mkstemp(suffix='_ligand.pdbqt', text=True)[1]
+
+    try:
+        open(ligand_fname, 'wt').write(ligand_pdbqt)
+
+        p = os.path.realpath(__file__)
+        python_exec = sys.executable
+        cmd = f'{python_exec} {os.path.dirname(p)}/vina_dock_cli.py -l {ligand_fname} -p {protein} -o {output_fname} ' \
+              f'--center {" ".join(map(str, center))} --box_size {" ".join(map(str, box_size))} ' \
+              f'-e {exhaustiveness} --seed {seed} --nposes {n_poses} -c {ncpu}'
+        subprocess.run(cmd, shell=True)
+
+        res = open(output_fname).read()
+
+        if res:
+            res = json.loads(res)
+            mol_block = pdbqt2molblock(res['poses'].split('MODEL')[1], mol, mol_id)
+        else:
+            return mol_id, None
+
+    finally:
+        os.unlink(ligand_fname)
+        os.unlink(output_fname)
+
+    return mol_id, {'docking_score': res['docking_score'],
+                    'pdb_block': res['poses'],
+                    'mol_block': mol_block}
+
+
+# def mol_dock3(mol, protein, center, box_size, seed, exhaustiveness, n_poses, ncpu):
+#     """
+#
+#     :param mol: RDKit Mol with title
+#     :param protein: PDBQT file name
+#     :param center:
+#     :param box_size:
+#     :param seed:
+#     :param exhaustiveness:
+#     :param n_poses:
+#     :param ncpu:
+#     :return:
+#     """
+#     mol_id = mol.GetProp('_Name')
+#     ligand_pdbqt = ligand_preparation(mol)
+#     if ligand_pdbqt is None:
+#         return mol_id, None
+#
+#     queue: Queue = Queue(maxsize=0)
+#     p = Process(target=__docking_queued, kwargs={'queue': queue,
+#                                                  'ligands_pdbqt_string': ligand_pdbqt,
+#                                                  'receptor_pdbqt_fname': protein,
+#                                                  'center': center, 'box_size': box_size,
+#                                                  'exhaustiveness': exhaustiveness,
+#                                                  'seed': seed, 'n_poses': n_poses, 'ncpu': ncpu})
+#     p.start()
+#
+#     score, pdbqt_out = queue.get()
+#
+#     mol_block = pdbqt2molblock(pdbqt_out.split('MODEL')[1], mol, mol_id)
+#
+#     return mol_id, {'docking_score': score,
+#                     'pdb_block': pdbqt_out,
+#                     'mol_block': mol_block}
+#
 
 def parse_config(config_fname):
 

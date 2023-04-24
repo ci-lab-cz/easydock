@@ -133,10 +133,18 @@ def main():
         if args.hostfile is not None:
             import dask
             from dask.distributed import Client
-            dask.config.set({'distributed.scheduler.allowed-failures': 30})
-            dask.config.set({'distributed.worker.lifetime.restart': True})
-            dask.config.set({'distributed.comm.timeouts.connect': 300})
-            dask.config.set({'distributed.comm.timeouts.tcp': 300})
+            # dask.config.set({'distributed.scheduler.allowed-failures': 30})
+            # dask.config.set({'distributed.scheduler.work-stealing-interval': '1minutes'})  # sec
+            # dask.config.set({'distributed.scheduler.worker-ttl': None})  # min
+            # dask.config.set({'distributed.scheduler.unknown-task-duration': '1h'})  # ms
+            # dask.config.set({'distributed.worker.lifetime.restart': True})
+            # dask.config.set({'distributed.worker.profile.interval': '100ms'})
+            # dask.config.set({'distributed.comm.timeouts.connect': '30minutes'})  #sec
+            # dask.config.set({'distributed.comm.timeouts.tcp': '30minutes'})  # sec
+            # dask.config.set({'distributed.comm.retry.count': 20})
+            # dask.config.set({'distributed.admin.tick.limit': '3h'})
+            # dask.config.set({'distributed.deploy.lost-worker-timeout': '30minutes'})
+            # print(dask.config.config)
             dask_client = Client(open(args.hostfile).readline().strip() + ':8786')
             # dask_client = Client()
         else:
@@ -146,7 +154,7 @@ def main():
             add_protonation(args.output)
 
         if args.program == 'vina':
-            from moldock.vina_dock import mol_dock, parse_config
+            from moldock.vina_dock import mol_dock2 as mol_dock, parse_config
         elif args.program == 'gnina':
             from moldock.gnina_dock import mol_dock, parse_config
         else:
