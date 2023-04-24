@@ -32,12 +32,14 @@ def get_supplied_args(parser):
     return tuple(supplied_args)
 
 
-def docking(mols, dock_func, dock_args, ncpu=1, dask_client=None):
+def docking(mols, dock_func, dock_args, ncpu=1, dask_client=None, dask_report_fname=None):
     Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
     if dask_client is not None:
         from dask.distributed import as_completed, performance_report
         import os
-        with performance_report(filename=os.path.abspath('dask-report.html')):
+        if dask_report_fname is None:
+            dask_report_fname = os.path.expanduser('~/dask-report.html')
+        with performance_report(filename=dask_report_fname):
             for future, (mol_id, res) in as_completed(dask_client.map(dock_func,
                                                                       mols,
                                                                       **dock_args),
@@ -168,7 +170,8 @@ def main():
                                                       dock_func=mol_dock,
                                                       dock_args=dock_args,
                                                       ncpu=args.ncpu,
-                                                      dask_client=dask_client),
+                                                      dask_client=dask_client,
+                                                      dask_report_fname=os.path.join(os.path.dirname(os.path.abspath(args.output)), 'dask_report.html')),
                                               1):
                 if res:
                     update_db(args.output, mol_id, res)
