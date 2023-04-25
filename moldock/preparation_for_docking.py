@@ -231,7 +231,7 @@ def boron_reduction(mol_B, mol):
         for i in mol_idx_boron[0]:
             mol.GetAtomWithIdx(i).SetAtomicNum(5)
     else: #if not - several equivalent mappings exist
-        sys.stderr.write('different mappings was detected. The structure cannot be recostructed automatically.')
+        sys.stderr.write('different mappings was detected. The structure cannot be reconstructed automatically.')
         return None
     return mol
 
