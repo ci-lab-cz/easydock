@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import timeit
 
 from vina import Vina
 from moldock.preparation_for_docking import ligand_preparation, pdbqt2molblock
@@ -66,7 +67,7 @@ def mol_dock(mol, protein, center, box_size, seed, exhaustiveness, n_poses, ncpu
                     'mol_block': mol_block}
 
 
-def mol_dock2(mol, protein, center, box_size, seed, exhaustiveness, n_poses, ncpu):
+def mol_dock_cli(mol, protein, center, box_size, seed, exhaustiveness, n_poses, ncpu):
     """
 
     :param mol: RDKit Mol with title
@@ -95,8 +96,9 @@ def mol_dock2(mol, protein, center, box_size, seed, exhaustiveness, n_poses, ncp
         cmd = f'{python_exec} {os.path.dirname(p)}/vina_dock_cli.py -l {ligand_fname} -p {protein} -o {output_fname} ' \
               f'--center {" ".join(map(str, center))} --box_size {" ".join(map(str, box_size))} ' \
               f'-e {exhaustiveness} --seed {seed} --nposes {n_poses} -c {ncpu}'
+        start_time = timeit.default_timer()
         subprocess.run(cmd, shell=True)
-
+        dock_time = round(timeit.default_timer() - start_time, 1)
         res = open(output_fname).read()
 
         if res:
@@ -111,7 +113,8 @@ def mol_dock2(mol, protein, center, box_size, seed, exhaustiveness, n_poses, ncp
 
     return mol_id, {'docking_score': res['docking_score'],
                     'pdb_block': res['poses'],
-                    'mol_block': mol_block}
+                    'mol_block': mol_block,
+                    'dock_time': dock_time}
 
 
 # def mol_dock3(mol, protein, center, box_size, seed, exhaustiveness, n_poses, ncpu):
