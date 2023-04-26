@@ -290,6 +290,7 @@ def create_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', '
              docking_score REAL,
              pdb_block TEXT,
              mol_block TEXT,
+             dock_time REAL,
              time TEXT
             )""")
 
