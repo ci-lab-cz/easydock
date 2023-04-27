@@ -57,7 +57,7 @@ def docking(mols, dock_func, dock_kwargs, priority_func=CalcNumRotatableBonds, n
             futures = []
             for i, mol in enumerate(mols, 1):
                 futures.append(dask_client.submit(dock_func, mol, priority=priority_func(mol), **dock_kwargs))
-                if i == nworkers * 2:
+                if i == nworkers * 6:
                     break
             seq = as_completed(futures, with_results=True)
             for i, (future, (mol_id, res)) in enumerate(seq, 1):
@@ -180,9 +180,10 @@ def main():
             add_protonation(args.output)
 
         if args.program == 'vina':
-            from moldock.vina_dock import mol_dock_cli as mol_dock, parse_config
+            from moldock.vina_dock import mol_dock_cli as mol_dock, parse_config, pred_dock_time
         elif args.program == 'gnina':
             from moldock.gnina_dock import mol_dock, parse_config
+            pred_dock_time = CalcNumRotatableBonds
         else:
             raise ValueError(f'Illegal program argument was supplied: {args.program}')
 
@@ -194,6 +195,7 @@ def main():
             for i, (mol_id, res) in enumerate(docking(mols,
                                                       dock_func=mol_dock,
                                                       dock_kwargs=dock_args,
+                                                      priority_func=pred_dock_time,
                                                       ncpu=args.ncpu,
                                                       dask_client=dask_client,
                                                       dask_report_fname=os.path.join(

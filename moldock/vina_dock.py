@@ -9,6 +9,7 @@ import sys
 import tempfile
 import timeit
 
+from rdkit.Chem.rdMolDescriptors import CalcNumRotatableBonds
 from vina import Vina
 from moldock.preparation_for_docking import ligand_preparation, pdbqt2molblock
 
@@ -117,42 +118,6 @@ def mol_dock_cli(mol, protein, center, box_size, seed, exhaustiveness, n_poses, 
                     'dock_time': dock_time}
 
 
-# def mol_dock3(mol, protein, center, box_size, seed, exhaustiveness, n_poses, ncpu):
-#     """
-#
-#     :param mol: RDKit Mol with title
-#     :param protein: PDBQT file name
-#     :param center:
-#     :param box_size:
-#     :param seed:
-#     :param exhaustiveness:
-#     :param n_poses:
-#     :param ncpu:
-#     :return:
-#     """
-#     mol_id = mol.GetProp('_Name')
-#     ligand_pdbqt = ligand_preparation(mol)
-#     if ligand_pdbqt is None:
-#         return mol_id, None
-#
-#     queue: Queue = Queue(maxsize=0)
-#     p = Process(target=__docking_queued, kwargs={'queue': queue,
-#                                                  'ligands_pdbqt_string': ligand_pdbqt,
-#                                                  'receptor_pdbqt_fname': protein,
-#                                                  'center': center, 'box_size': box_size,
-#                                                  'exhaustiveness': exhaustiveness,
-#                                                  'seed': seed, 'n_poses': n_poses, 'ncpu': ncpu})
-#     p.start()
-#
-#     score, pdbqt_out = queue.get()
-#
-#     mol_block = pdbqt2molblock(pdbqt_out.split('MODEL')[1], mol, mol_id)
-#
-#     return mol_id, {'docking_score': score,
-#                     'pdb_block': pdbqt_out,
-#                     'mol_block': mol_block}
-#
-
 def parse_config(config_fname):
 
     def get_param_from_config(protein_setup_fname):
@@ -176,3 +141,9 @@ def parse_config(config_fname):
 
     return config
 
+
+def pred_dock_time(mol):
+    hac = mol.GetNumHeavyAtoms()
+    rtb = CalcNumRotatableBonds(mol)
+    res = 465.9791 - 59.7143 * rtb - 0.3750 * rtb ** 2 - 36.7238 * hac + 0.7446 * hac ** 2 + 3.4801 * rtb * hac
+    return res
