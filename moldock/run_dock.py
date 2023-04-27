@@ -2,12 +2,14 @@
 
 import argparse
 import os
+import sqlite3
 import sys
 import tempfile
 from functools import partial
 from multiprocessing import Pool
 
 from rdkit import Chem
+from rdkit.Chem.rdMolDescriptors import CalcNumRotatableBonds
 from moldock.preparation_for_docking import create_db, restore_setup_from_db, init_db, save_sdf, add_protonation, \
     cpu_type, filepath_type, update_db, select_mols_to_dock
 
@@ -32,22 +34,44 @@ def get_supplied_args(parser):
     return tuple(supplied_args)
 
 
-def docking(mols, dock_func, dock_args, ncpu=1, dask_client=None, dask_report_fname=None):
+def docking(mols, dock_func, dock_kwargs, priority_func=CalcNumRotatableBonds, ncpu=1, dask_client=None, dask_report_fname=None):
+    """
+
+    :param mols: iterator of molecules, each molecule must have a title
+    :param dock_func: docking function
+    :param dock_kwargs: a dist of docking arguments which will be passed to dock_func
+    :param priority_func: function which return a numeric value, higher values - higher docking priority
+    :param ncpu: number of cores to be used in a single server docking
+    :param dask_client: reference to a dask client (if omitted single server docking will be performed)
+    :param dask_report_fname: name of dask html-report file (optional)
+    :return: iterator with molecule title and a dict of values returned by dock_func
+    """
     Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
     if dask_client is not None:
         from dask.distributed import as_completed, performance_report
-        import os
-        if dask_report_fname is None:
-            dask_report_fname = os.path.expanduser('~/dask-report.html')
-        with performance_report(filename=dask_report_fname):
-            for future, (mol_id, res) in as_completed(dask_client.map(dock_func,
-                                                                      mols,
-                                                                      **dock_args),
-                                                      with_results=True):
+        # https://stackoverflow.com/a/12168252/895544 - optional context manager
+        from contextlib import contextmanager
+        none_context = contextmanager(lambda: iter([None]))()
+        with (performance_report(filename=dask_report_fname) if dask_report_fname is not None else none_context):
+            nworkers = len(dask_client.scheduler_info()['workers'])
+            futures = []
+            for i, mol in enumerate(mols, 1):
+                futures.append(dask_client.submit(dock_func, mol, priority=priority_func(mol), **dock_kwargs))
+                if i == nworkers * 2:
+                    break
+            seq = as_completed(futures, with_results=True)
+            for i, (future, (mol_id, res)) in enumerate(seq, 1):
                 yield mol_id, res
+                del future
+                try:
+                    mol = next(mols)
+                    new_future = dask_client.submit(dock_func, mol, priority=priority_func(mol), **dock_kwargs)
+                    seq.add(new_future)
+                except StopIteration:
+                    continue
     else:
         pool = Pool(ncpu)
-        for mol_id, res in pool.imap_unordered(partial(dock_func, **dock_args), mols, chunksize=1):
+        for mol_id, res in pool.imap_unordered(partial(dock_func, **dock_kwargs), mols, chunksize=1):
             yield mol_id, res
 
 
@@ -135,19 +159,19 @@ def main():
         if args.hostfile is not None:
             import dask
             from dask.distributed import Client
-            # dask.config.set({'distributed.scheduler.allowed-failures': 30})
-            # dask.config.set({'distributed.scheduler.work-stealing-interval': '1minutes'})  # sec
-            # dask.config.set({'distributed.scheduler.worker-ttl': None})  # min
-            # dask.config.set({'distributed.scheduler.unknown-task-duration': '1h'})  # ms
-            # dask.config.set({'distributed.worker.lifetime.restart': True})
-            # dask.config.set({'distributed.worker.profile.interval': '100ms'})
-            # dask.config.set({'distributed.comm.timeouts.connect': '30minutes'})  #sec
-            # dask.config.set({'distributed.comm.timeouts.tcp': '30minutes'})  # sec
-            # dask.config.set({'distributed.comm.retry.count': 20})
-            # dask.config.set({'distributed.admin.tick.limit': '3h'})
-            # dask.config.set({'distributed.deploy.lost-worker-timeout': '30minutes'})
-            # print(dask.config.config)
-            dask_client = Client(open(args.hostfile).readline().strip() + ':8786')
+            dask.config.set({'distributed.scheduler.allowed-failures': 30})
+            dask.config.set({'distributed.scheduler.work-stealing-interval': '1minutes'})  # sec
+            dask.config.set({'distributed.scheduler.worker-ttl': None})  # min
+            dask.config.set({'distributed.scheduler.unknown-task-duration': '1h'})  # ms
+            dask.config.set({'distributed.worker.lifetime.restart': True})
+            dask.config.set({'distributed.worker.profile.interval': '100ms'})
+            dask.config.set({'distributed.comm.timeouts.connect': '30minutes'})  #sec
+            dask.config.set({'distributed.comm.timeouts.tcp': '30minutes'})  # sec
+            dask.config.set({'distributed.comm.retry.count': 20})
+            dask.config.set({'distributed.admin.tick.limit': '3h'})
+            dask.config.set({'distributed.deploy.lost-worker-timeout': '30minutes'})
+            hosts = [line.strip() for line in open(args.hostfile)]
+            dask_client = Client(hosts[0] + ':8786', connection_limit=2048)
             # dask_client = Client()
         else:
             dask_client = None
@@ -156,29 +180,32 @@ def main():
             add_protonation(args.output)
 
         if args.program == 'vina':
-            from moldock.vina_dock import mol_dock2 as mol_dock, parse_config
+            from moldock.vina_dock import mol_dock_cli as mol_dock, parse_config
         elif args.program == 'gnina':
             from moldock.gnina_dock import mol_dock, parse_config
         else:
             raise ValueError(f'Illegal program argument was supplied: {args.program}')
+
         dock_args = parse_config(args.config)  # create a dict of args to pass to mol_dock
 
-        i = 0
-        mols = select_mols_to_dock(args.output)
-        if mols:
+        with sqlite3.connect(args.output) as conn:
+            mols = select_mols_to_dock(conn)
+            i = 0
             for i, (mol_id, res) in enumerate(docking(mols,
                                                       dock_func=mol_dock,
-                                                      dock_args=dock_args,
+                                                      dock_kwargs=dock_args,
                                                       ncpu=args.ncpu,
                                                       dask_client=dask_client,
-                                                      dask_report_fname=os.path.join(os.path.dirname(os.path.abspath(args.output)), 'dask_report.html')),
+                                                      dask_report_fname=os.path.join(
+                                                                 os.path.dirname(os.path.abspath(args.output)),
+                                                                 'dask_report.html')),
                                               1):
                 if res:
-                    update_db(args.output, mol_id, res)
+                    update_db(conn, mol_id, res)
                 if args.verbose and i % 100 == 0:
-                    sys.stderr.write(f'\r{i} molecules were docked')
+                    sys.stderr.write(f'\r{i} molecules were processed')
             if args.verbose:
-                sys.stderr.write(f'\n{i} molecules were docked\n')
+                sys.stderr.write(f'\n{i} molecules were processed\n')
 
         if args.sdf:
             save_sdf(args.output)
