@@ -405,18 +405,17 @@ def init_db(db_fname, input_fname, prefix=None):
     conn.commit()
 
 
-def get_protonation_arg_value(db_fname):
+def get_protonation_arg_value(db_conn):
     """
     Returns True if molecules had to be protonated and False otherwise
-    :param db_fname:
+    :param db_conn:
     :return:
     """
-    conn = sqlite3.connect(db_fname)
-    d = yaml.safe_load(conn.execute("SELECT yaml FROM setup").fetchone()[0])
+    d = yaml.safe_load(db_conn.execute("SELECT yaml FROM setup").fetchone()[0])
     return not d['no_protonation']
 
 
-def update_db(db_fname, mol_id, data, table_name='mols'):
+def update_db(db_conn, mol_id, data, table_name='mols', commit=True):
     """
 
     :param db_fname:
@@ -425,16 +424,16 @@ def update_db(db_fname, mol_id, data, table_name='mols'):
     :param table_name:
     :return:
     """
-    conn = sqlite3.connect(db_fname)
     if data:
         cols, values = zip(*data.items())
-        conn.execute(f"""UPDATE {table_name}
+        db_conn.execute(f"""UPDATE {table_name}
                            SET {', '.join(['%s = ?'] * len(cols))},
                                time = CURRENT_TIMESTAMP
                            WHERE
                                id = ?
                         """ % cols, list(values) + [mol_id])
-        conn.commit()
+        if commit:
+            db_conn.commit()
 
 
 def insert_db(db_fname, data, cols=None, table_name='mols'):
@@ -474,36 +473,33 @@ def save_sdf(db_fname):
         sys.stderr.write(f'Best poses were saved to {sdf_fname}\n')
 
 
-def select_mols_to_dock(db_fname, table_name='mols', add_sql=None):
+def select_mols_to_dock(db_conn, table_name='mols', add_sql=None):
     """
     Select molecules for docking from a given table using additional selection conditions
-    :param db_fname:
+    :param db_conn:
     :param table_name:
     :param add_sql: additional SQL query which is appended the SQL query which returns molecules for docking,
                     e.g. "AND iteration=MAX(iteration)"
     :return: list of tuples (mol_id, smi) or (mol_id, mol_block). They can be mixed if the DB is not consistently
              filled, but this is not an issue if use proper parsing function
     """
-    data = []
-    protonation_status = get_protonation_arg_value(db_fname)
-    with sqlite3.connect(db_fname) as conn:
-        cur = conn.cursor()
-        smi_field_name = 'smi_protonated' if protonation_status else 'smi'
-        mol_field_name = 'source_mol_block_protonated' if protonation_status else 'source_mol_block'
+    protonation_status = get_protonation_arg_value(db_conn)
+    cur = db_conn.cursor()
+    smi_field_name = 'smi_protonated' if protonation_status else 'smi'
+    mol_field_name = 'source_mol_block_protonated' if protonation_status else 'source_mol_block'
 
-        sql = f"""SELECT id, {smi_field_name}, {mol_field_name}
-                  FROM {table_name}
-                  WHERE docking_score IS NULL AND 
-                        (({smi_field_name} IS NOT NULL AND {smi_field_name != ''}) OR 
-                         ({mol_field_name} IS NOT NULL AND {mol_field_name != ''})) """
-        if isinstance(add_sql, str) and add_sql:
-            sql += add_sql
-        for mol_id, smi, mol_block in cur.execute(sql):
-            if mol_block is None:
-                mol = Chem.MolFromSmiles(smi)
-            else:
-                mol = Chem.MolFromMolBlock(mol_block, removeHs=False)
-            if mol:
-                mol.SetProp('_Name', mol_id)
-                data.append(mol)
-    return data
+    sql = f"""SELECT id, {smi_field_name}, {mol_field_name}
+              FROM {table_name}
+              WHERE docking_score IS NULL AND 
+                    (({smi_field_name} IS NOT NULL AND {smi_field_name != ''}) OR 
+                     ({mol_field_name} IS NOT NULL AND {mol_field_name != ''})) """
+    if isinstance(add_sql, str) and add_sql:
+        sql += add_sql
+    for mol_id, smi, mol_block in cur.execute(sql):
+        if mol_block is None:
+            mol = Chem.MolFromSmiles(smi)
+        else:
+            mol = Chem.MolFromMolBlock(mol_block, removeHs=False)
+        if mol:
+            mol.SetProp('_Name', mol_id)
+            yield mol
