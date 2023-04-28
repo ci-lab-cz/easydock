@@ -159,17 +159,25 @@ def main():
         if args.hostfile is not None:
             import dask
             from dask.distributed import Client
-            dask.config.set({'distributed.scheduler.allowed-failures': 30})
-            dask.config.set({'distributed.scheduler.work-stealing-interval': '1minutes'})  # sec
-            dask.config.set({'distributed.scheduler.worker-ttl': None})  # min
-            dask.config.set({'distributed.scheduler.unknown-task-duration': '1h'})  # ms
-            dask.config.set({'distributed.worker.lifetime.restart': True})
-            dask.config.set({'distributed.worker.profile.interval': '100ms'})
-            dask.config.set({'distributed.comm.timeouts.connect': '30minutes'})  #sec
-            dask.config.set({'distributed.comm.timeouts.tcp': '30minutes'})  # sec
-            dask.config.set({'distributed.comm.retry.count': 20})
-            dask.config.set({'distributed.admin.tick.limit': '3h'})
-            dask.config.set({'distributed.deploy.lost-worker-timeout': '30minutes'})
+            # dask.config.set({'distributed.client.heartbeat': '20s'})
+            # dask.config.set({'distributed.client.scheduler-info-interval': '10s'})
+            # dask.config.set({'distributed.scheduler.allowed-failures': 30})
+            # dask.config.set({'distributed.scheduler.work-stealing-interval': '1minutes'})
+            # dask.config.set({'distributed.scheduler.worker-ttl': None})
+            # dask.config.set({'distributed.scheduler.unknown-task-duration': '1h'})
+            # dask.config.set({'distributed.scheduler.work-stealing': False})
+            # dask.config.set({'distributed.scheduler.unknown-task-duration': '5minutes'})
+            # dask.config.set({'distributed.worker.lifetime.restart': True})
+            # dask.config.set({'distributed.worker.profile.interval': '500ms'})
+            # dask.config.set({'distributed.worker.profile.cycle': '5s'})
+            # dask.config.set({'distributed.worker.memory.monitor-interval': '1s'})
+            # dask.config.set({'distributed.comm.timeouts.connect': '30minutes'})
+            # dask.config.set({'distributed.comm.timeouts.tcp': '30minutes'})
+            # dask.config.set({'distributed.comm.retry.count': 20})
+            # dask.config.set({'distributed.admin.tick.limit': '3h'})
+            # dask.config.set({'distributed.admin.tick.interval': '500ms'})
+            # dask.config.set({'distributed.deploy.lost-worker-timeout': '30minutes'})
+
             hosts = [line.strip() for line in open(args.hostfile)]
             dask_client = Client(hosts[0] + ':8786', connection_limit=2048)
             # dask_client = Client()
