@@ -137,7 +137,6 @@ def parse_config(config_fname):
     del config['protein_setup']
     config['center'] = center
     config['box_size'] = box_size
-    config['ncpu'] = 1
 
     return config
 
