@@ -57,7 +57,7 @@ def docking(mols, dock_func, dock_kwargs, priority_func=CalcNumRotatableBonds, n
             futures = []
             for i, mol in enumerate(mols, 1):
                 futures.append(dask_client.submit(dock_func, mol, priority=priority_func(mol), **dock_kwargs))
-                if i == nworkers * 6:
+                if i == nworkers * 10:
                     break
             seq = as_completed(futures, with_results=True)
             for i, (future, (mol_id, res)) in enumerate(seq, 1):
