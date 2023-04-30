@@ -81,16 +81,19 @@ def mol_dock_cli(mol, protein, center, box_size, seed, exhaustiveness, n_poses, 
     :param ncpu:
     :return:
     """
+    output = None
+
     mol_id = mol.GetProp('_Name')
     ligand_pdbqt = ligand_preparation(mol)
     if ligand_pdbqt is None:
         return mol_id, None
 
-    output_fname = tempfile.mkstemp(suffix='_output.json', text=True)[1]
-    ligand_fname = tempfile.mkstemp(suffix='_ligand.pdbqt', text=True)[1]
+    output_fd, output_fname = tempfile.mkstemp(suffix='_output.json', text=True)
+    ligand_fd, ligand_fname = tempfile.mkstemp(suffix='_ligand.pdbqt', text=True)
 
     try:
-        open(ligand_fname, 'wt').write(ligand_pdbqt)
+        with open(ligand_fname, 'wt') as f:
+            f.write(ligand_pdbqt)
 
         p = os.path.realpath(__file__)
         python_exec = sys.executable
@@ -100,22 +103,24 @@ def mol_dock_cli(mol, protein, center, box_size, seed, exhaustiveness, n_poses, 
         start_time = timeit.default_timer()
         subprocess.run(cmd, shell=True)
         dock_time = round(timeit.default_timer() - start_time, 1)
-        res = open(output_fname).read()
 
-        if res:
-            res = json.loads(res)
-            mol_block = pdbqt2molblock(res['poses'].split('MODEL')[1], mol, mol_id)
-        else:
-            return mol_id, None
+        with open(output_fname) as f:
+            res = f.read()
+            if res:
+                res = json.loads(res)
+                mol_block = pdbqt2molblock(res['poses'].split('MODEL')[1], mol, mol_id)
+                output = {'docking_score': res['docking_score'],
+                          'pdb_block': res['poses'],
+                          'mol_block': mol_block,
+                          'dock_time': dock_time}
 
     finally:
+        os.close(output_fd)
+        os.close(ligand_fd)
         os.unlink(ligand_fname)
         os.unlink(output_fname)
 
-    return mol_id, {'docking_score': res['docking_score'],
-                    'pdb_block': res['poses'],
-                    'mol_block': mol_block,
-                    'dock_time': dock_time}
+    return mol_id, output
 
 
 def parse_config(config_fname):
@@ -132,7 +137,8 @@ def parse_config(config_fname):
                            (config['size_x'], config['size_y'], config['size_z'])
         return center, box_size
 
-    config = yaml.safe_load(open(config_fname))
+    with open(config_fname) as f:
+        config = yaml.safe_load(f)
     center, box_size = get_param_from_config(config['protein_setup'])
     del config['protein_setup']
     config['center'] = center

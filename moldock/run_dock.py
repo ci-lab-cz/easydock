@@ -70,9 +70,9 @@ def docking(mols, dock_func, dock_kwargs, priority_func=CalcNumRotatableBonds, n
                 except StopIteration:
                     continue
     else:
-        pool = Pool(ncpu)
-        for mol_id, res in pool.imap_unordered(partial(dock_func, **dock_kwargs), mols, chunksize=1):
-            yield mol_id, res
+        with Pool(ncpu) as pool:
+            for mol_id, res in pool.imap_unordered(partial(dock_func, **dock_kwargs), tuple(mols), chunksize=1):
+                yield mol_id, res
 
 
 def main():
@@ -178,7 +178,8 @@ def main():
             # dask.config.set({'distributed.admin.tick.interval': '500ms'})
             # dask.config.set({'distributed.deploy.lost-worker-timeout': '30minutes'})
 
-            hosts = [line.strip() for line in open(args.hostfile)]
+            with open(args.hostfile) as f:
+                hosts = [line.strip() for line in f]
             dask_client = Client(hosts[0] + ':8786', connection_limit=2048)
             # dask_client = Client()
         else:

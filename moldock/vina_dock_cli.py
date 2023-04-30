@@ -54,7 +54,10 @@ def main():
 
     args = parser.parse_args()
 
-    res = __docking(ligands_pdbqt_string=open(args.ligand).read(),
+    with open(args.ligand) as f:
+        ligand_pdbqt_string = f.read()
+
+    res = __docking(ligands_pdbqt_string=ligand_pdbqt_string,
                     receptor_pdbqt_fname=args.protein,
                     center=args.center,
                     box_size=args.box_size,
