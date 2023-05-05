@@ -45,7 +45,7 @@ def main():
                         help='size of the box in XYZ dimensions.')
     parser.add_argument('-e', '--exhaustiveness', metavar='INTEGER', required=False, type=int, default=8,
                         help='exhaustiveness of docking search.')
-    parser.add_argument('--seed', metavar='INTEGER', required=False, type=int, default=-1,
+    parser.add_argument('--seed', metavar='INTEGER', required=False, type=int, default=0,
                         help='seed to make results reproducible.')
     parser.add_argument('-n', '--nposes', default=10, type=int,
                         help='number of poses.')
