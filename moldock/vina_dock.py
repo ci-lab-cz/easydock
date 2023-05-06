@@ -31,7 +31,7 @@ def __docking(ligands_pdbqt_string, receptor_pdbqt_fname, center, box_size, exha
     v = Vina(sf_name='vina', cpu=ncpu, seed=seed, no_refine=False, verbosity=0)
     v.set_receptor(rigid_pdbqt_filename=receptor_pdbqt_fname)
     v.set_ligand_from_string(ligands_pdbqt_string)
-    v.compute_vina_maps(center=center, box_size=box_size, spacing=1)
+    v.compute_vina_maps(center=center, box_size=box_size)
     v.dock(exhaustiveness=exhaustiveness, n_poses=50 if n_poses < 50 else n_poses) #number of poses fixed for optimal search,
                                                                                    #but if a user want to generate more poses, the number will be changed
     return v.energies(n_poses=n_poses)[0][0], v.poses(n_poses=n_poses)
