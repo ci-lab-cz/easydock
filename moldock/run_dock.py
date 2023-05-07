@@ -84,14 +84,14 @@ def main():
                                                  'To run on a single machine:\n'
                                                  '  run_dock.py -i input.smi -o output.db --program vina --config config.yml -c 4 -v\n\n'
                                                  'To run on several machines using dask ssh-cluster (on PBS system):\n'
-                                                 '  dask-ssh --hostfile $PBS_NODEFILE --nprocs 32 --nthreads 1 &\n'
+                                                 '  dask ssh --hostfile $PBS_NODEFILE --nprocs 8 --nthreads 5 &\n'
                                                  '  sleep 10\n'
-                                                 '  run_dock.py -i input.smi -o output.db --program vina --config config.yml -c 4 -v --hostfile $PBS_NODEFILE\n\n'
-                                                 '  $PBS_NODEFILE contains the list of addresses of servers\n'
+                                                 '  run_dock.py -i input.smi -o output.db --program vina --config config.yml -hostfile $PBS_NODEFILE\n\n'
+                                                 '  $PBS_NODEFILE contains the list of addresses of computational nodes\n'
                                                  'To continue interrupted calculations it is enough to run the script '
                                                  'with just output argument, all other arguments and data is stored '
-                                                 'in DB. If you supply other arguments they will have precedence over '
-                                                 'those ones stored in DB.',
+                                                 'in DB. If you supply other arguments ina command line they will have '
+                                                 'higher precedence over those ones stored in DB.',
                                      formatter_class=RawTextArgumentDefaultsHelpFormatter)
     parser.add_argument('-i', '--input', metavar='FILENAME', required=False, type=filepath_type,
                         help='input file with molecules (SMI, SDF, SDF.GZ, PKL). Maybe be omitted if output DB was '
@@ -105,13 +105,13 @@ def main():
                         help='name of a docking program. Choices: vina, gnina')
     parser.add_argument('--config', metavar='FILENAME', required=False,
                         help='YAML file with parameters used by docking program.\n'
-                             'vina\n'
+                             'vina.yml\n'
                              'protein: path to pdbqt file with a protein\n'
                              'protein_setup: path to a text file with coordinates of a binding site\n'
                              'exhaustiveness: 8\n'
                              'n_poses: 10\n'
                              'seed: -1\n'
-                             'gnina\n')
+                             'gnina.yml\n')
     parser.add_argument('--no_protonation', action='store_true', default=False,
                         help='disable protonation of molecules before docking. Protonation requires installed '
                              'cxcalc chemaxon utility.')
@@ -123,13 +123,13 @@ def main():
                              'will be the address of the scheduler running on the standard port 8786. If omitted, '
                              'calculations will run on a single machine as usual.')
     parser.add_argument('--tmpdir', metavar='DIRNAME', required=False, type=filepath_type, default=None,
-                        help='path to a dir where to store temporary files accessible to a program. If use dask this '
-                             'argument must be specified because dask cannot access ordinary tmp locations.')
+                        help='path to a dir where to store temporary files accessible to a program. '
+                             'Normally should be used,')
     parser.add_argument('--prefix', metavar='STRING', required=False, type=str, default=None,
                         help='prefix which will be added to all molecule names. This might be useful if multiple '
                              'repeated runs are made which will be analyzed together.')
     parser.add_argument('-c', '--ncpu', default=1, type=cpu_type,
-                        help='number of cpus.')
+                        help='number of cpus. This affects only docking on a single server.')
     parser.add_argument('-v', '--verbose', action='store_true', default=False,
                         help='print progress to STDERR.')
     # parser.add_argument('--table_name', metavar='STRING', required=False, default='mols',
@@ -181,7 +181,7 @@ def main():
             with open(args.hostfile) as f:
                 hosts = [line.strip() for line in f]
             dask_client = Client(hosts[0] + ':8786', connection_limit=2048)
-            # dask_client = Client()
+            # dask_client = Client()   # to test dask locally
         else:
             dask_client = None
 
