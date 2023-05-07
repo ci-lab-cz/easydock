@@ -88,8 +88,8 @@ def add_protonation(db_fname):
                     for mol in sdf_protonated:
                         mol_name = mol.GetProp('_Name')
                         smi = mol.GetPropsAsDict().get('MAJORMS', None)
-                        if smi is not None:
-                            cansmi = Chem.CanonSmiles(smi)
+                        if smi is not None:  # protonation was successful
+                            cansmi = Chem.MolToSmiles(mol)
                             if mol_name in smi_ids:
                                 output_data_smi.append((cansmi, mol_name))
                             elif mol_name in mol_ids:
