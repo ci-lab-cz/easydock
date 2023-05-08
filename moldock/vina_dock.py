@@ -71,7 +71,7 @@ def mol_dock(mol, protein, center, box_size, seed, exhaustiveness, n_poses, ncpu
 def mol_dock_cli(mol, protein, center, box_size, seed, exhaustiveness, n_poses, ncpu):
     """
 
-    :param mol: RDKit Mol with title
+    :param mol: RDKit Mol of a ligand with title
     :param protein: PDBQT file name
     :param center: 3-tuple
     :param box_size: 3-tuple
