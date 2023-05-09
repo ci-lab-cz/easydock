@@ -122,6 +122,8 @@ def main():
                              'passed as $PBS_NODEFILE variable from inside a PBS script. The first line in this file '
                              'will be the address of the scheduler running on the standard port 8786. If omitted, '
                              'calculations will run on a single machine as usual.')
+    parser.add_argument('--dask_report', action='store_true', default=False,
+                        help='save Dask report to HTML file. It will have the same name as the output database.')
     # parser.add_argument('--tmpdir', metavar='DIRNAME', required=False, type=filepath_type, default=None,
     #                     help='path to a dir where to store temporary files accessible to a program. '
     #                          'Normally should be used,')
@@ -198,6 +200,11 @@ def main():
 
         dock_args = parse_config(args.config)  # create a dict of args to pass to mol_dock
 
+        if args.dask_report:
+            dask_report_fname = os.path.splitext(args.output)[0] + '.html'
+        else:
+            dask_report_fname = None
+
         with sqlite3.connect(args.output) as conn:
             mols = select_mols_to_dock(conn)
             i = 0
@@ -207,9 +214,7 @@ def main():
                                                       priority_func=priority_func,
                                                       ncpu=args.ncpu,
                                                       dask_client=dask_client,
-                                                      dask_report_fname=os.path.join(
-                                                                 os.path.dirname(os.path.abspath(args.output)),
-                                                                 'dask_report.html')),
+                                                      dask_report_fname=dask_report_fname),
                                               1):
                 if res:
                     update_db(conn, mol_id, res)
