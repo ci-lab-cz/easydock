@@ -122,9 +122,9 @@ def main():
                              'passed as $PBS_NODEFILE variable from inside a PBS script. The first line in this file '
                              'will be the address of the scheduler running on the standard port 8786. If omitted, '
                              'calculations will run on a single machine as usual.')
-    parser.add_argument('--tmpdir', metavar='DIRNAME', required=False, type=filepath_type, default=None,
-                        help='path to a dir where to store temporary files accessible to a program. '
-                             'Normally should be used,')
+    # parser.add_argument('--tmpdir', metavar='DIRNAME', required=False, type=filepath_type, default=None,
+    #                     help='path to a dir where to store temporary files accessible to a program. '
+    #                          'Normally should be used,')
     parser.add_argument('--prefix', metavar='STRING', required=False, type=str, default=None,
                         help='prefix which will be added to all molecule names. This might be useful if multiple '
                              'repeated runs are made which will be analyzed together.')
@@ -138,8 +138,8 @@ def main():
     args = parser.parse_args()
     supplied_args = get_supplied_args(parser)
 
-    if args.tmpdir is not None:
-        tempfile.tempdir = args.tmpdir
+    # if args.tmpdir is not None:
+    #     tempfile.tempdir = args.tmpdir
 
     tmpfiles = []  # store text files which were saved to the setup table
 
