@@ -189,10 +189,10 @@ def main():
             add_protonation(args.output)
 
         if args.program == 'vina':
-            from moldock.vina_dock import mol_dock_cli as mol_dock, parse_config, pred_dock_time
+            from moldock.vina_dock import mol_dock_cli as mol_dock, parse_config, pred_dock_time as priority_func
         elif args.program == 'gnina':
             from moldock.gnina_dock import mol_dock, parse_config
-            pred_dock_time = CalcNumRotatableBonds
+            from moldock.vina_dock import pred_dock_time  as priority_func
         else:
             raise ValueError(f'Illegal program argument was supplied: {args.program}')
 
@@ -204,7 +204,7 @@ def main():
             for i, (mol_id, res) in enumerate(docking(mols,
                                                       dock_func=mol_dock,
                                                       dock_kwargs=dock_args,
-                                                      priority_func=pred_dock_time,
+                                                      priority_func=priority_func,
                                                       ncpu=args.ncpu,
                                                       dask_client=dask_client,
                                                       dask_report_fname=os.path.join(
