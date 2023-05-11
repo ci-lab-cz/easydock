@@ -173,7 +173,7 @@ def ligand_preparation(mol, seed=43):
     try:
         mol = mol_embedding_3d(mol, seed=seed)
         if mol:
-            idx_boron = [idx for idx, atom in enumerate(mol.GetAtoms()) if atom.GetAtomicNum() == 5]
+            idx_boron = [a.GetIdx() for a in mol.GetAtoms() if a.GetAtomicNum() == 5]
             for id_ in idx_boron:
                 if mol.GetAtomWithIdx(id_).GetFormalCharge() < 0:
                     mol.GetAtomWithIdx(id_).SetFormalCharge(0)
@@ -222,8 +222,7 @@ def assign_bonds_from_template(template_mol, mol):
 
 
 def boron_reduction(mol_B, mol):
-    idx_boron = {idx: atom.GetFormalCharge() for idx, atom in enumerate(mol_B.GetAtoms()) if
-                 atom.GetAtomicNum() == 5}
+    idx_boron = {a.GetIdx(): a.GetFormalCharge() for a in mol_B.GetAtoms() if a.GetAtomicNum() == 5}
     for id_, charge in idx_boron.items():
         if charge < 0:
             mol_B.GetAtomWithIdx(id_).SetFormalCharge(0)
@@ -231,10 +230,10 @@ def boron_reduction(mol_B, mol):
 
     mol = assign_bonds_from_template(mol_B, mol)
     idx = mol.GetSubstructMatches(mol_B)
-    mol_idx_boron = [(ids[i], j) for i, j in idx_boron.items() for ids in idx]
+    mol_idx_boron = [tuple(sorted((ids[i], j) for i, j in idx_boron.items())) for ids in idx]
     mol_idx_boron = list(set(mol_idx_boron))  # retrieve all ids matched possible boron atom positions
     if len(mol_idx_boron) == 1:  # check whether this set of ids is unique
-        for id_, charge in mol_idx_boron:
+        for id_, charge in mol_idx_boron[0]:
             mol.GetAtomWithIdx(id_).SetAtomicNum(5)
             mol.GetAtomWithIdx(id_).SetFormalCharge(charge)
     else:  # if not - several equivalent mappings exist
