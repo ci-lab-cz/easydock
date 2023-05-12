@@ -47,7 +47,8 @@ def mol_dock(mol, script_file, protein, protein_setup, exhaustiveness, scoring,
     output = None
 
     mol_id = mol.GetProp('_Name')
-    ligand_pdbqt = ligand_preparation(mol)
+    boron_replacement = cnn_scoring in [None, "none"]
+    ligand_pdbqt = ligand_preparation(mol, boron_replacement=boron_replacement)
     if ligand_pdbqt is None:
         return mol_id, None
 

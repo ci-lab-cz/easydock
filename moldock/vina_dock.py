@@ -55,7 +55,7 @@ def mol_dock(mol, protein, center, box_size, seed, exhaustiveness, n_poses, ncpu
     :return:
     """
     mol_id = mol.GetProp('_Name')
-    ligand_pdbqt = ligand_preparation(mol)
+    ligand_pdbqt = ligand_preparation(mol, boron_replacement=True)
     if ligand_pdbqt is None:
         return mol_id, None
     score, pdbqt_out = __docking(ligands_pdbqt_string=ligand_pdbqt, receptor_pdbqt_fname=protein,
@@ -84,7 +84,7 @@ def mol_dock_cli(mol, protein, center, box_size, seed, exhaustiveness, n_poses, 
     output = None
 
     mol_id = mol.GetProp('_Name')
-    ligand_pdbqt = ligand_preparation(mol)
+    ligand_pdbqt = ligand_preparation(mol, boron_replacement=True)
     if ligand_pdbqt is None:
         return mol_id, None
 
