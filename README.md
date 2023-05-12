@@ -143,8 +143,11 @@ from rdkit import Chem
 
 smiles = ['CC(=O)O', 'NCC(=O)O', 'NC(C)C(=O)O']
 mols = [Chem.MolFromSmiles(smi) for smi in smiles]
+
+# assign names, because this will be an identifier of docking outputs of a molecule 
 for mol, smi in zip(mols, smiles):
     mol.SetProp('_Name', smi)
+
 for mol_id, res in docking(mols, dock_func=mol_dock, dock_config='config.yml', ncpu=4):
     print(mol_id, res)
 ```
