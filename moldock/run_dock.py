@@ -4,7 +4,6 @@ import argparse
 import os
 import sqlite3
 import sys
-import tempfile
 from functools import partial
 from multiprocessing import Pool
 
@@ -34,12 +33,12 @@ def get_supplied_args(parser):
     return tuple(supplied_args)
 
 
-def docking(mols, dock_func, dock_kwargs, priority_func=CalcNumRotatableBonds, ncpu=1, dask_client=None, dask_report_fname=None):
+def docking(mols, dock_func, dock_config, priority_func=CalcNumRotatableBonds, ncpu=1, dask_client=None, dask_report_fname=None):
     """
 
     :param mols: iterator of molecules, each molecule must have a title
     :param dock_func: docking function
-    :param dock_kwargs: a dist of docking arguments which will be passed to dock_func
+    :param dock_config: yml-file with docking settings which will be passed to dock_func
     :param priority_func: function which return a numeric value, higher values - higher docking priority
     :param ncpu: number of cores to be used in a single server docking
     :param dask_client: reference to a dask client (if omitted single server docking will be performed)
@@ -56,7 +55,7 @@ def docking(mols, dock_func, dock_kwargs, priority_func=CalcNumRotatableBonds, n
             nworkers = len(dask_client.scheduler_info()['workers'])
             futures = []
             for i, mol in enumerate(mols, 1):
-                futures.append(dask_client.submit(dock_func, mol, priority=priority_func(mol), **dock_kwargs))
+                futures.append(dask_client.submit(dock_func, mol, priority=priority_func(mol), config=dock_config))
                 if i == nworkers * 10:
                     break
             seq = as_completed(futures, with_results=True)
@@ -65,13 +64,13 @@ def docking(mols, dock_func, dock_kwargs, priority_func=CalcNumRotatableBonds, n
                 del future
                 try:
                     mol = next(mols)
-                    new_future = dask_client.submit(dock_func, mol, priority=priority_func(mol), **dock_kwargs)
+                    new_future = dask_client.submit(dock_func, mol, priority=priority_func(mol), config=dock_config)
                     seq.add(new_future)
                 except StopIteration:
                     continue
     else:
         with Pool(ncpu) as pool:
-            for mol_id, res in pool.imap_unordered(partial(dock_func, **dock_kwargs), tuple(mols), chunksize=1):
+            for mol_id, res in pool.imap_unordered(partial(dock_func, config=dock_config), tuple(mols), chunksize=1):
                 yield mol_id, res
 
 
@@ -191,14 +190,12 @@ def main():
             add_protonation(args.output)
 
         if args.program == 'vina':
-            from moldock.vina_dock import mol_dock_cli as mol_dock, parse_config, pred_dock_time as priority_func
+            from moldock.vina_dock import mol_dock_cli as mol_dock, pred_dock_time as priority_func
         elif args.program == 'gnina':
-            from moldock.gnina_dock import mol_dock, parse_config
-            from moldock.vina_dock import pred_dock_time  as priority_func
+            from moldock.gnina_dock import mol_dock
+            from moldock.vina_dock import pred_dock_time as priority_func
         else:
             raise ValueError(f'Illegal program argument was supplied: {args.program}')
-
-        dock_args = parse_config(args.config)  # create a dict of args to pass to mol_dock
 
         if args.dask_report:
             dask_report_fname = os.path.splitext(args.output)[0] + '.html'
@@ -210,7 +207,7 @@ def main():
             i = 0
             for i, (mol_id, res) in enumerate(docking(mols,
                                                       dock_func=mol_dock,
-                                                      dock_kwargs=dock_args,
+                                                      dock_config=args.config,
                                                       priority_func=priority_func,
                                                       ncpu=args.ncpu,
                                                       dask_client=dask_client,

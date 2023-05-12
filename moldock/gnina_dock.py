@@ -14,40 +14,31 @@ class RawTextArgumentDefaultsHelpFormatter(argparse.RawTextHelpFormatter, argpar
     pass
 
 
-def get_pdbqt_and_score(ligand_out_fname):
+def __get_pdbqt_and_score(ligand_out_fname):
     with open(ligand_out_fname) as f:
         pdbqt_out = f.read()
     string_with_score = pdbqt_out.split('MODEL')[1].split('\n')[1]
     if 'CNNaffinity' in string_with_score:
-        score = round(float(string_with_score.split('CNNaffinity ')[1].split('REMARK')[0]), 3) #get CNNaffinity
+        score = round(float(string_with_score.split('CNNaffinity ')[1].split('REMARK')[0]), 3)  # get CNNaffinity
     else:
         score = round(float(string_with_score.split('minimizedAffinity ')[1].split('REMARK')[0]), 3)
     return score, pdbqt_out
 
 
-def mol_dock(mol, script_file, protein, protein_setup, exhaustiveness, scoring,
-             cnn_scoring, cnn, addH, n_poses, seed, ncpu):
+def mol_dock(mol, config):
     """
 
     :param mol: RDKit Mol of a ligand with title
-    :param script_file: path to gnina executable
-    :param protein: PDBQT file name
-    :param protein_setup: text file name with coordinates of a center of the binding box and its sizes
-    :param exhaustiveness: int
-    :param scoring:
-    :param cnn_scoring:
-    :param cnn:
-    :param addH:
-    :param n_poses:
-    :param seed:
-    :param ncpu:
+    :param config: yml-file with docking settings
     :return:
     """
 
     output = None
 
+    config = __parse_config(config)
+
     mol_id = mol.GetProp('_Name')
-    boron_replacement = cnn_scoring in [None, "none"]
+    boron_replacement = config["cnn_scoring"] in [None, "none"]
     ligand_pdbqt = ligand_preparation(mol, boron_replacement=boron_replacement)
     if ligand_pdbqt is None:
         return mol_id, None
@@ -59,14 +50,16 @@ def mol_dock(mol, script_file, protein, protein_setup, exhaustiveness, scoring,
         with open(ligand_fname, 'wt') as f:
             f.write(ligand_pdbqt)
 
-        cmd = f'{script_file} --receptor {protein} --ligand {ligand_fname} --out {output_fname} ' \
-              f'--config {protein_setup} --exhaustiveness {exhaustiveness} --seed {seed} --scoring {scoring} ' \
-              f'--cpu {ncpu} --addH {addH} --cnn_scoring {cnn_scoring} --cnn {cnn} --num_modes {n_poses}'
+        cmd = f'{config["script_file"]} --receptor {config["protein"]} --ligand {ligand_fname} --out {output_fname} ' \
+              f'--config {config["protein_setup"]} --exhaustiveness {config["exhaustiveness"]} ' \
+              f'--seed {config["seed"]} --scoring {config["scoring"]} ' \
+              f'--cpu {config["ncpu"]} --addH {config["addH"]} --cnn_scoring {config["cnn_scoring"]} ' \
+              f'--cnn {config["cnn"]} --num_modes {config["n_poses"]}'
         start_time = timeit.default_timer()
         subprocess.run(cmd, shell=True)
         dock_time = round(timeit.default_timer() - start_time, 1)
 
-        score, pdbqt_out = get_pdbqt_and_score(output_fname)
+        score, pdbqt_out = __get_pdbqt_and_score(output_fname)
         mol_block = pdbqt2molblock(pdbqt_out.split('MODEL')[1], mol, mol_id)
 
         output = {'docking_score': score,
@@ -83,7 +76,7 @@ def mol_dock(mol, script_file, protein, protein_setup, exhaustiveness, scoring,
     return mol_id, output
 
 
-def parse_config(config_fname):
+def __parse_config(config_fname):
 
     with open(config_fname) as f:
         config = yaml.safe_load(f)
