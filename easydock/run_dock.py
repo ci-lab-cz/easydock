@@ -190,10 +190,10 @@ def main():
             add_protonation(args.output)
 
         if args.program == 'vina':
-            from easydock.vina_dock import mol_dock_cli as mol_dock, pred_dock_time as priority_func
+            from easydock.vina_dock import mol_dock, pred_dock_time
         elif args.program == 'gnina':
             from easydock.gnina_dock import mol_dock
-            from easydock.vina_dock import pred_dock_time as priority_func
+            from easydock.vina_dock import pred_dock_time
         else:
             raise ValueError(f'Illegal program argument was supplied: {args.program}')
 
@@ -208,7 +208,7 @@ def main():
             for i, (mol_id, res) in enumerate(docking(mols,
                                                       dock_func=mol_dock,
                                                       dock_config=args.config,
-                                                      priority_func=priority_func,
+                                                      priority_func=pred_dock_time,
                                                       ncpu=args.ncpu,
                                                       dask_client=dask_client,
                                                       dask_report_fname=dask_report_fname),

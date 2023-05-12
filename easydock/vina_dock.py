@@ -37,7 +37,7 @@ def __docking(ligands_pdbqt_string, receptor_pdbqt_fname, center, box_size, exha
     return v.energies(n_poses=n_poses)[0][0], v.poses(n_poses=n_poses)
 
 
-def mol_dock(mol, protein, center, box_size, seed, exhaustiveness, n_poses, ncpu):
+def mol_dock2(mol, protein, center, box_size, seed, exhaustiveness, n_poses, ncpu):
     """
 
     :param mol: RDKit Mol with title
@@ -64,7 +64,7 @@ def mol_dock(mol, protein, center, box_size, seed, exhaustiveness, n_poses, ncpu
                     'mol_block': mol_block}
 
 
-def mol_dock_cli(mol, config):
+def mol_dock(mol, config):
     """
 
     :param mol: RDKit Mol of a ligand with title
