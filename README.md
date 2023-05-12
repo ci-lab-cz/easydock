@@ -1,39 +1,44 @@
-# Python scripts to automate molecular docking
+# EasyDock - Python module to automate molecular docking
 
 ### Installation
 
 ```
-pip install moldock
+pip install easydock
 ```
-or the latest version
+or the latest version from github
 ```
-pip install git+https://github.com/ci-lab-cz/docking-scripts.git
+pip install git+https://github.com/ci-lab-cz/easydock.git
 ```
 
 ### Dependencies
 
 from conda
 ```
-conda install -c conda-forge python=3.9 numpy=1.20 rdkit scipy dask distributed vina
+conda install -c conda-forge python=3.9 numpy=1.20 rdkit scipy dask distributed
 ```
 
 from pypi
 ```
-pip install meeko
+pip install vina meeko
 ```
 
 Installation of gnina is described at https://github.com/gnina/gnina
 
 ### Description
 
-Fully automatic pipeline for molecular docking.
-- two major scripts `vina_dock` and `gnina_dock` which support docking with `vina` and `gnina` (`gnina` also supports `smina` and its custom scoring functions)
-- can be used as command line scripts or imported as a python module
-- support distributed computing using `dask` library
-- `get_sdf_from_db` is used to extract data from output DB 
+Fully automatic pipeline for molecular docking.  
+
+Features:
+- the major script `run_dock` supports docking with `vina` and `gnina` (`gnina` also supports `smina` and its custom scoring functions)
+- can be used as a command line utility or imported as a python module
+- supports distributed computing using `dask` library
+- supports docking of boron-containing compounds using `vina` and `smina` (boron is replaced with carbon before docking and returned back)
+- all outputs are stored in an SQLite database
+- interrupted calculations can be restarted by invoking the same command or by supplying just a single argument - the existing output database
+- `get_sdf_from_dock_db` is used to extract data from output DB
 
 Pipeline:
-- input SMILES are converted in 3D by RDKit embedding, if input is 3D structures in SDF their conformations wil be taken as starting without changes.
+- input SMILES are converted in 3D by RDKit, if input is 3D structures in SDF their conformations wil be taken as starting without changes.
 - ligands are protonated by chemaxon at pH 7.4 and the most stable tautomers are generated (optional, requires a Chemaxon license)
 - molecules are converted in PDBQT format
 - docking with `vina`/`gnina`
@@ -41,22 +46,107 @@ Pipeline:
 
 ### Example
 
-Both scripts `vina_dock` and `gnina_dock` have similar common arguments.
+##### Docking from command line
 
-Docking using input SMILES, prepared protein and config files. Ligands will not be protonated with Chemaxon, so their supplied charged states will be used. 4 CPU cores will be used. When docking will finish an SDF will be created with top docking poses for each ligand. 
+Docking using `vina` takes input SMILES and a config file. Ligands will not be protonated with Chemaxon, so their supplied charged states will be used. 4 CPU cores will be used. When docking will finish an SDF file will be created with top docking poses for each ligand. 
 ```
-vina_dock -i input.smi -o output.db -p protein.pdbqt -s vina_config --no_protonation -c 4 --sdf 
+run_dock -i input.smi -o output.db --program vina -c config.yml --no_protonation -c 4 --sdf
 ``` 
 
-Retrieve second poses for compounds `mol_id_1` and `mol_id_2` with their docking scores in SDF format:
+Example of config.yml for `vina` docking  
 ```
-get_sdf_from_db -i output.db -o out.sdf -d mol_id_1,mol_id_4 --fields docking_score --poses 2 
+protein: /path/to/protein.pdbqt
+protein_setup: /path/to/grid.txt
+exhaustiveness: 8
+seed: 0
+n_poses: 5
+ncpu: 5
 ```
-Instead of a comma-separated list of ids a text file can be supplied as an argument `-d`.
+
+The same but using `gnina`
+```
+run_dock -i input.smi -o output.db --program gnina -c config.yml --no_protonation -c 4 --sdf
+``` 
+
+Example of config.yml for `gnina` docking  
+```
+script_file: /path/to/gnina_executable
+protein: /path/to/protein.pdbqt
+protein_setup: /path/to/grid.txt
+exhaustiveness: 8
+scoring: default
+cnn_scoring: rescore
+cnn: dense_ensemble
+n_poses: 10
+addH: False
+ncpu: 1
+seed: 0
+```
+
+To use `smina` invoke `gnina` as shown above and make corresponding changes in config.yml
+```
+script_file: /path/to/gnina_executable
+protein: /path/to/protein.pdbqt
+protein_setup: /path/to/grid.txt
+exhaustiveness: 8
+scoring: vinardo
+cnn_scoring: None
+cnn: dense_ensemble
+n_poses: 10
+addH: False
+ncpu: 1
+seed: 0
+```
+
+##### Docking using multiple servers
+
+To distribute docking over multiple servers one have to start dask cluster and call the script
+
+```bash
+dask ssh --hostfile $PBS_NODEFILE --nworkers 15 --nthreads 1 &
+sleep 10
+run_dock -i input.smi -o output.db --program vina -c config.yml --no_protonation -c 4 --sdf --hostfile $PBS_NODEFILE --dask_report
+```
+`$PBS_NODEFILE` is a file containing list of IP addresses of servers. The first one from the list will be used by a dask scheduler, but it will also participate in computations.
+  
+`--dask_report` argument will create at the end of calculations an html-file with performance report (may be useful to tweak docking parameters).
+  
+**Important setup issue** - the limit of open files on every server should be increased to the level at least twice the total number of requested workers (file streams are used for inter-node communication by dask).
+
+##### Data retrieval from the output database
+
+To extract data from the database one may use the script `get_sdf_from_dock_db`.
+
+Extract top poses:
+```
+get_sdf_from_dock_db -i output.db -o output.sdf --poses 1
+```
+Retrieve second poses for compounds `mol_1` and `mol_4` with their docking scores in SDF format:
+```
+get_sdf_from_dock_db -i output.db -o output.sdf -d mol_1 mol_4 --fields docking_score --poses 2 
+```
+Instead of a list of ids a text file can be supplied as an argument `-d`.
 
 Retrieve top poses for compounds with docking score less then -10:
 ```
-get_sdf_from_db -i output.db -o out.sdf --fields docking_score --poses 1 --add_sql 'docking_score < -10' 
+get_sdf_from_dock_db -i output.db -o output.sdf --fields docking_score --poses 1 --add_sql 'docking_score < -10' 
+```
+
+##### Docking from Python
+
+Dock a list of molecules on a local computer. Import `mol_dock` function from a corresponding submodule.
+```python
+from easydock.run_dock import docking
+from easydock.vina_dock import mol_dock
+# from easydock.gnina_dock import mol_dock  # <- enable gnina docking
+from rdkit import Chem
+
+smiles = ['CC(=O)O', 'NCC(=O)O', 'NC(C)C(=O)O']
+mols = [Chem.MolFromSmiles(smi) for smi in smiles]
+for mol, smi in zip(mols, smiles):
+    mol.SetProp('_Name', smi)
+for mol_id, res in docking(mols, dock_func=mol_dock, dock_config='config.yml', ncpu=4):
+    print(mol_id, res)
 ```
 
 ### Changelog
