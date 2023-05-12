@@ -32,13 +32,9 @@ def __docking(ligands_pdbqt_string, receptor_pdbqt_fname, center, box_size, exha
     v.set_receptor(rigid_pdbqt_filename=receptor_pdbqt_fname)
     v.set_ligand_from_string(ligands_pdbqt_string)
     v.compute_vina_maps(center=center, box_size=box_size)
-    v.dock(exhaustiveness=exhaustiveness, n_poses=50 if n_poses < 50 else n_poses) #number of poses fixed for optimal search,
-                                                                                   #but if a user want to generate more poses, the number will be changed
+    v.dock(exhaustiveness=exhaustiveness, n_poses=50 if n_poses < 50 else n_poses)  # number of poses fixed for optimal search,
+                                                                                    # but if a user want to generate more poses, the number will be changed
     return v.energies(n_poses=n_poses)[0][0], v.poses(n_poses=n_poses)
-
-
-def __docking_queued(queue, **kwargs):
-    queue.put(__docking(**kwargs))
 
 
 def mol_dock(mol, protein, center, box_size, seed, exhaustiveness, n_poses, ncpu):
@@ -68,20 +64,16 @@ def mol_dock(mol, protein, center, box_size, seed, exhaustiveness, n_poses, ncpu
                     'mol_block': mol_block}
 
 
-def mol_dock_cli(mol, protein, center, box_size, seed, exhaustiveness, n_poses, ncpu):
+def mol_dock_cli(mol, config):
     """
 
     :param mol: RDKit Mol of a ligand with title
-    :param protein: PDBQT file name
-    :param center: 3-tuple
-    :param box_size: 3-tuple
-    :param seed:
-    :param exhaustiveness:
-    :param n_poses:
-    :param ncpu:
+    :param config: yml-file with docking settings
     :return:
     """
     output = None
+
+    config = __parse_config(config)
 
     mol_id = mol.GetProp('_Name')
     ligand_pdbqt = ligand_preparation(mol, boron_replacement=True)
@@ -97,9 +89,10 @@ def mol_dock_cli(mol, protein, center, box_size, seed, exhaustiveness, n_poses, 
 
         p = os.path.realpath(__file__)
         python_exec = sys.executable
-        cmd = f'{python_exec} {os.path.dirname(p)}/vina_dock_cli.py -l {ligand_fname} -p {protein} -o {output_fname} ' \
-              f'--center {" ".join(map(str, center))} --box_size {" ".join(map(str, box_size))} ' \
-              f'-e {exhaustiveness} --seed {seed} --nposes {n_poses} -c {ncpu}'
+        cmd = f'{python_exec} {os.path.dirname(p)}/vina_dock_cli.py -l {ligand_fname} -p {config["protein"]} ' \
+              f'-o {output_fname} --center {" ".join(map(str, config["center"]))} ' \
+              f'--box_size {" ".join(map(str, config["box_size"]))} ' \
+              f'-e {config["exhaustiveness"]} --seed {config["seed"]} --nposes {config["n_poses"]} -c {config["ncpu"]}'
         start_time = timeit.default_timer()
         subprocess.run(cmd, shell=True)
         dock_time = round(timeit.default_timer() - start_time, 1)
@@ -123,7 +116,7 @@ def mol_dock_cli(mol, protein, center, box_size, seed, exhaustiveness, n_poses, 
     return mol_id, output
 
 
-def parse_config(config_fname):
+def __parse_config(config_fname):
 
     def get_param_from_config(protein_setup_fname):
         config = {}
