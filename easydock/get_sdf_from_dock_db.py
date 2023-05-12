@@ -16,8 +16,8 @@ def main():
                         help='SQLite DB, which is output of vina_dock script.')
     parser.add_argument('-o', '--output', metavar='output.sdf', required=True, type=str,
                         help='output SDF file (with mol blocks) or SMILES. Output format is guessed from extension.')
-    parser.add_argument('-d', '--ids', metavar='mol_ids', required=False, type=str, default=None,
-                        help='comma separated list of mol ids in DB or a text file with mol ids on individual lines. '
+    parser.add_argument('-d', '--ids', metavar='mol_ids', required=False, type=str, default=None, nargs='*',
+                        help='a list of mol ids in DB or a text file with mol ids on individual lines. '
                              'If omitted all records in DB will be saved to SDF.')
     parser.add_argument('-f', '--first_entry', action='store_true', default=False,
                         help='retrieve only the first entry of each molecule from the database.')
@@ -38,7 +38,7 @@ def main():
         with open(args.ids) as f:
             ids = [line.strip() for line in f]
     else:
-        ids = args.ids.split(',')
+        ids = args.ids
 
     conn = sqlite3.connect(args.input)
     cur = conn.cursor()
