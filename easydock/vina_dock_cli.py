@@ -4,7 +4,7 @@ import argparse
 import json
 
 from vina import Vina
-from moldock.preparation_for_docking import cpu_type, filepath_type
+from easydock.preparation_for_docking import cpu_type, filepath_type
 
 
 class RawTextArgumentDefaultsHelpFormatter(argparse.RawTextHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):

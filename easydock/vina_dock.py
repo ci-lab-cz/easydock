@@ -11,7 +11,7 @@ import timeit
 
 from rdkit.Chem.rdMolDescriptors import CalcNumRotatableBonds
 from vina import Vina
-from moldock.preparation_for_docking import ligand_preparation, pdbqt2molblock
+from easydock.preparation_for_docking import ligand_preparation, pdbqt2molblock
 
 
 class RawTextArgumentDefaultsHelpFormatter(argparse.RawTextHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):

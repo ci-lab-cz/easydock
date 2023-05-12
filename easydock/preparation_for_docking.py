@@ -12,7 +12,7 @@ from copy import deepcopy
 from meeko import MoleculePreparation
 from rdkit import Chem
 from rdkit.Chem import AllChem
-from moldock import read_input
+from easydock import read_input
 
 
 def cpu_type(x):

@@ -9,7 +9,7 @@ from multiprocessing import Pool
 
 from rdkit import Chem
 from rdkit.Chem.rdMolDescriptors import CalcNumRotatableBonds
-from moldock.preparation_for_docking import create_db, restore_setup_from_db, init_db, save_sdf, add_protonation, \
+from easydock.preparation_for_docking import create_db, restore_setup_from_db, init_db, save_sdf, add_protonation, \
     cpu_type, filepath_type, update_db, select_mols_to_dock
 
 
@@ -190,10 +190,10 @@ def main():
             add_protonation(args.output)
 
         if args.program == 'vina':
-            from moldock.vina_dock import mol_dock_cli as mol_dock, pred_dock_time as priority_func
+            from easydock.vina_dock import mol_dock_cli as mol_dock, pred_dock_time as priority_func
         elif args.program == 'gnina':
-            from moldock.gnina_dock import mol_dock
-            from moldock.vina_dock import pred_dock_time as priority_func
+            from easydock.gnina_dock import mol_dock
+            from easydock.vina_dock import pred_dock_time as priority_func
         else:
             raise ValueError(f'Illegal program argument was supplied: {args.program}')
 
