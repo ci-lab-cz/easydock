@@ -14,7 +14,7 @@ setuptools.setup(
     description="EasyDock Python module to facilitate molecular docking",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/ci-lab-cz/docking-scripts",
+    url="https://github.com/ci-lab-cz/easydock",
     packages=['easydock'],
     classifiers=[
         "Programming Language :: Python :: 3",
