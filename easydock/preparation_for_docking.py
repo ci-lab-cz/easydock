@@ -99,7 +99,18 @@ def add_protonation(db_fname, table_name='mols', add_sql=''):
                         if mol_name in smi_ids:
                             output_data_smi.append((cansmi, mol_name))
                         elif mol_name in mol_ids:
-                            output_data_mol.append((cansmi, Chem.MolToMolBlock(mol), mol_name))
+                            try:
+                                # mol block in chemaxon sdf is an input molecule
+                                # so, we make all bonds single, remove Hs and assign bond orders from SMILES
+                                # this should work even if a generated tautomer differs from the input molecule
+                                mol = Chem.RemoveHs(Chem.RWMol(mol))
+                                for b in mol.GetBonds():
+                                    b.SetBondType(Chem.BondType.SINGLE)
+                                ref_mol = Chem.RemoveHs(Chem.MolFromSmiles(smi))
+                                mol = AllChem.AssignBondOrdersFromTemplate(ref_mol, mol)
+                                output_data_mol.append((cansmi, Chem.MolToMolBlock(mol), mol_name))
+                            except ValueError:
+                                continue
             finally:
                 os.remove(output)
 
