@@ -129,7 +129,7 @@ Instead of a list of ids a text file can be supplied as an argument `-d`.
 
 Retrieve top poses for compounds with docking score less then -10:
 ```
-get_sdf_from_dock_db -i output.db -o output.sdf --fields docking_score --poses 1 --add_sql 'docking_score < -10' 
+get_sdf_from_dock_db -i output.db -o output.sdf --fields docking_score --add_sql 'docking_score < -10' 
 ```
 
 ##### Docking from Python
