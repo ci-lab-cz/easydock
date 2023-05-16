@@ -174,11 +174,12 @@ def ligand_preparation(mol, boron_replacement=False, seed=43):
     try:
         mol = mol_embedding_3d(mol, seed=seed)
         if mol:
-            if boron_replacement:
-                idx_boron = [idx for idx, atom in enumerate(mol.GetAtoms()) if atom.GetAtomicNum() == 5]
-                for id_ in idx_boron:
-                    mol.GetAtomWithIdx(id_).SetAtomicNum(6)
-                    # mol.UpdatePropertyCache() # uncomment if necessary
+            idx_boron = [a.GetIdx() for a in mol.GetAtoms() if a.GetAtomicNum() == 5]
+            for id_ in idx_boron:
+                if mol.GetAtomWithIdx(id_).GetFormalCharge() < 0:
+                    mol.GetAtomWithIdx(id_).SetFormalCharge(0)
+                mol.GetAtomWithIdx(id_).SetAtomicNum(6)
+                # mol.UpdatePropertyCache() # uncomment if necessary
             mol_conf_pdbqt = mk_prepare_ligand(mol, verbose=False)
             return mol_conf_pdbqt
     except Exception:
