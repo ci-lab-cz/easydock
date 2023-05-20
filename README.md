@@ -169,4 +169,4 @@ To implement support of a custom docking program one should implement a function
 - (bugfix) docking of macrocycles is rigid (in future may be changed)
 
 ### Licence
-CC BY-NC-SA 4.0
+BSD-3
