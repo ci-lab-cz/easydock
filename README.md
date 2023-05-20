@@ -117,13 +117,13 @@ run_dock -i input.smi -o output.db --program vina -c config.yml --no_protonation
 
 To extract data from the database one may use the script `get_sdf_from_dock_db`.
 
-Extract top poses:
+Extract top poses with their scores (additional information in DB fields can be extracted only for the top poses):
 ```
-get_sdf_from_dock_db -i output.db -o output.sdf --poses 1
+get_sdf_from_dock_db -i output.db -o output.sdf --fields docking_score
 ```
-Retrieve second poses for compounds `mol_1` and `mol_4` with their docking scores in SDF format:
+Retrieve second poses for compounds `mol_1` and `mol_4` in SDF format:
 ```
-get_sdf_from_dock_db -i output.db -o output.sdf -d mol_1 mol_4 --fields docking_score --poses 2 
+get_sdf_from_dock_db -i output.db -o output.sdf -d mol_1 mol_4 --poses 2 
 ```
 Instead of a list of ids a text file can be supplied as an argument `-d`.
 
