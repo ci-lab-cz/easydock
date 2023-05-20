@@ -158,6 +158,13 @@ To implement support of a custom docking program one should implement a function
 
 ### Changelog
 
+**0.2.0**
+- the stable version with multiple fixes and updates
+- dask library was fully integrated and tested
+- API was redesigned
+- docking of boron-containing compounds was implemented (Vina, smina)
+- a function to predict docking runtime was introduced   
+
 **0.1.2**
 - (bugfix) docking of macrocycles is rigid (in future may be changed)
 
