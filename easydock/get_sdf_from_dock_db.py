@@ -34,7 +34,7 @@ def main():
 
     if args.ids is None:
         ids = tuple()
-    elif os.path.isfile(args.ids):
+    elif os.path.isfile(args.ids[0]):
         with open(args.ids) as f:
             ids = [line.strip() for line in f]
     else:
