@@ -19,10 +19,12 @@ conda install -c conda-forge python=3.9 numpy=1.20 rdkit scipy dask distributed
 
 from pypi
 ```
-pip install vina meeko
+pip install meeko
 ```
 
-Installation of gnina is described at https://github.com/gnina/gnina
+Installation of `vina`. There is a strict recommendation to install `vina` from sources https://github.com/ccsb-scripps/AutoDock-Vina, because version 1.2.3 (available from pip) contains a bug which result in very unstable docking scores. The fix will be included in later releases.
+
+Installation of `gnina` is described at https://github.com/gnina/gnina
 
 ### Description
 
