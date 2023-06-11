@@ -46,7 +46,7 @@ def add_protonation(db_fname, table_name='mols', add_sql=''):
     :param db_fname:
     :param table_name: table name with molecules to protonate
     :param add_sql: additional SQL query to be appended to the SQL query to retrieve molecules for protonation,
-                    e.g. "AND iteration=MAX(iteration)".
+                    e.g. "AND id IN ('MOL1', 'MOL2')" or "AND iteration=(SELECT MAX(iteration) FROM mols)".
     :return:
     '''
     conn = sqlite3.connect(db_fname)
@@ -508,7 +508,7 @@ def select_mols_to_dock(db_conn, table_name='mols', add_sql=None):
     :param db_conn:
     :param table_name:
     :param add_sql: additional SQL query which is appended the SQL query which returns molecules for docking,
-                    e.g. "AND iteration=MAX(iteration)"
+                    e.g. "AND id IN ('MOL1', 'MOL2')" or "AND iteration=(SELECT MAX(iteration) FROM mols)"
     :return: list of tuples (mol_id, smi) or (mol_id, mol_block). They can be mixed if the DB is not consistently
              filled, but this is not an issue if use proper parsing function
     """
