@@ -469,20 +469,23 @@ def insert_db(db_fname, data, cols=None, table_name='mols'):
     """
 
     :param db_fname:
-    :param data: list of values to insert
+    :param data: list of values to insert or a list of lists to insert multiple records
     :param cols: list of corresponding column names in the same order
     :param table_name:
     :return:
     """
     conn = sqlite3.connect(db_fname)
     if data:
+        # transform data to list of lists to perform executemany and be compatible with data if it is lists of lists
+        if not isinstance(data[0], (list, tuple)):
+            data = [data]
         cur = conn.cursor()
         ncols = len(data)
         if cols is None:
-            cur.execute(f"INSERT OR IGNORE INTO {table_name} VAlUES({','.join('?' * ncols)})", data)
+            cur.executemany(f"INSERT OR IGNORE INTO {table_name} VAlUES({','.join('?' * ncols)})", data)
         else:
             cols = ', '.join(cols)
-            cur.execute(f"INSERT OR IGNORE INTO {table_name} ({cols}) VAlUES({','.join('?' * ncols)})", data)
+            cur.executemany(f"INSERT OR IGNORE INTO {table_name} ({cols}) VAlUES({','.join('?' * ncols)})", data)
         conn.commit()
 
 
