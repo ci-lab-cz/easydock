@@ -480,7 +480,7 @@ def insert_db(db_fname, data, cols=None, table_name='mols'):
         if not isinstance(data[0], (list, tuple)):
             data = [data]
         cur = conn.cursor()
-        ncols = len(data)
+        ncols = len(data[0])
         if cols is None:
             cur.executemany(f"INSERT OR IGNORE INTO {table_name} VAlUES({','.join('?' * ncols)})", data)
         else:
