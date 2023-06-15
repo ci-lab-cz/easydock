@@ -160,6 +160,12 @@ To implement support of a custom docking program one should implement a function
 
 ### Changelog
 
+**0.2.1**
+- fix treatment of molecule ids in get_sdf_from_dock_db
+- change installation instructions, vina must be installed from sources
+- add argument no_tautomerization to disable tautomerization during protonation
+- (critical) fix conversion of PDBQT to Mol which could not assign bond orders and returned molecules with only single bonds 
+
 **0.2.0**
 - the stable version with multiple fixes and updates
 - dask library was fully integrated and tested
