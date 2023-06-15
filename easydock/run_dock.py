@@ -114,6 +114,8 @@ def main():
     parser.add_argument('--no_protonation', action='store_true', default=False,
                         help='disable protonation of molecules before docking. Protonation requires installed '
                              'cxcalc chemaxon utility.')
+    parser.add_argument('--no_tautomerization', action='store_true', default=False,
+                        help='disable tautomerization of molecules during protonation.')
     parser.add_argument('--sdf', action='store_true', default=False,
                         help='save best docked poses to SDF file with the same name as output DB.')
     parser.add_argument('--hostfile', metavar='FILENAME', required=False, type=filepath_type, default=None,
@@ -187,7 +189,7 @@ def main():
             dask_client = None
 
         if not args.no_protonation:
-            add_protonation(args.output)
+            add_protonation(args.output, not args.no_tautomerization)
 
         if args.program == 'vina':
             from easydock.vina_dock import mol_dock, pred_dock_time

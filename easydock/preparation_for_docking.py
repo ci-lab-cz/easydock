@@ -39,11 +39,12 @@ def mol_from_smi_or_molblock(ligand_string):
     return mol
 
 
-def add_protonation(db_fname, table_name='mols', add_sql=''):
+def add_protonation(db_fname, tautomerize=True, table_name='mols', add_sql=''):
     '''
     Protonate SMILES by Chemaxon cxcalc utility to get molecule ionization states at pH 7.4.
     Parse console output and update db.
     :param db_fname:
+    :param tautomerize: get a major tautomer at protonation
     :param table_name: table name with molecules to protonate
     :param add_sql: additional SQL query to be appended to the SQL query to retrieve molecules for protonation,
                     e.g. "AND id IN ('MOL1', 'MOL2')" or "AND iteration=(SELECT MAX(iteration) FROM mols)".
@@ -88,7 +89,8 @@ def add_protonation(db_fname, table_name='mols', add_sql=''):
                     tmp.write(mol_block)
                     tmp.write('\n$$$$\n')
                 tmp.flush()
-                cmd_run = f"cxcalc -S majormicrospecies -H 7.4 -M -K '{tmp.name}' > '{output}'"
+                cmd_run = f"cxcalc -S --ignore-error majormicrospecies -H 7.4 " \
+                          f"{'-M' if tautomerize else ''} -K '{tmp.name}' > '{output}'"
                 subprocess.call(cmd_run, shell=True)
                 sdf_protonated = Chem.SDMolSupplier(output)
                 for mol in sdf_protonated:
