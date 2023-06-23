@@ -97,7 +97,12 @@ def add_protonation(db_fname, tautomerize=True, table_name='mols', add_sql=''):
                     mol_name = mol.GetProp('_Name')
                     smi = mol.GetPropsAsDict().get('MAJORMS', None)
                     if smi is not None:
-                        cansmi = Chem.CanonSmiles(smi)
+                        try:
+                            cansmi = Chem.CanonSmiles(smi)
+                        except:
+                            sys.stderr.write(f'EASYDOCK ERROR: {mol_name}, smiles {smi} obtained after protonation '
+                                             f'could not be read by RDKit. The molecule was skipped.\n')
+                            continue
                         if mol_name in smi_ids:
                             output_data_smi.append((cansmi, mol_name))
                         elif mol_name in mol_ids:
