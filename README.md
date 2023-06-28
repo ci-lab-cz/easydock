@@ -50,7 +50,7 @@ Pipeline:
 
 ##### Docking from command line
 
-Docking using `vina` takes input SMILES and a config file. Ligands will not be protonated with Chemaxon, so their supplied charged states will be used. 4 CPU cores will be used. When docking will finish an SDF file will be created with top docking poses for each ligand. 
+Docking using `vina` takes input SMILES and a config file. Ligands will not be protonated with Chemaxon, so their supplied charged states will be used. 4 CPU cores will be used (4 molecules will be dock in parallel). When docking will finish an SDF file will be created with top docking poses for each ligand. 
 ```
 run_dock -i input.smi -o output.db --program vina -c config.yml --no_protonation -c 4 --sdf
 ``` 
@@ -64,6 +64,8 @@ seed: 0
 n_poses: 5
 ncpu: 5
 ```
+
+NOTE: ncpu argument in `run_dock` and `config.yml` has different meaning. In `run_dock` it means the number of molecules docked in parallel. In `config.yml` it means the number of CPUs used for docking of a single molecule. The product of these two values should be equal or a little bit more than the number of CPUs on a computer.
 
 The same but using `gnina`
 ```
@@ -110,6 +112,10 @@ sleep 10
 run_dock -i input.smi -o output.db --program vina -c config.yml --no_protonation -c 4 --sdf --hostfile $PBS_NODEFILE --dask_report
 ```
 `$PBS_NODEFILE` is a file containing list of IP addresses of servers. The first one from the list will be used by a dask scheduler, but it will also participate in computations.
+
+`--nworkers` is the number of workers per host. This is the number of molecules which are docked in parallel on a single host.
+
+`--nthreads` can be any value. The number of CPUs used for docking of a single molecule will be taken from `config.yml`.
   
 `--dask_report` argument will create at the end of calculations an html-file with performance report (may be useful to tweak docking parameters).
   
