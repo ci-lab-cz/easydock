@@ -88,9 +88,10 @@ def main():
                                                  '  run_dock.py -i input.smi -o output.db --program vina --config config.yml -hostfile $PBS_NODEFILE\n\n'
                                                  '  $PBS_NODEFILE contains the list of addresses of computational nodes\n'
                                                  'To continue interrupted calculations it is enough to run the script '
-                                                 'with just output argument, all other arguments and data is stored '
-                                                 'in DB. If you supply other arguments ina command line they will have '
-                                                 'higher precedence over those ones stored in DB.',
+                                                 'with just the output argument, all other arguments and data is '
+                                                 'stored in DB. If you supply other arguments in a command line they '
+                                                 'will be ignored with the exception of hostfile, dask_report, ncpu '
+                                                 'and verbose.',
                                      formatter_class=RawTextArgumentDefaultsHelpFormatter)
     parser.add_argument('-i', '--input', metavar='FILENAME', required=False, type=filepath_type,
                         help='input file with molecules (SMI, SDF, SDF.GZ, PKL). Maybe be omitted if output DB was '
@@ -140,6 +141,9 @@ def main():
 
     args = parser.parse_args()
     supplied_args = get_supplied_args(parser)
+    # allow update of only given arguments
+    allowed_args = ['output', 'hostfile', 'dask_report', 'ncpu', 'verbose']
+    supplied_args = tuple(arg for arg in supplied_args if arg in allowed_args)
 
     # if args.tmpdir is not None:
     #     tempfile.tempdir = args.tmpdir
