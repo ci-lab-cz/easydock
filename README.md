@@ -160,6 +160,10 @@ To implement support of a custom docking program one should implement a function
 
 ### Changelog
 
+**0.2.2**
+- fix bug with continuation of calculations after db was transferred to other machine
+- restrict precedence of command line arguments over arguments restored from DB only to specific ones (output, hostfile, dask_report, ncpu, verbose)
+
 **0.2.1**
 - fix treatment of molecule ids in get_sdf_from_dock_db
 - change installation instructions, vina must be installed from sources
