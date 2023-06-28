@@ -411,7 +411,8 @@ def restore_setup_from_db(db_fname):
         tmppath = tempfile.mkstemp(suffix='.yml', text=True)
         d['config'] = tmppath[1]
         tmpfiles.append(tmppath[1])
-        open(tmppath[1], 'wt').write(values['config'])
+        with open(tmppath[1], 'wt') as f:
+            yaml.safe_dump(c, f)
 
     except Exception as e:
         for fname in tmpfiles:
