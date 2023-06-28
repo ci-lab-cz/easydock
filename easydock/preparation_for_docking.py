@@ -120,6 +120,7 @@ def add_protonation(db_fname, tautomerize=True, table_name='mols', add_sql=''):
                                 continue
             finally:
                 os.remove(output)
+                os.close(fd)
 
         cur.executemany(f"""UPDATE {table_name}
                        SET 
