@@ -291,7 +291,8 @@ def pdbqt2molblock(pdbqt_block, template_mol, mol_id):
                 mol = assign_bonds_from_template(template_mol, mol)
             mol.SetProp('_Name', mol_id)
             mol_block = Chem.MolToMolBlock(mol)
-        except ValueError:
+        except Exception:
+            traceback.print_exc()
             if fixed:  # if a molecule was already fixed and the error persists - simply break and return None
                 sys.stderr.write(f'Parsing PDB was failed (fixing did not help): {mol_id}\n')
                 break
