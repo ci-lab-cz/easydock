@@ -208,7 +208,7 @@ def main():
         else:
             dask_report_fname = None
 
-        with sqlite3.connect(args.output) as conn:
+        with sqlite3.connect(args.output, timeout=60) as conn:
             mols = select_mols_to_dock(conn)
             i = 0
             for i, (mol_id, res) in enumerate(docking(mols,
