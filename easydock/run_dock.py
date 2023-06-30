@@ -9,8 +9,9 @@ from multiprocessing import Pool
 
 from rdkit import Chem
 from rdkit.Chem.rdMolDescriptors import CalcNumRotatableBonds
-from easydock.preparation_for_docking import create_db, restore_setup_from_db, init_db, save_sdf, add_protonation, \
-    cpu_type, filepath_type, update_db, select_mols_to_dock
+from easydock.database import create_db, restore_setup_from_db, init_db, update_db, save_sdf, select_mols_to_dock, \
+    add_protonation
+from easydock.preparation_for_docking import cpu_type, filepath_type
 
 
 class RawTextArgumentDefaultsHelpFormatter(argparse.RawTextHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
