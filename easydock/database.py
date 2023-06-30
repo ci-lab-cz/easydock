@@ -4,10 +4,12 @@ import subprocess
 import sys
 import tempfile
 from copy import deepcopy
+from functools import partial
 
 import yaml
 from easydock import read_input
 from easydock.preparation_for_docking import mol_is_3d
+from easydock.auxiliary import take
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
@@ -258,8 +260,7 @@ def select_mols_to_dock(db_conn, table_name='mols', add_sql=None):
 
 def add_protonation(db_fname, tautomerize=True, table_name='mols', add_sql=''):
     '''
-    Protonate SMILES by Chemaxon cxcalc utility to get molecule ionization states at pH 7.4.
-    Parse console output and update db.
+    Protonate SMILES by Chemaxon cxcalc utility to get molecule ionization states at pH 7.4
     :param db_fname:
     :param tautomerize: get a major tautomer at protonation
     :param table_name: table name with molecules to protonate
@@ -355,3 +356,43 @@ def add_protonation(db_fname, tautomerize=True, table_name='mols', add_sql=''):
 
     finally:
         conn.close()
+
+
+def select_from_db(cur, sql, values):
+    """
+    It makes SELECTs by chunks and works if too many values should be returned from DB.
+    Workaround of the limitation of SQLite3 on the number of values in a query (https://www.sqlite.org/limits.html,
+    section 9).
+    :param cur: curson or connection to db
+    :param sql: SQL query, where a single question mark identify position where to insert multiple values, e.g.
+                "SELECT smi FROM mols WHERE id IN (?)". This question mark will be replaced with multiple ones.
+                So, only one such a symbol should be present in the query.
+    :param values: list of values which will substitute the question mark in the query
+    :return: generator over results retrieved from DB
+    """
+    if sql.count('?') > 1:
+        raise ValueError('SQL query should contain only one question mark.')
+    chunks = iter(partial(take, 32000, iter(values)), [])  # split values on chunks with up to 32000 items
+    for chunk in chunks:
+        for item in cur.execute(sql.replace('?', ','.join('?' * len(chunk))), chunk):
+            yield item
+
+
+def get_mols(conn, mol_ids):
+    """
+    Returns list of Mol objects from docking DB, order is arbitrary, molecules with errors will be silently skipped
+    :param conn: connection to docking DB
+    :param mol_ids: list of molecules to retrieve
+    :return:
+    """
+    cur = conn.cursor()
+    sql = 'SELECT mol_block FROM mols WHERE id IN (?) AND mol_block IS NOT NULL'
+
+    mols = []
+    for items in select_from_db(cur, sql, mol_ids):
+        m = Chem.MolFromMolBlock(items[0], removeHs=False)
+        if m:
+            Chem.AssignStereochemistryFrom3D(m)
+            mols.append(m)
+    cur.close()
+    return mols
