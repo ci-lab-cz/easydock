@@ -300,41 +300,45 @@ def add_protonation(db_fname, tautomerize=True, table_name='mols', add_sql=''):
 
         output_data_smi = []
         output_data_mol = []
-        with tempfile.NamedTemporaryFile(suffix='.sdf', mode='w', encoding='utf-8') as tmp:
+        with tempfile.NamedTemporaryFile(suffix='.smi', mode='w', encoding='utf-8') as tmp:
             fd, output = tempfile.mkstemp()  # use output file to avoid overflow of stdout in extreme cases
             try:
-                for _, mol_block, _ in data_list:
-                    tmp.write(mol_block)
-                    tmp.write('\n$$$$\n')
+                for smi, _, mol_id in data_list:
+                    tmp.write(f'{smi}\t{mol_id}\n')
                 tmp.flush()
                 cmd_run = f"cxcalc -S --ignore-error majormicrospecies -H 7.4 " \
                           f"{'-M' if tautomerize else ''} -K '{tmp.name}' > '{output}'"
                 subprocess.call(cmd_run, shell=True)
-                for mol in Chem.SDMolSupplier(output):
-                    mol_name = mol.GetProp('_Name')
-                    smi = mol.GetPropsAsDict().get('MAJORMS', None)
-                    if smi is not None:
-                        try:
-                            cansmi = Chem.CanonSmiles(smi)
-                        except:
-                            sys.stderr.write(f'EASYDOCK ERROR: {mol_name}, smiles {smi} obtained after protonation '
-                                             f'could not be read by RDKit. The molecule was skipped.\n')
-                            continue
-                        if mol_name in smi_ids:
-                            output_data_smi.append((cansmi, mol_name))
-                        elif mol_name in mol_ids:
+                for mol in Chem.SDMolSupplier(output, sanitize=False):
+                    if mol:
+                        mol_name = mol.GetProp('_Name')
+                        smi = mol.GetPropsAsDict().get('MAJORMS', None)
+                        if smi is not None:
                             try:
-                                # mol block in chemaxon sdf is an input molecule
-                                # so, we make all bonds single, remove Hs and assign bond orders from SMILES
-                                # this should work even if a generated tautomer differs from the input molecule
-                                mol = Chem.RemoveHs(Chem.RWMol(mol))
-                                for b in mol.GetBonds():
-                                    b.SetBondType(Chem.BondType.SINGLE)
-                                ref_mol = Chem.RemoveHs(Chem.MolFromSmiles(smi))
-                                mol = AllChem.AssignBondOrdersFromTemplate(ref_mol, mol)
-                                output_data_mol.append((cansmi, Chem.MolToMolBlock(mol), mol_name))
-                            except ValueError:
+                                cansmi = Chem.CanonSmiles(smi)
+                            except:
+                                sys.stderr.write(f'EASYDOCK ERROR: {mol_name}, smiles {smi} obtained after protonation '
+                                                 f'could not be read by RDKit. The molecule was skipped.\n')
                                 continue
+                            if mol_name in smi_ids:
+                                output_data_smi.append((cansmi, mol_name))
+                            elif mol_name in mol_ids:
+                                try:
+                                    # mol block in chemaxon sdf is an input molecule but with 2d structure
+                                    # because input is SMILES
+                                    # to assign proper 3D coordinates we load 3D mol from DB,  make all bonds single,
+                                    # remove Hs and assign bond orders from SMILES
+                                    # this should work even if a generated tautomer differs from the input molecule
+                                    mol3d = get_mols(conn, [mol_name])
+                                    mol3d = Chem.RemoveHs(Chem.RWMol(mol3d[0]))
+                                    for b in mol3d.GetBonds():
+                                        b.SetBondType(Chem.BondType.SINGLE)
+                                    ref_mol = Chem.RemoveHs(Chem.MolFromSmiles(smi))
+                                    mol = AllChem.AssignBondOrdersFromTemplate(ref_mol, mol3d)
+                                    Chem.AssignStereochemistryFrom3D(mol)  # not sure whether it is necessary
+                                    output_data_mol.append((cansmi, Chem.MolToMolBlock(mol), mol_name))
+                                except ValueError:
+                                    continue
             finally:
                 os.remove(output)
                 os.close(fd)
