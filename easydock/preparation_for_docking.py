@@ -1,3 +1,4 @@
+import contextlib
 import os
 import re
 import sqlite3
@@ -6,7 +7,8 @@ import sys
 import tempfile
 import traceback
 import yaml
-from multiprocessing import cpu_count
+from functools import partial
+from multiprocessing import cpu_count, Pool
 from copy import deepcopy
 
 from meeko import MoleculePreparation
@@ -39,15 +41,81 @@ def mol_from_smi_or_molblock(ligand_string):
     return mol
 
 
-def add_protonation(db_fname, tautomerize=True, table_name='mols', add_sql=''):
+class DummyFile(object):
+    def write(self, x): pass
+
+
+@contextlib.contextmanager
+def nostd():
+    save_stdout = sys.stdout
+    save_stderr = sys.stderr
+    sys.stdout = DummyFile()
+    sys.stderr = DummyFile()
+    yield
+    sys.stdout = save_stdout
+    sys.stderr = save_stderr
+
+
+def pkasolver_protonate(mol, ph=7.4, keep_coords=False, model=None):
+    """
+
+    :param mol:
+    :param ph: pH
+    :param keep_coords: whether to keep coordinates of the input molecule
+    :return:
+    """
+    from pkasolver.query import calculate_microstate_pka_values
+    with nostd():
+        states = calculate_microstate_pka_values(mol, only_dimorphite=False, query_model=model)
+    if not states:
+        output_mol = mol
+    else:
+        # select protonated form of the first state with pKa > pH or deprotonated form of the state with the highest pKa
+        output_mol = None
+        for state in states:
+            if state.pka > ph:
+                output_mol = state.protonated_mol
+                break
+        if not output_mol:
+            output_mol = states[-1].deprotonated_mol
+        # fix protonated amides and analogs (about 2% such structures in 23K molecules)
+        output_mol = Chem.RemoveHs(output_mol)
+        ids = output_mol.GetSubstructMatches(Chem.MolFromSmarts('[$([NH+]-[*]=O)]'))
+        if ids:
+            for i in ids:
+                output_mol.GetAtomWithIdx(i[0]).SetFormalCharge(0)
+        if keep_coords:
+            output_mol = AllChem.AssignBondOrdersFromTemplate(output_mol, mol)
+        if mol.HasProp('_Name'):
+            output_mol.SetProp('_Name', mol.GetProp('_Name'))
+    return output_mol
+
+
+def pkasolver_protonate_mp(items, model=None):
+    smi, mol_block, mol_name = items
+    if mol_block is None:
+        mol = Chem.MolFromSmiles(smi)
+        keep_coords = False
+    else:
+        mol = Chem.MolFromMolBlock(mol_block)
+        keep_coords = True
+    output_mol = pkasolver_protonate(mol, keep_coords=keep_coords, model=model)
+    output_smi = Chem.MolToSmiles(output_mol, isomericSmiles=True)
+    output_molblock = Chem.MolToMolBlock(output_mol) if mol_block is not None else None
+    return output_smi, output_molblock, mol_name
+
+
+def add_protonation(db_fname, method='pkasolver', tautomerize=True, table_name='mols', add_sql='', ncpu=1):
     '''
     Protonate SMILES by Chemaxon cxcalc utility to get molecule ionization states at pH 7.4.
     Parse console output and update db.
     :param db_fname:
-    :param tautomerize: get a major tautomer at protonation
+    :param method: pkasolver or cxcalc
+    :param tautomerize: get a major tautomer at protonation when use cxcalc
     :param table_name: table name with molecules to protonate
     :param add_sql: additional SQL query to be appended to the SQL query to retrieve molecules for protonation,
                     e.g. "AND id IN ('MOL1', 'MOL2')" or "AND iteration=(SELECT MAX(iteration) FROM mols)".
+    :param ncpu: number of cpu
     :return:
     '''
     conn = sqlite3.connect(db_fname)
@@ -65,77 +133,114 @@ def add_protonation(db_fname, tautomerize=True, table_name='mols', add_sql=''):
             sys.stderr.write(f'no molecules to protonate\n')
             return
 
-        smi_ids = []
-        mol_ids = []
-        for i, (smi, mol_block, mol_name) in enumerate(data_list):
-            if mol_block is None:
-                smi_ids.append(mol_name)
-                # add missing mol blocks
-                m = Chem.MolFromSmiles(data_list[i][0])
-                m.SetProp('_Name', mol_name)
-                m_block = Chem.MolToMolBlock(m)
-                data_list[i] = (smi, m_block, mol_name)
-            else:
-                mol_ids.append(mol_name)
-        smi_ids = set(smi_ids)
-        mol_ids = set(mol_ids)
+        if method == 'pkasolver':
 
-        output_data_smi = []
-        output_data_mol = []
-        with tempfile.NamedTemporaryFile(suffix='.sdf', mode='w', encoding='utf-8') as tmp:
-            fd, output = tempfile.mkstemp()  # use output file to avoid overflow of stdout in extreme cases
-            try:
-                for _, mol_block, _ in data_list:
-                    tmp.write(mol_block)
-                    tmp.write('\n$$$$\n')
-                tmp.flush()
-                cmd_run = f"cxcalc -S --ignore-error majormicrospecies -H 7.4 " \
-                          f"{'-M' if tautomerize else ''} -K '{tmp.name}' > '{output}'"
-                subprocess.call(cmd_run, shell=True)
-                sdf_protonated = Chem.SDMolSupplier(output)
-                for mol in sdf_protonated:
-                    mol_name = mol.GetProp('_Name')
-                    smi = mol.GetPropsAsDict().get('MAJORMS', None)
-                    if smi is not None:
-                        try:
-                            cansmi = Chem.CanonSmiles(smi)
-                        except:
-                            sys.stderr.write(f'EASYDOCK ERROR: {mol_name}, smiles {smi} obtained after protonation '
-                                             f'could not be read by RDKit. The molecule was skipped.\n')
-                            continue
-                        if mol_name in smi_ids:
-                            output_data_smi.append((cansmi, mol_name))
-                        elif mol_name in mol_ids:
+            print(ncpu)
+
+            from pkasolver.query import QueryModel
+            model = QueryModel()
+
+            pool = Pool(ncpu)
+            items = []
+            for i, res in enumerate(pool.imap_unordered(partial(pkasolver_protonate_mp, model=model),
+                                                        data_list),
+                                    1):
+                print(i, res)
+                items.append(res)
+                if i % 10000 == 0:
+                    cur.executemany(f"""UPDATE {table_name}
+                                   SET 
+                                       smi_protonated = ?, 
+                                       source_mol_block_protonated = ?
+                                   WHERE
+                                       id = ?
+                                """, items)
+                    conn.commit()
+                    items = []
+
+            if items:
+                cur.executemany(f"""UPDATE {table_name}
+                               SET 
+                                   smi_protonated = ?, 
+                                   source_mol_block_protonated = ?
+                               WHERE
+                                   id = ?
+                            """, items)
+                conn.commit()
+
+        elif method == 'cxcalc':
+
+            smi_ids = []
+            mol_ids = []
+            for i, (smi, mol_block, mol_name) in enumerate(data_list):
+                if mol_block is None:
+                    smi_ids.append(mol_name)
+                    # add missing mol blocks
+                    m = Chem.MolFromSmiles(data_list[i][0])
+                    m.SetProp('_Name', mol_name)
+                    m_block = Chem.MolToMolBlock(m)
+                    data_list[i] = (smi, m_block, mol_name)
+                else:
+                    mol_ids.append(mol_name)
+            smi_ids = set(smi_ids)
+            mol_ids = set(mol_ids)
+
+            output_data_smi = []
+            output_data_mol = []
+            with tempfile.NamedTemporaryFile(suffix='.sdf', mode='w', encoding='utf-8') as tmp:
+                fd, output = tempfile.mkstemp()  # use output file to avoid overflow of stdout in extreme cases
+                try:
+                    for _, mol_block, _ in data_list:
+                        tmp.write(mol_block)
+                        tmp.write('\n$$$$\n')
+                    tmp.flush()
+                    cmd_run = f"cxcalc -S --ignore-error majormicrospecies -H 7.4 " \
+                              f"{'-M' if tautomerize else ''} -K '{tmp.name}' > '{output}'"
+                    subprocess.call(cmd_run, shell=True)
+                    sdf_protonated = Chem.SDMolSupplier(output)
+                    for mol in sdf_protonated:
+                        mol_name = mol.GetProp('_Name')
+                        smi = mol.GetPropsAsDict().get('MAJORMS', None)
+                        if smi is not None:
                             try:
-                                # mol block in chemaxon sdf is an input molecule
-                                # so, we make all bonds single, remove Hs and assign bond orders from SMILES
-                                # this should work even if a generated tautomer differs from the input molecule
-                                mol = Chem.RemoveHs(Chem.RWMol(mol))
-                                for b in mol.GetBonds():
-                                    b.SetBondType(Chem.BondType.SINGLE)
-                                ref_mol = Chem.RemoveHs(Chem.MolFromSmiles(smi))
-                                mol = AllChem.AssignBondOrdersFromTemplate(ref_mol, mol)
-                                output_data_mol.append((cansmi, Chem.MolToMolBlock(mol), mol_name))
-                            except ValueError:
+                                cansmi = Chem.CanonSmiles(smi)
+                            except:
+                                sys.stderr.write(f'EASYDOCK ERROR: {mol_name}, smiles {smi} obtained after protonation '
+                                                 f'could not be read by RDKit. The molecule was skipped.\n')
                                 continue
-            finally:
-                os.remove(output)
-                os.close(fd)
+                            if mol_name in smi_ids:
+                                output_data_smi.append((cansmi, mol_name))
+                            elif mol_name in mol_ids:
+                                try:
+                                    # mol block in chemaxon sdf is an input molecule
+                                    # so, we make all bonds single, remove Hs and assign bond orders from SMILES
+                                    # this should work even if a generated tautomer differs from the input molecule
+                                    mol = Chem.RemoveHs(Chem.RWMol(mol))
+                                    for b in mol.GetBonds():
+                                        b.SetBondType(Chem.BondType.SINGLE)
+                                    ref_mol = Chem.RemoveHs(Chem.MolFromSmiles(smi))
+                                    mol = AllChem.AssignBondOrdersFromTemplate(ref_mol, mol)
+                                    output_data_mol.append((cansmi, Chem.MolToMolBlock(mol), mol_name))
+                                except ValueError:
+                                    continue
+                finally:
+                    os.remove(output)
+                    os.close(fd)
 
-        cur.executemany(f"""UPDATE {table_name}
-                       SET 
-                           smi_protonated = ?
-                       WHERE
-                           id = ?
-                    """, output_data_smi)
-        cur.executemany(f"""UPDATE {table_name}
-                       SET 
-                           smi_protonated = ?, 
-                           source_mol_block_protonated = ?
-                       WHERE
-                           id = ?
-                    """, output_data_mol)
-        conn.commit()
+            cur.executemany(f"""UPDATE {table_name}
+                           SET 
+                               smi_protonated = ?
+                           WHERE
+                               id = ?
+                        """, output_data_smi)
+            cur.executemany(f"""UPDATE {table_name}
+                           SET 
+                               smi_protonated = ?, 
+                               source_mol_block_protonated = ?
+                           WHERE
+                               id = ?
+                        """, output_data_mol)
+            conn.commit()
 
     finally:
         conn.close()

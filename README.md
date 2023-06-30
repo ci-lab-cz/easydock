@@ -26,6 +26,17 @@ Installation of `vina`. There is a strict recommendation to install `vina` from 
 
 Installation of `gnina` is described at https://github.com/gnina/gnina
 
+Optional installation of `pkasolver` and its dependencies. This tool is used for protonation of molecules. Alternatively `cxcalc` tool from Chemaxon is supported (requires license).
+```bash
+pip install torch==1.13.1+cpu -f https://download.pytorch.org/whl/cpu/torch_stable.html
+pip install torch-scatter -f https://data.pyg.org/whl/torch-1.13.1+cpu.html
+pip install torch-sparse -f https://data.pyg.org/whl/torch-1.13.1+cpu.html
+pip install torch-spline-conv torch-geometric==2.0.1 -f https://data.pyg.org/whl/torch-1.13.1+cpu.html
+pip install cairosvg svgutils molvs
+# modified version of pkasolver with support of multiprocessing and no unnecessry messages
+pip install git+https://github.com/DrrDom/pkasolver.git@noprints
+```
+
 ### Description
 
 Fully automatic pipeline for molecular docking.  

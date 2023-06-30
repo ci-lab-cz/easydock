@@ -5,7 +5,7 @@ import os
 import sqlite3
 import sys
 from functools import partial
-from multiprocessing import Pool
+from multiprocessing import Pool, cpu_count
 
 from rdkit import Chem
 from rdkit.Chem.rdMolDescriptors import CalcNumRotatableBonds
@@ -112,11 +112,13 @@ def main():
                              'n_poses: 10\n'
                              'seed: -1\n'
                              'gnina.yml\n')
-    parser.add_argument('--no_protonation', action='store_true', default=False,
-                        help='disable protonation of molecules before docking. Protonation requires installed '
-                             'cxcalc chemaxon utility.')
+    parser.add_argument('--protonation_method', metavar='STRING', choices=['pkasolver', 'cxcalc'], default='pkasolver',
+                        help='method to be used for determination of a protonation state. '
+                             'Choices: pkasolver (default), cxcalc (need Chemaxon license).')
     parser.add_argument('--no_tautomerization', action='store_true', default=False,
-                        help='disable tautomerization of molecules during protonation.')
+                        help='disable tautomerization of molecules during protonation in cxcalc.')
+    parser.add_argument('--no_protonation', action='store_true', default=False,
+                        help='disable protonation of molecules before docking.')
     parser.add_argument('--sdf', action='store_true', default=False,
                         help='save best docked poses to SDF file with the same name as output DB.')
     parser.add_argument('--hostfile', metavar='FILENAME', required=False, type=filepath_type, default=None,
@@ -193,7 +195,8 @@ def main():
             dask_client = None
 
         if not args.no_protonation:
-            add_protonation(args.output, not args.no_tautomerization)
+            add_protonation(args.output, method=args.protonation_method, tautomerize=not args.no_tautomerization,
+                            ncpu=cpu_count())
 
         if args.program == 'vina':
             from easydock.vina_dock import mol_dock, pred_dock_time
