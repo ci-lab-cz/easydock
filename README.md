@@ -52,7 +52,7 @@ Pipeline:
 
 Docking using `vina` takes input SMILES and a config file. Ligands will not be protonated with Chemaxon, so their supplied charged states will be used. 4 CPU cores will be used (4 molecules will be dock in parallel). When docking will finish an SDF file will be created with top docking poses for each ligand. 
 ```
-run_dock -i input.smi -o output.db --program vina -c config.yml --no_protonation -c 4 --sdf
+run_dock -i input.smi -o output.db --program vina --config config.yml --no_protonation -c 4 --sdf
 ``` 
 
 Example of config.yml for `vina` docking  
@@ -69,7 +69,7 @@ NOTE: ncpu argument in `run_dock` and `config.yml` has different meaning. In `ru
 
 The same but using `gnina`
 ```
-run_dock -i input.smi -o output.db --program gnina -c config.yml --no_protonation -c 4 --sdf
+run_dock -i input.smi -o output.db --program gnina --config config.yml --no_protonation -c 4 --sdf
 ``` 
 
 Example of config.yml for `gnina` docking  
