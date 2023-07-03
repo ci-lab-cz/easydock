@@ -166,6 +166,13 @@ To implement support of a custom docking program one should implement a function
 
 ### Changelog
 
+**0.2.3**
+- improve descriptions of examples on README
+- catch all exceptions in conversion of PDBQT to Mol
+- move DB related functions to a new database.py module
+- use SMILES temporary file to protonate molecules with cxcalc
+- add functions to get molecules from DB in Python (get_mols, select_from_db)
+
 **0.2.2**
 - fix bug with continuation of calculations after db was transferred to other machine
 - restrict precedence of command line arguments over arguments restored from DB only to specific ones (output, hostfile, dask_report, ncpu, verbose)
