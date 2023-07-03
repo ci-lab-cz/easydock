@@ -329,7 +329,7 @@ def add_protonation(db_fname, tautomerize=True, table_name='mols', add_sql=''):
                                     # to assign proper 3D coordinates we load 3D mol from DB,  make all bonds single,
                                     # remove Hs and assign bond orders from SMILES
                                     # this should work even if a generated tautomer differs from the input molecule
-                                    mol3d = get_mols(conn, [mol_name])
+                                    mol3d = get_mols(conn, [mol_name], field_name='source_mol_block')
                                     mol3d = Chem.RemoveHs(Chem.RWMol(mol3d[0]))
                                     for b in mol3d.GetBonds():
                                         b.SetBondType(Chem.BondType.SINGLE)
@@ -382,19 +382,29 @@ def select_from_db(cur, sql, values):
             yield item
 
 
-def get_mols(conn, mol_ids):
+def get_mols(conn, mol_ids, field_name='mol_block'):
     """
     Returns list of Mol objects from docking DB, order is arbitrary, molecules with errors will be silently skipped
     :param conn: connection to docking DB
     :param mol_ids: list of molecules to retrieve
+    :param field_name: name of the field from which a molecule should be retrieved
     :return:
     """
+    if field_name in ['mol_block', 'source_mol_block']:
+        func = partial(Chem.MolFromMolBlock, removeHs=False)
+    elif field_name in ['smi']:
+        func = Chem.MolFromSmiles
+    else:
+        raise AttributeError(f'Wrong field name was specified for a get_mols functions. '
+                             f'Allowed: mol_block, source_mol_block, smi. Supplied: {field_name}')
+
     cur = conn.cursor()
-    sql = 'SELECT mol_block FROM mols WHERE id IN (?) AND mol_block IS NOT NULL'
+    # one "?" because we use the special retrieve function - select_from_db - which does it in chunks
+    sql = f'SELECT {field_name} FROM mols WHERE id IN (?) AND {field_name} IS NOT NULL'
 
     mols = []
     for items in select_from_db(cur, sql, mol_ids):
-        m = Chem.MolFromMolBlock(items[0], removeHs=False)
+        m = func(items[0])
         if m:
             Chem.AssignStereochemistryFrom3D(m)
             mols.append(m)
