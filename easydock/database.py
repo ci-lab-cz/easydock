@@ -306,9 +306,10 @@ def add_protonation(db_fname, tautomerize=True, table_name='mols', add_sql=''):
                 for smi, _, mol_id in data_list:
                     tmp.write(f'{smi}\t{mol_id}\n')
                 tmp.flush()
-                cmd_run = f"cxcalc -S --ignore-error majormicrospecies -H 7.4 " \
-                          f"{'-M' if tautomerize else ''} -K '{tmp.name}' > '{output}'"
-                subprocess.call(cmd_run, shell=True)
+                cmd_run = ['cxcalc', '-S', '--ignore-error', 'majormicrospecies', '-H', '7.4', '-K',
+                           f'{"-M" if tautomerize else ""}', tmp.name]
+                with open(output, 'w') as file:
+                    subprocess.run(cmd_run, stdout=file, text=True)
                 for mol in Chem.SDMolSupplier(output, sanitize=False):
                     if mol:
                         mol_name = mol.GetProp('_Name')
