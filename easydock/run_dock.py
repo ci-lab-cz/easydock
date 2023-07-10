@@ -70,9 +70,13 @@ def docking(mols, dock_func, dock_config, priority_func=CalcNumRotatableBonds, n
                 except StopIteration:
                     continue
     else:
-        with Pool(ncpu) as pool:
+        pool = Pool(ncpu)
+        try:
             for mol_id, res in pool.imap_unordered(partial(dock_func, config=dock_config), tuple(mols), chunksize=1):
                 yield mol_id, res
+        finally:
+            pool.close()
+            pool.join()
 
 
 def main():
