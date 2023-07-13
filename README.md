@@ -22,6 +22,11 @@ from pypi
 pip install meeko
 ```
 
+to use multiple servers for docking install `paramiko` (backend of `dask` if launched from the command line)
+```
+pip install paramiko
+```
+
 Installation of `vina`. There is a strict recommendation to install `vina` from sources https://github.com/ccsb-scripps/AutoDock-Vina, because version 1.2.3 (available from pip) contains a bug which result in very unstable docking scores. The fix will be included in later releases.
 
 Installation of `gnina` is described at https://github.com/gnina/gnina
@@ -117,7 +122,7 @@ run_dock -i input.smi -o output.db --program vina -c config.yml --no_protonation
 
 `--nthreads` can be any value. The number of CPUs used for docking of a single molecule will be taken from `config.yml`.
   
-`--dask_report` argument will create at the end of calculations an html-file with performance report (may be useful to tweak docking parameters).
+`--dask_report` argument will create at the end of calculations an html-file with performance report (may be useful to tweak docking parameters).  
   
 **Important setup issue** - the limit of open files on every server should be increased to the level at least twice the total number of requested workers (file streams are used for inter-node communication by dask).
 
