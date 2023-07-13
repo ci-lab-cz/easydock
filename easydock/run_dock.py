@@ -79,6 +79,38 @@ def docking(mols, dock_func, dock_config, priority_func=CalcNumRotatableBonds, n
             pool.join()
 
 
+def create_dask_client(hostfile):
+    Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
+    if hostfile is not None:
+        from dask.distributed import Client
+        # import dask
+        # dask.config.set({'distributed.client.heartbeat': '20s'})
+        # dask.config.set({'distributed.client.scheduler-info-interval': '10s'})
+        # dask.config.set({'distributed.scheduler.allowed-failures': 30})
+        # dask.config.set({'distributed.scheduler.work-stealing-interval': '1minutes'})
+        # dask.config.set({'distributed.scheduler.worker-ttl': None})
+        # dask.config.set({'distributed.scheduler.unknown-task-duration': '1h'})
+        # dask.config.set({'distributed.scheduler.work-stealing': False})
+        # dask.config.set({'distributed.scheduler.unknown-task-duration': '5minutes'})
+        # dask.config.set({'distributed.worker.lifetime.restart': True})
+        # dask.config.set({'distributed.worker.profile.interval': '500ms'})
+        # dask.config.set({'distributed.worker.profile.cycle': '5s'})
+        # dask.config.set({'distributed.worker.memory.monitor-interval': '1s'})
+        # dask.config.set({'distributed.comm.timeouts.connect': '30minutes'})
+        # dask.config.set({'distributed.comm.timeouts.tcp': '30minutes'})
+        # dask.config.set({'distributed.comm.retry.count': 20})
+        # dask.config.set({'distributed.admin.tick.limit': '3h'})
+        # dask.config.set({'distributed.admin.tick.interval': '500ms'})
+        # dask.config.set({'distributed.deploy.lost-worker-timeout': '30minutes'})
+        with open(hostfile) as f:
+            hosts = [line.strip() for line in f]
+        dask_client = Client(hosts[0] + ':8786', connection_limit=2048)
+        # dask_client = Client()   # to test dask locally
+    else:
+        dask_client = None
+    return dask_client
+
+
 def main():
     parser = argparse.ArgumentParser(description='Perform docking of input molecules using Vina 1.2 or Gnina. '
                                                  'The script automates the whole pipeline: protonates molecules, '
@@ -168,34 +200,7 @@ def main():
                 del args_dict[arg]
             args.__dict__.update(args_dict)
 
-        if args.hostfile is not None:
-            import dask
-            from dask.distributed import Client
-            # dask.config.set({'distributed.client.heartbeat': '20s'})
-            # dask.config.set({'distributed.client.scheduler-info-interval': '10s'})
-            # dask.config.set({'distributed.scheduler.allowed-failures': 30})
-            # dask.config.set({'distributed.scheduler.work-stealing-interval': '1minutes'})
-            # dask.config.set({'distributed.scheduler.worker-ttl': None})
-            # dask.config.set({'distributed.scheduler.unknown-task-duration': '1h'})
-            # dask.config.set({'distributed.scheduler.work-stealing': False})
-            # dask.config.set({'distributed.scheduler.unknown-task-duration': '5minutes'})
-            # dask.config.set({'distributed.worker.lifetime.restart': True})
-            # dask.config.set({'distributed.worker.profile.interval': '500ms'})
-            # dask.config.set({'distributed.worker.profile.cycle': '5s'})
-            # dask.config.set({'distributed.worker.memory.monitor-interval': '1s'})
-            # dask.config.set({'distributed.comm.timeouts.connect': '30minutes'})
-            # dask.config.set({'distributed.comm.timeouts.tcp': '30minutes'})
-            # dask.config.set({'distributed.comm.retry.count': 20})
-            # dask.config.set({'distributed.admin.tick.limit': '3h'})
-            # dask.config.set({'distributed.admin.tick.interval': '500ms'})
-            # dask.config.set({'distributed.deploy.lost-worker-timeout': '30minutes'})
-
-            with open(args.hostfile) as f:
-                hosts = [line.strip() for line in f]
-            dask_client = Client(hosts[0] + ':8786', connection_limit=2048)
-            # dask_client = Client()   # to test dask locally
-        else:
-            dask_client = None
+        dask_client = create_dask_client(args.hostfile)
 
         if not args.no_protonation:
             add_protonation(args.output, not args.no_tautomerization)
