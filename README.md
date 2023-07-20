@@ -171,6 +171,11 @@ To implement support of a custom docking program one should implement a function
 
 ### Changelog
 
+**0.2.4**
+- close pool explicitly to solve issue with multiprocessing
+- replace subprocess calls with run
+- explicitly set types of command line arguments which a file paths (solve issue with relative paths)
+
 **0.2.3**
 - improve descriptions of examples on README
 - catch all exceptions in conversion of PDBQT to Mol
