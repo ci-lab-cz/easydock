@@ -118,11 +118,11 @@ def main():
                                                  'a single machine (multiprocessing) or a cluster of servers (dask), '
                                                  'stores the best scores and poses in PDBQT and MOL formats to DB.\n'
                                                  'To run on a single machine:\n'
-                                                 '  run_dock.py -i input.smi -o output.db --program vina --config config.yml -c 4 -v\n\n'
+                                                 '  run_dock -i input.smi -o output.db --program vina --config config.yml -c 4 -v\n\n'
                                                  'To run on several machines using dask ssh-cluster (on PBS system):\n'
                                                  '  dask ssh --hostfile $PBS_NODEFILE --nprocs 8 --nthreads 5 &\n'
                                                  '  sleep 10\n'
-                                                 '  run_dock.py -i input.smi -o output.db --program vina --config config.yml -hostfile $PBS_NODEFILE\n\n'
+                                                 '  run_dock -i input.smi -o output.db --program vina --config config.yml -hostfile $PBS_NODEFILE\n\n'
                                                  '  $PBS_NODEFILE contains the list of addresses of computational nodes\n'
                                                  'To continue interrupted calculations it is enough to run the script '
                                                  'with just the output argument, all other arguments and data is '
@@ -140,7 +140,7 @@ def main():
                              'If output DB exists all other inputs will be ignored and calculations will be continued.')
     parser.add_argument('--program', metavar='STRING', required=False, choices=['vina', 'gnina'],
                         help='name of a docking program. Choices: vina, gnina')
-    parser.add_argument('--config', metavar='FILENAME', required=False,
+    parser.add_argument('--config', metavar='FILENAME', required=False, type=filepath_type,
                         help='YAML file with parameters used by docking program.\n'
                              'vina.yml\n'
                              'protein: path to pdbqt file with a protein\n'
@@ -161,7 +161,7 @@ def main():
                              'passed as $PBS_NODEFILE variable from inside a PBS script. The first line in this file '
                              'will be the address of the scheduler running on the standard port 8786. If omitted, '
                              'calculations will run on a single machine as usual.')
-    parser.add_argument('--dask_report', action='store_true', default=False,
+    parser.add_argument('--dask_report', action='store_true', default=False, type=filepath_type,
                         help='save Dask report to HTML file. It will have the same name as the output database.')
     # parser.add_argument('--tmpdir', metavar='DIRNAME', required=False, type=filepath_type, default=None,
     #                     help='path to a dir where to store temporary files accessible to a program. '
