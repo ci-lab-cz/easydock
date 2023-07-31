@@ -114,7 +114,7 @@ To distribute docking over multiple servers one have to start dask cluster and c
 ```bash
 dask ssh --hostfile $PBS_NODEFILE --nworkers 15 --nthreads 1 &
 sleep 10
-run_dock -i input.smi -o output.db --program vina --config config.yml --no_protonation -c 4 --sdf --hostfile $PBS_NODEFILE --dask_report
+run_dock -i input.smi -o output.db --program vina --config config.yml --no_protonation --sdf --hostfile $PBS_NODEFILE --dask_report
 ```
 `$PBS_NODEFILE` is a file containing list of IP addresses of servers. The first one from the list will be used by a dask scheduler, but it will also participate in computations.
 
