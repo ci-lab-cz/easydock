@@ -161,7 +161,7 @@ def main():
                              'passed as $PBS_NODEFILE variable from inside a PBS script. The first line in this file '
                              'will be the address of the scheduler running on the standard port 8786. If omitted, '
                              'calculations will run on a single machine as usual.')
-    parser.add_argument('--dask_report', action='store_true', default=False, type=filepath_type,
+    parser.add_argument('--dask_report', default=False, type=filepath_type,
                         help='save Dask report to HTML file. It will have the same name as the output database.')
     # parser.add_argument('--tmpdir', metavar='DIRNAME', required=False, type=filepath_type, default=None,
     #                     help='path to a dir where to store temporary files accessible to a program. '
