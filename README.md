@@ -205,3 +205,9 @@ To implement support of a custom docking program one should implement a function
 
 ### Licence
 BSD-3
+
+### Citation
+Minibaeva, G.; Ivanova, A.; Polishchuk, P.,  
+EasyDock: customizable and scalable docking tool.  
+*Journal of Cheminformatics* **2023**, 15 (1), 102.  
+https://doi.org/10.1186/s13321-023-00772-2
