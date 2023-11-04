@@ -171,6 +171,10 @@ To implement support of a custom docking program one should implement a function
 
 ### Changelog
 
+**0.2.5**
+- fix input argument type
+- update examples and citation
+
 **0.2.4**
 - close pool explicitly to solve issue with multiprocessing
 - replace subprocess calls with run
