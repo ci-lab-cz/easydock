@@ -34,8 +34,8 @@ def mol_from_smi_or_molblock(ligand_string):
 
 
 def mk_prepare_ligand(mol, verbose=False):
-    preparator = MoleculePreparation(keep_nonpolar_hydrogens=False, hydrate=False, flexible_amides=False,
-                                     rigid_macrocycles=True, min_ring_size=7, max_ring_size=33)
+    preparator = MoleculePreparation(hydrate=False, flexible_amides=False, rigid_macrocycles=True, min_ring_size=7,
+                                     max_ring_size=33)
     try:
         preparator.prepare(mol)
         pdbqt_string = preparator.write_pdbqt_string()
