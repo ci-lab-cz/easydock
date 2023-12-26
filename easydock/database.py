@@ -14,7 +14,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 
-def create_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', 'protein_setup')):
+def create_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', 'protein_setup'), unique_smi=False):
     """
     Create empty database structure and the setup table, which is filled with values. To setup table two fields are
     always stored: yaml file with all input args of the docking script and yaml file with docking config
@@ -24,24 +24,25 @@ def create_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', '
                          fields in setup table
     :param config_args_to_save: list of arg names from config file which values are file names which content should be
                                 stored as separate fields in setup table
+    :param unique_smi: whether to create a table with UNIQUE constraint on smi field
     :return:
     """
     os.makedirs(os.path.dirname(os.path.abspath(db_fname)), exist_ok=True)
     conn = sqlite3.connect(db_fname)
     cur = conn.cursor()
-    cur.execute("""CREATE TABLE IF NOT EXISTS mols
-            (
-             id TEXT PRIMARY KEY,
-             smi TEXT,
-             smi_protonated TEXT,
-             source_mol_block TEXT,
-             source_mol_block_protonated TEXT,
-             docking_score REAL,
-             pdb_block TEXT,
-             mol_block TEXT,
-             dock_time REAL,
-             time TEXT
-            )""")
+    cur.execute(f"""CREATE TABLE IF NOT EXISTS mols
+                (
+                 id TEXT PRIMARY KEY,
+                 smi TEXT {'UNIQUE' if unique_smi else ''},
+                 smi_protonated TEXT,
+                 source_mol_block TEXT,
+                 source_mol_block_protonated TEXT,
+                 docking_score REAL,
+                 pdb_block TEXT,
+                 mol_block TEXT,
+                 dock_time REAL,
+                 time TEXT
+                )""")
 
     # this will create a setup table with the first item in YAML format which contains all input args, and additional
     # fields with names identical to selected arg names pointed out on text files (e.g config, protein.pdbqt,
