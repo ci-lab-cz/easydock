@@ -171,6 +171,9 @@ To implement support of a custom docking program one should implement a function
 
 ### Changelog
 
+**0.2.7**
+- add an optional UNIQUE constraint on SMILES field in the main table on database creation (currently duplicates are not removed)
+
 **0.2.6**
 - fix compatibility issue with meeko version 0.5.0
 
