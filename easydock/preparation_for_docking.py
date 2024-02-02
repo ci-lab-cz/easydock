@@ -94,7 +94,9 @@ def ligand_preparation(mol, boron_replacement=False, seed=43):
         mol = mol_embedding_3d(mol, seed=seed)
         if mol:
             if boron_replacement:
-                idx_boron = [a.GetIdx() for a in mol.GetAtoms() if a.GetAtomicNum() == 5]
+                idx_boron = [
+                    a.GetIdx() for a in mol.GetAtoms() if a.GetAtomicNum() == 5
+                ]
                 for id_ in idx_boron:
                     if mol.GetAtomWithIdx(id_).GetFormalCharge() < 0:
                         mol.GetAtomWithIdx(id_).SetFormalCharge(0)
@@ -109,37 +111,47 @@ def ligand_preparation(mol, boron_replacement=False, seed=43):
 
 def fix_pdbqt(pdbqt_block):
     pdbqt_fixed = []
-    for line in pdbqt_block.split('\n'):
-        if not line.startswith('HETATM') and not line.startswith('ATOM'):
+    for line in pdbqt_block.split("\n"):
+        if not line.startswith("HETATM") and not line.startswith("ATOM"):
             pdbqt_fixed.append(line)
             continue
         atom_type = line[12:16].strip()
         # autodock vina types
-        if 'CA' in line[77:79]: #Calcium is exception
-            atom_pdbqt_type = 'CA'
+        if "CA" in line[77:79]:  # Calcium is exception
+            atom_pdbqt_type = "CA"
         else:
-            atom_pdbqt_type = re.sub('D|A', '', line[77:79]).strip() # can add meeko macrocycle types (G and \d (CG0 etc) in the sub expression if will be going to use it
+            atom_pdbqt_type = re.sub(
+                "D|A", "", line[77:79]
+            ).strip()  # can add meeko macrocycle types (G and \d (CG0 etc) in the sub expression if will be going to use it
 
-        if re.search('\d', atom_type[0]) or len(atom_pdbqt_type) == 2: #1HG or two-letter atom names such as CL,FE starts with 13
-            atom_format_type = '{:<4s}'.format(atom_type)
+        if (
+            re.search("\d", atom_type[0]) or len(atom_pdbqt_type) == 2
+        ):  # 1HG or two-letter atom names such as CL,FE starts with 13
+            atom_format_type = "{:<4s}".format(atom_type)
         else:  # starts with 14
-            atom_format_type = ' {:<3s}'.format(atom_type)
+            atom_format_type = " {:<3s}".format(atom_type)
         line = line[:12] + atom_format_type + line[16:]
         pdbqt_fixed.append(line)
 
-    return '\n'.join(pdbqt_fixed)
+    return "\n".join(pdbqt_fixed)
 
 
 def assign_bonds_from_template(template_mol, mol):
     # explicit hydrogends are removed from carbon atoms (chiral hydrogens) to match pdbqt mol,
     # e.g. [NH3+][C@H](C)C(=O)[O-]
     template_mol_ = Chem.Mol(template_mol)
-    template_mol_ = Chem.AddHs(template_mol_, explicitOnly=True,
-                               onlyOnAtoms=[a.GetIdx() for a in template_mol_.GetAtoms() if
-                                            a.GetAtomicNum() != 6])
+    template_mol_ = Chem.AddHs(
+        template_mol_,
+        explicitOnly=True,
+        onlyOnAtoms=[
+            a.GetIdx() for a in template_mol_.GetAtoms() if a.GetAtomicNum() != 6
+        ],
+    )
     mol = AllChem.AssignBondOrdersFromTemplate(template_mol_, mol)
     Chem.SanitizeMol(mol)
-    Chem.AssignStereochemistry(mol, cleanIt=True, force=True, flagPossibleStereoCenters=True)
+    Chem.AssignStereochemistry(
+        mol, cleanIt=True, force=True, flagPossibleStereoCenters=True
+    )
     return mol
 
 
@@ -147,7 +159,11 @@ def boron_reduction(mol_B, mol):
     mol_B_ = Chem.Mol(mol_B)
     mol_ = Chem.Mol(mol)
 
-    idx_boron = {a.GetIdx(): a.GetFormalCharge() for a in mol_B_.GetAtoms() if a.GetAtomicNum() == 5}
+    idx_boron = {
+        a.GetIdx(): a.GetFormalCharge()
+        for a in mol_B_.GetAtoms()
+        if a.GetAtomicNum() == 5
+    }
     if idx_boron:
 
         for id_, charge in idx_boron.items():
@@ -157,14 +173,20 @@ def boron_reduction(mol_B, mol):
 
         mol_ = assign_bonds_from_template(mol_B_, mol_)
         idx = mol_.GetSubstructMatches(mol_B_)
-        mol_idx_boron = [tuple(sorted((ids[i], j) for i, j in idx_boron.items())) for ids in idx]
-        mol_idx_boron = list(set(mol_idx_boron))  # retrieve all ids matched possible boron atom positions
+        mol_idx_boron = [
+            tuple(sorted((ids[i], j) for i, j in idx_boron.items())) for ids in idx
+        ]
+        mol_idx_boron = list(
+            set(mol_idx_boron)
+        )  # retrieve all ids matched possible boron atom positions
         if len(mol_idx_boron) == 1:  # check whether this set of ids is unique
             for id_, charge in mol_idx_boron[0]:
                 mol_.GetAtomWithIdx(id_).SetAtomicNum(5)
                 mol_.GetAtomWithIdx(id_).SetFormalCharge(charge)
         else:  # if not - several equivalent mappings exist
-            sys.stderr.write('different mappings was detected. The structure cannot be recostructed automatically.')
+            sys.stderr.write(
+                "different mappings was detected. The structure cannot be recostructed automatically."
+            )
             return None
 
     return mol_
@@ -183,20 +205,30 @@ def pdbqt2molblock(pdbqt_block, template_mol, mol_id):
     mol_block = None
     fixed = False
     while mol_block is None:
-        mol = Chem.MolFromPDBBlock('\n'.join([i[:66] for i in pdbqt_block.split('\n')]), removeHs=False, sanitize=False)
+        mol = Chem.MolFromPDBBlock(
+            "\n".join([i[:66] for i in pdbqt_block.split("\n")]),
+            removeHs=False,
+            sanitize=False,
+        )
         try:
             if 5 in [atom.GetAtomicNum() for atom in template_mol.GetAtoms()]:
                 mol = boron_reduction(template_mol, mol)
             else:
                 mol = assign_bonds_from_template(template_mol, mol)
-            mol.SetProp('_Name', mol_id)
+            mol.SetProp("_Name", mol_id)
             mol_block = Chem.MolToMolBlock(mol)
         except Exception:
             traceback.print_exc()
-            if fixed:  # if a molecule was already fixed and the error persists - simply break and return None
-                sys.stderr.write(f'Parsing PDB was failed (fixing did not help): {mol_id}\n')
+            if (
+                fixed
+            ):  # if a molecule was already fixed and the error persists - simply break and return None
+                sys.stderr.write(
+                    f"Parsing PDB was failed (fixing did not help): {mol_id}\n"
+                )
                 break
-            sys.stderr.write(f'Could not assign bond orders while parsing PDB: {mol_id}. Trying to fix.\n')
+            sys.stderr.write(
+                f"Could not assign bond orders while parsing PDB: {mol_id}. Trying to fix.\n"
+            )
             pdbqt_block = fix_pdbqt(pdbqt_block)
             fixed = True
     return mol_block
