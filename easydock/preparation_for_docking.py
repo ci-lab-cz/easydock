@@ -4,7 +4,7 @@ import sys
 import traceback
 from multiprocessing import cpu_count
 
-from meeko import MoleculePreparation
+from meeko import MoleculePreparation, PDBQTWriterLegacy
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
@@ -34,15 +34,23 @@ def mol_from_smi_or_molblock(ligand_string):
 
 
 def mk_prepare_ligand(mol, verbose=False):
-    preparator = MoleculePreparation(hydrate=False, flexible_amides=False, rigid_macrocycles=True, min_ring_size=7,
-                                     max_ring_size=33)
+    preparator = MoleculePreparation(
+        hydrate=False,
+        flexible_amides=False,
+        rigid_macrocycles=True,
+        min_ring_size=7,
+        max_ring_size=33,
+    )
     try:
-        preparator.prepare(mol)
-        pdbqt_string = preparator.write_pdbqt_string()
-        if verbose:
-            preparator.show_setup()
+        mol_setups = preparator.prepare(mol)
+        for setup in mol_setups:
+            pdbqt_string, is_ok, error_msg = PDBQTWriterLegacy.write_string(setup)
+            if verbose:
+                print(f"{setup}")
     except Exception:
-        sys.stderr.write('Warning. Incorrect mol object to convert to pdbqt. Continue. \n')
+        sys.stderr.write(
+            "Warning. Incorrect mol object to convert to pdbqt. Continue. \n"
+        )
         traceback.print_exc()
         pdbqt_string = None
 
