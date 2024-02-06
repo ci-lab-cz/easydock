@@ -4,7 +4,8 @@ import sys
 import traceback
 from multiprocessing import cpu_count
 
-from meeko import MoleculePreparation, PDBQTWriterLegacy
+from meeko import (MoleculePreparation, PDBQTMolecule, PDBQTWriterLegacy,
+                   RDKitMolCreate)
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
@@ -203,32 +204,28 @@ def pdbqt2molblock(pdbqt_block, template_mol, mol_id):
     :return: a single string with a MOL block, if conversion failed returns None
     """
     mol_block = None
-    fixed = False
-    while mol_block is None:
-        mol = Chem.MolFromPDBBlock(
-            "\n".join([i[:66] for i in pdbqt_block.split("\n")]),
-            removeHs=False,
-            sanitize=False,
+    try:
+        pdbqt_mol = PDBQTMolecule(
+            pdbqt_block, is_dlg=False, skip_typing=True, poses_to_read=1
         )
-        try:
-            if 5 in [atom.GetAtomicNum() for atom in template_mol.GetAtoms()]:
-                mol = boron_reduction(template_mol, mol)
-            else:
-                mol = assign_bonds_from_template(template_mol, mol)
-            mol.SetProp("_Name", mol_id)
-            mol_block = Chem.MolToMolBlock(mol)
-        except Exception:
-            traceback.print_exc()
-            if (
-                fixed
-            ):  # if a molecule was already fixed and the error persists - simply break and return None
-                sys.stderr.write(
-                    f"Parsing PDB was failed (fixing did not help): {mol_id}\n"
-                )
-                break
-            sys.stderr.write(
-                f"Could not assign bond orders while parsing PDB: {mol_id}. Trying to fix.\n"
-            )
-            pdbqt_block = fix_pdbqt(pdbqt_block)
-            fixed = True
+        rdkitmol_list = RDKitMolCreate.from_pdbqt_mol(pdbqt_mol)
+        rdkit_mol = rdkitmol_list[0]
+    except Exception:
+        traceback.print_exc()
+        sys.stderr.write(f"Parsing PDB was failed (fixing did not help): {mol_id}\n")
+        return None
+
+    try:
+        if 5 in [atom.GetAtomicNum() for atom in template_mol.GetAtoms()]:
+            mol = boron_reduction(template_mol, rdkit_mol)
+        else:
+            mol = assign_bonds_from_template(template_mol, rdkit_mol)
+        mol.SetProp("_Name", mol_id)
+        mol_block = Chem.MolToMolBlock(mol)
+    except Exception:
+        traceback.print_exc()
+        sys.stderr.write(
+            f"Could not assign bond orders while parsing PDB: {mol_id}. Trying to fix.\n"
+        )
+
     return mol_block
