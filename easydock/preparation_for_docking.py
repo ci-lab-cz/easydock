@@ -110,33 +110,6 @@ def ligand_preparation(mol, boron_replacement=False, seed=43):
         return None
 
 
-def fix_pdbqt(pdbqt_block):
-    pdbqt_fixed = []
-    for line in pdbqt_block.split("\n"):
-        if not line.startswith("HETATM") and not line.startswith("ATOM"):
-            pdbqt_fixed.append(line)
-            continue
-        atom_type = line[12:16].strip()
-        # autodock vina types
-        if "CA" in line[77:79]:  # Calcium is exception
-            atom_pdbqt_type = "CA"
-        else:
-            atom_pdbqt_type = re.sub(
-                "D|A", "", line[77:79]
-            ).strip()  # can add meeko macrocycle types (G and \d (CG0 etc) in the sub expression if will be going to use it
-
-        if (
-            re.search("\d", atom_type[0]) or len(atom_pdbqt_type) == 2
-        ):  # 1HG or two-letter atom names such as CL,FE starts with 13
-            atom_format_type = "{:<4s}".format(atom_type)
-        else:  # starts with 14
-            atom_format_type = " {:<3s}".format(atom_type)
-        line = line[:12] + atom_format_type + line[16:]
-        pdbqt_fixed.append(line)
-
-    return "\n".join(pdbqt_fixed)
-
-
 def assign_bonds_from_template(template_mol, mol):
     # explicit hydrogends are removed from carbon atoms (chiral hydrogens) to match pdbqt mol,
     # e.g. [NH3+][C@H](C)C(=O)[O-]
