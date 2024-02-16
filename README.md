@@ -174,6 +174,10 @@ To implement support of a custom docking program one should implement a function
 
 ### Changelog
 
+**0.2.8**
+- conversion of PDBQT to Mol by means of Meeko (improvement) [PR19](https://github.com/ci-lab-cz/easydock/pull/19)
+- clarify installation instructions
+
 **0.2.7**
 - add an optional UNIQUE constraint on SMILES field in the main table on database creation (currently duplicates are not removed)
 
