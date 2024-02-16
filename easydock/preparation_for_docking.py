@@ -95,9 +95,7 @@ def ligand_preparation(mol, boron_replacement=False, seed=43):
         mol = mol_embedding_3d(mol, seed=seed)
         if mol:
             if boron_replacement:
-                idx_boron = [
-                    a.GetIdx() for a in mol.GetAtoms() if a.GetAtomicNum() == 5
-                ]
+                idx_boron = [a.GetIdx() for a in mol.GetAtoms() if a.GetAtomicNum() == 5]
                 for id_ in idx_boron:
                     if mol.GetAtomWithIdx(id_).GetFormalCharge() < 0:
                         mol.GetAtomWithIdx(id_).SetFormalCharge(0)
@@ -114,18 +112,12 @@ def assign_bonds_from_template(template_mol, mol):
     # explicit hydrogends are removed from carbon atoms (chiral hydrogens) to match pdbqt mol,
     # e.g. [NH3+][C@H](C)C(=O)[O-]
     template_mol_ = Chem.Mol(template_mol)
-    template_mol_ = Chem.AddHs(
-        template_mol_,
-        explicitOnly=True,
-        onlyOnAtoms=[
-            a.GetIdx() for a in template_mol_.GetAtoms() if a.GetAtomicNum() != 6
-        ],
-    )
+    template_mol_ = Chem.AddHs(template_mol_, explicitOnly=True,
+                               onlyOnAtoms=[a.GetIdx() for a in template_mol_.GetAtoms() if
+                                            a.GetAtomicNum() != 6])
     mol = AllChem.AssignBondOrdersFromTemplate(template_mol_, mol)
     Chem.SanitizeMol(mol)
-    Chem.AssignStereochemistry(
-        mol, cleanIt=True, force=True, flagPossibleStereoCenters=True
-    )
+    Chem.AssignStereochemistry(mol, cleanIt=True, force=True, flagPossibleStereoCenters=True)
     return mol
 
 
@@ -133,11 +125,7 @@ def boron_reduction(mol_B, mol):
     mol_B_ = Chem.Mol(mol_B)
     mol_ = Chem.Mol(mol)
 
-    idx_boron = {
-        a.GetIdx(): a.GetFormalCharge()
-        for a in mol_B_.GetAtoms()
-        if a.GetAtomicNum() == 5
-    }
+    idx_boron = {a.GetIdx(): a.GetFormalCharge() for a in mol_B_.GetAtoms() if a.GetAtomicNum() == 5}
     if idx_boron:
 
         for id_, charge in idx_boron.items():
@@ -147,20 +135,14 @@ def boron_reduction(mol_B, mol):
 
         mol_ = assign_bonds_from_template(mol_B_, mol_)
         idx = mol_.GetSubstructMatches(mol_B_)
-        mol_idx_boron = [
-            tuple(sorted((ids[i], j) for i, j in idx_boron.items())) for ids in idx
-        ]
-        mol_idx_boron = list(
-            set(mol_idx_boron)
-        )  # retrieve all ids matched possible boron atom positions
+        mol_idx_boron = [tuple(sorted((ids[i], j) for i, j in idx_boron.items())) for ids in idx]
+        mol_idx_boron = list(set(mol_idx_boron))  # retrieve all ids matched possible boron atom positions
         if len(mol_idx_boron) == 1:  # check whether this set of ids is unique
             for id_, charge in mol_idx_boron[0]:
                 mol_.GetAtomWithIdx(id_).SetAtomicNum(5)
                 mol_.GetAtomWithIdx(id_).SetFormalCharge(charge)
         else:  # if not - several equivalent mappings exist
-            sys.stderr.write(
-                "different mappings was detected. The structure cannot be recostructed automatically."
-            )
+            sys.stderr.write('different mappings was detected. The structure cannot be recostructed automatically.')
             return None
 
     return mol_
@@ -178,9 +160,7 @@ def pdbqt2molblock(pdbqt_block, template_mol, mol_id):
     """
     mol_block = None
     try:
-        pdbqt_mol = PDBQTMolecule(
-            pdbqt_block, is_dlg=False, skip_typing=True, poses_to_read=1
-        )
+        pdbqt_mol = PDBQTMolecule(pdbqt_block, is_dlg=False, skip_typing=True, poses_to_read=1)
         rdkitmol_list = RDKitMolCreate.from_pdbqt_mol(pdbqt_mol)
         rdkit_mol = rdkitmol_list[0]
     except Exception:
@@ -193,12 +173,11 @@ def pdbqt2molblock(pdbqt_block, template_mol, mol_id):
             mol = boron_reduction(template_mol, rdkit_mol)
         else:
             mol = assign_bonds_from_template(template_mol, rdkit_mol)
+
         mol.SetProp("_Name", mol_id)
         mol_block = Chem.MolToMolBlock(mol)
     except Exception:
         traceback.print_exc()
-        sys.stderr.write(
-            f"Could not assign bond orders while parsing PDB: {mol_id}. Trying to fix.\n"
-        )
+        sys.stderr.write(f"Could not assign bond orders while parsing PDB: {mol_id}. Trying to fix.\n")
 
     return mol_block
