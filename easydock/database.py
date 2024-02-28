@@ -139,8 +139,8 @@ def restore_setup_from_db(db_fname):
 
     return d, tmpfiles
 
-def get_isomers(mol):
-    opts = StereoEnumerationOptions(tryEmbedding=True,maxIsomers=32,rand=0xf00d)
+def get_isomers(mol, max_isomers):
+    opts = StereoEnumerationOptions(tryEmbedding=True, maxIsomers=max_isomers, rand=0xf00d)
     # this is a workaround for rdkit issue - if a double bond has STEREOANY it will cause errors at
     # stereoisomer enumeration, we replace STEREOANY with STEREONONE in these cases
     try:
@@ -152,22 +152,22 @@ def get_isomers(mol):
         isomers = tuple(EnumerateStereoisomers(mol,options=opts))
     return isomers
 
-def init_db(db_fname, input_fname, prefix=None):
+def init_db(db_fname, input_fname, prefix=None, max_isomers):
 
     conn = sqlite3.connect(db_fname)
     cur = conn.cursor()
     data_smi = []  # non 3D structures
     data_mol = []  # 3D structures
     for mol, mol_name in read_input.read_input(input_fname):
-        isomers = get_isomers(mol)
-        for stereo_index, stereo_mol in enumerate(isomers):
-            smi = Chem.MolToSmiles(stereo_mol, isomericSmiles=True)
-            if prefix:
-                mol_name = f'{prefix}-{mol_name}'
-            if mol_is_3d(mol):
-                data_mol.append((mol_name, stereo_index, smi, Chem.MolToMolBlock(stereo_mol)))
-            else:
-                data_smi.append((mol_name, stereo_index, smi))
+        if prefix:
+            mol_name = f'{prefix}-{mol_name}'
+        if mol_is_3d(mol):
+            data_mol.append((mol_name, 0, smi, Chem.MolToMolBlock(stereo_mol)))
+        else:
+            isomers = get_isomers(mol,max_isomers)
+            for stereo_id, stereo_mol in enumerate(isomers):
+                smi = Chem.MolToSmiles(stereo_mol, isomericSmiles=True)
+                data_smi.append((mol_name, stereo_id, smi))
     cur.executemany(f'INSERT INTO mols (id, stereo_id, smi) VALUES(?, ?, ?)', data_smi)
     cur.executemany(f'INSERT INTO mols (id, stereo_id, smi, source_mol_block) VALUES(?, ?, ?, ?)', data_mol)
     conn.commit()
@@ -192,18 +192,15 @@ def update_db(db_conn, mol_id, data, table_name='mols', commit=True,complex_id=T
     :param table_name:
     :return:
     """
-    if data:
-        if complex_id and '_' in mol_id:
-            mol_id, stereo_index = mol_id.rsplit('_',1)
-        else:
-            stereo_index = ''
+    if data:    
+        mol_id, stereo_id = mol_id.rsplit('_',1)
         cols, values = zip(*data.items())
         db_conn.execute(f"""UPDATE {table_name}
                            SET {', '.join(['%s = ?'] * len(cols))},
                                time = CURRENT_TIMESTAMP
                            WHERE
                                id = ? AND stereo_id = ?
-                        """ % cols, list(values) + [mol_id,stereo_index])
+                        """ % cols, list(values) + [mol_id,stereo_id])
         if commit:
             db_conn.commit()
 
@@ -270,20 +267,17 @@ def select_mols_to_dock(db_conn, table_name='mols', add_sql=None):
                      ({mol_field_name} IS NOT NULL AND {mol_field_name != ''})) """
     if isinstance(add_sql, str) and add_sql:
         sql += add_sql
-    for mol_id, stereo_index, smi, mol_block in cur.execute(sql):
+    for mol_id, stereo_id, smi, mol_block in cur.execute(sql):
         if mol_block is None:
             mol = Chem.MolFromSmiles(smi)
         else:
             mol = Chem.MolFromMolBlock(mol_block, removeHs=False)
         if mol:
-            if stereo_index == '' or stereo_index == None:
-                mol.SetProp('_Name', mol_id)
-            else:
-                mol.SetProp('_Name', mol_id + '_' + stereo_index)
+            mol.SetProp('_Name', mol_id + '_' + stereo_id)
             yield mol
 
 
-def add_protonation(db_fname, tautomerize=True, table_name='mols', add_sql='',complex_id=True):
+def add_protonation(db_fname, tautomerize=True, table_name='mols', add_sql=''):
     '''
     Protonate SMILES by Chemaxon cxcalc utility to get molecule ionization states at pH 7.4
     :param db_fname:
@@ -310,14 +304,14 @@ def add_protonation(db_fname, tautomerize=True, table_name='mols', add_sql='',co
 
         smi_ids = []
         mol_ids = []
-        for i, (smi, mol_block, mol_name, stereo_index) in enumerate(data_list):
+        for i, (smi, mol_block, mol_name, stereo_id) in enumerate(data_list):
             if mol_block is None:
                 smi_ids.append(mol_name)
                 # add missing mol blocks
                 m = Chem.MolFromSmiles(data_list[i][0])
                 m.SetProp('_Name', mol_name)
                 m_block = Chem.MolToMolBlock(m)
-                data_list[i] = (smi, m_block, mol_name, stereo_index)
+                data_list[i] = (smi, m_block, mol_name, stereo_id)
             else:
                 mol_ids.append(mol_name)
         smi_ids = set(smi_ids)
@@ -326,36 +320,20 @@ def add_protonation(db_fname, tautomerize=True, table_name='mols', add_sql='',co
         output_data_smi = []
         output_data_mol = []
         with tempfile.NamedTemporaryFile(suffix='.smi', mode='w', encoding='utf-8') as tmp:
-            fd1, inputs = tempfile.mkstemp()
             fd, output = tempfile.mkstemp()  # use output file to avoid overflow of stdout in extreme cases
             try:
-                # for smi, _, mol_id in data_list:
-                #     tmp.write(f'{smi}\t{mol_id}\n')
-                # tmp.flush()
-                # cmd_run = ['cxcalc', '-S', '--ignore-error', 'majormicrospecies', '-H', '7.4', '-K',
-                #            f'{"-M" if tautomerize else ""}', tmp.name]
-                # with open(output, 'w') as file:
-                #     subprocess.run(cmd_run, stdout=file, text=True)
-                with open(inputs,'w') as input_file:
-                    for smi, _, mol_id, stereo_index in data_list:
-                        input_file.write(f'{smi}\t{mol_id}\t{stereo_index}\n')
+                for smi, _, mol_id in data_list:
+                    tmp.write(f'{smi}\t{mol_id}\t{stereo_id}\n')
                 tmp.flush()
-                cmd_run = ['python','/home/user/miniforge3/envs/easydock/lib/python3.9/site-packages/easydock/dimorphite_dl.py', \
-                            '--smiles_file',inputs,'--output_file',output,'--min_ph','7.3','--max_ph','7.5','--max_variants','1','--silent']
-                subprocess.run(cmd_run,text=True)
+                cmd_run = ['cxcalc', '-S', '--ignore-error', 'majormicrospecies', '-H', '7.4', '-K',
+                           f'{"-M" if tautomerize else ""}', tmp.name]
+                with open(output, 'w') as file:
+                    subprocess.run(cmd_run, stdout=file, text=True)
 
-                # for mol in Chem.SDMolSupplier(output, sanitize=False):
-                for index,line in enumerate([x.strip() for x in open(output,'r').readlines()]):
-                    smi = line.split()[0]
-                    mol = Chem.MolFromSmiles(line,sanitize=False)
+                for mol in Chem.SDMolSupplier(output, sanitize=False):
                     if mol:
-                        if complex_id and len(mol.GetProp('_Name').split()) >1:
-                            mol_name, stereo_index = mol.GetProp('_Name').rsplit(maxsplit=1)
-                        else:
-                            mol_name = mol.GetProp('_Name')
-                            stereo_index = ''
-
-                        # smi = mol.GetPropsAsDict().get('MAJORMS', None)
+                        mol_name, stereo_id = mol.GetProp('_Name').rsplit(maxsplit=1)
+                        smi = mol.GetPropsAsDict().get('MAJORMS', None)
                         if smi is not None:
                             try:
                                 cansmi = Chem.CanonSmiles(smi)
@@ -364,7 +342,7 @@ def add_protonation(db_fname, tautomerize=True, table_name='mols', add_sql='',co
                                                  f'could not be read by RDKit. The molecule was skipped.\n')
                                 continue
                             if mol_name in smi_ids:
-                                output_data_smi.append((cansmi, mol_name, stereo_index))
+                                output_data_smi.append((cansmi, mol_name, stereo_id))
                             elif mol_name in mol_ids:
                                 try:
                                     # mol block in chemaxon sdf is an input molecule but with 2d structure
@@ -379,14 +357,12 @@ def add_protonation(db_fname, tautomerize=True, table_name='mols', add_sql='',co
                                     ref_mol = Chem.RemoveHs(Chem.MolFromSmiles(smi))
                                     mol = AllChem.AssignBondOrdersFromTemplate(ref_mol, mol3d)
                                     Chem.AssignStereochemistryFrom3D(mol)  # not sure whether it is necessary
-                                    output_data_mol.append((cansmi, Chem.MolToMolBlock(mol), mol_name,stereo_index))
+                                    output_data_mol.append((cansmi, Chem.MolToMolBlock(mol), mol_name, stereo_id))
                                 except ValueError:
                                     continue
             finally:
                 os.remove(output)
                 os.close(fd)
-                os.remove(inputs)
-                os.close(fd1)
 
         cur.executemany(f"""UPDATE {table_name}
                        SET 
