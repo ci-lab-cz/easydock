@@ -162,6 +162,7 @@ def init_db(db_fname, input_fname, prefix=None, max_isomers):
         if prefix:
             mol_name = f'{prefix}-{mol_name}'
         if mol_is_3d(mol):
+            smi = Chem.MolToSmiles(mol, isomericSmiles=True)
             data_mol.append((mol_name, 0, smi, Chem.MolToMolBlock(stereo_mol)))
         else:
             isomers = get_isomers(mol,max_isomers)
