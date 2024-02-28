@@ -183,7 +183,7 @@ def get_protonation_arg_value(db_conn):
     return not d['no_protonation']
 
 
-def update_db(db_conn, mol_id, data, table_name='mols', commit=True,complex_id=True):
+def update_db(db_conn, mol_id, data, table_name='mols', commit=True):
     """
 
     :param db_conn:
