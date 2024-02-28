@@ -173,7 +173,7 @@ def main():
                         help='number of cpus. This affects only docking on a single server.')
     parser.add_argument('-v', '--verbose', action='store_true', default=False,
                         help='print progress to STDERR.')
-    parser.add_argument('--max_isomers', action='store_true', required=False, type=str, default=1,
+    parser.add_argument('--max_isomers', action='store_true', required=False, default=1,
                         help='maximum number of isomers to enumerate. The default is set to 1.')
     # parser.add_argument('--table_name', metavar='STRING', required=False, default='mols',
     #                     help='name of the main table in a database.')
@@ -193,7 +193,7 @@ def main():
 
         if not os.path.isfile(args.output):
             create_db(args.output, args)
-            init_db(args.output, args.input, args.prefix, args.max_isomers)
+            init_db(args.output, args.input, args.max_isomers, args.prefix)
         else:
             args_dict, tmpfiles = restore_setup_from_db(args.output)
             # this will ignore stored values of those args which were supplied via command line

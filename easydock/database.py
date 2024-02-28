@@ -152,7 +152,7 @@ def get_isomers(mol, max_isomers):
         isomers = tuple(EnumerateStereoisomers(mol,options=opts))
     return isomers
 
-def init_db(db_fname, input_fname, prefix=None, max_isomers):
+def init_db(db_fname, input_fname, max_isomers, prefix=None):
 
     conn = sqlite3.connect(db_fname)
     cur = conn.cursor()
@@ -165,7 +165,7 @@ def init_db(db_fname, input_fname, prefix=None, max_isomers):
             smi = Chem.MolToSmiles(mol, isomericSmiles=True)
             data_mol.append((mol_name, 0, smi, Chem.MolToMolBlock(stereo_mol)))
         else:
-            isomers = get_isomers(mol,max_isomers)
+            isomers = get_isomers(mol, max_isomers)
             for stereo_id, stereo_mol in enumerate(isomers):
                 smi = Chem.MolToSmiles(stereo_mol, isomericSmiles=True)
                 data_smi.append((mol_name, stereo_id, smi))
