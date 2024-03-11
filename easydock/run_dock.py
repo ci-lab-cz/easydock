@@ -193,7 +193,7 @@ def main():
 
         if not os.path.isfile(args.output):
             create_db(args.output, args)
-            init_db(args.output, args.input, args.max_isomers, args.prefix)
+            init_db(args.output, args.input, args.max_stereoisomers, args.prefix)
         else:
             args_dict, tmpfiles = restore_setup_from_db(args.output)
             # this will ignore stored values of those args which were supplied via command line

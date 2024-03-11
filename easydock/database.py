@@ -139,8 +139,8 @@ def restore_setup_from_db(db_fname):
 
     return d, tmpfiles
 
-def get_isomers(mol, max_isomers=1):
-    opts = StereoEnumerationOptions(tryEmbedding=True, maxIsomers=max_isomers, rand=0xf00d)
+def get_isomers(mol, max_stereoisomers=1):
+    opts = StereoEnumerationOptions(tryEmbedding=True, maxIsomers=max_stereoisomers, rand=0xf00d)
     # this is a workaround for rdkit issue - if a double bond has STEREOANY it will cause errors at
     # stereoisomer enumeration, we replace STEREOANY with STEREONONE in these cases
     try:
@@ -152,7 +152,7 @@ def get_isomers(mol, max_isomers=1):
         isomers = tuple(EnumerateStereoisomers(mol,options=opts))
     return isomers
 
-def init_db(db_fname, input_fname, max_isomers=1, prefix=None):
+def init_db(db_fname, input_fname, max_stereoisomers=1, prefix=None):
 
     conn = sqlite3.connect(db_fname)
     cur = conn.cursor()
@@ -165,7 +165,7 @@ def init_db(db_fname, input_fname, max_isomers=1, prefix=None):
             smi = Chem.MolToSmiles(mol, isomericSmiles=True)
             data_mol.append((mol_name, 0, smi, Chem.MolToMolBlock(mol)))
         else:
-            isomers = get_isomers(mol, max_isomers)
+            isomers = get_isomers(mol, max_stereoisomers)
             for stereo_id, stereo_mol in enumerate(isomers):
                 smi = Chem.MolToSmiles(stereo_mol, isomericSmiles=True)
                 data_smi.append((mol_name, stereo_id, smi))
