@@ -139,7 +139,7 @@ def restore_setup_from_db(db_fname):
 
     return d, tmpfiles
 
-def get_isomers(mol, max_isomers):
+def get_isomers(mol, max_isomers=1):
     opts = StereoEnumerationOptions(tryEmbedding=True, maxIsomers=max_isomers, rand=0xf00d)
     # this is a workaround for rdkit issue - if a double bond has STEREOANY it will cause errors at
     # stereoisomer enumeration, we replace STEREOANY with STEREONONE in these cases
@@ -152,7 +152,7 @@ def get_isomers(mol, max_isomers):
         isomers = tuple(EnumerateStereoisomers(mol,options=opts))
     return isomers
 
-def init_db(db_fname, input_fname, max_isomers, prefix=None):
+def init_db(db_fname, input_fname, max_isomers=1, prefix=None):
 
     conn = sqlite3.connect(db_fname)
     cur = conn.cursor()
@@ -163,7 +163,7 @@ def init_db(db_fname, input_fname, max_isomers, prefix=None):
             mol_name = f'{prefix}-{mol_name}'
         if mol_is_3d(mol):
             smi = Chem.MolToSmiles(mol, isomericSmiles=True)
-            data_mol.append((mol_name, 0, smi, Chem.MolToMolBlock(stereo_mol)))
+            data_mol.append((mol_name, 0, smi, Chem.MolToMolBlock(mol)))
         else:
             isomers = get_isomers(mol, max_isomers)
             for stereo_id, stereo_mol in enumerate(isomers):
@@ -324,7 +324,7 @@ def add_protonation(db_fname, tautomerize=True, table_name='mols', add_sql=''):
             fd, output = tempfile.mkstemp()  # use output file to avoid overflow of stdout in extreme cases
             try:
                 for smi, _, mol_id in data_list:
-                    tmp.write(f'{smi}\t{mol_id}\t{stereo_id}\n')
+                    tmp.write(f'{smi}\t{mol_id}_{stereo_id}\n')
                 tmp.flush()
                 cmd_run = ['cxcalc', '-S', '--ignore-error', 'majormicrospecies', '-H', '7.4', '-K',
                            f'{"-M" if tautomerize else ""}', tmp.name]
@@ -333,7 +333,7 @@ def add_protonation(db_fname, tautomerize=True, table_name='mols', add_sql=''):
 
                 for mol in Chem.SDMolSupplier(output, sanitize=False):
                     if mol:
-                        mol_name, stereo_id = mol.GetProp('_Name').rsplit(maxsplit=1)
+                        mol_name, stereo_id = mol.GetProp('_Name').rsplit('_', maxsplit=1)
                         smi = mol.GetPropsAsDict().get('MAJORMS', None)
                         if smi is not None:
                             try:
