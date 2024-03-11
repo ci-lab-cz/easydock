@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import re
 import tempfile
 import timeit
 import subprocess
@@ -17,11 +18,13 @@ class RawTextArgumentDefaultsHelpFormatter(argparse.RawTextHelpFormatter, argpar
 def __get_pdbqt_and_score(ligand_out_fname):
     with open(ligand_out_fname) as f:
         pdbqt_out = f.read()
-    string_with_score = pdbqt_out.split('MODEL')[1].split('\n')[1]
-    if 'CNNaffinity' in string_with_score:
-        score = round(float(string_with_score.split('CNNaffinity ')[1].split('REMARK')[0]), 3)  # get CNNaffinity
+    match = re.search(r'REMARK CNNaffinity\s+([\d.]+)', pdbqt_out)
+    if match:
+        score = round(float(match.group(1)), 3)
     else:
-        score = round(float(string_with_score.split('minimizedAffinity ')[1].split('REMARK')[0]), 3)
+        match = re.search(r'REMARK minimizedAffinity\s+(-?[\d.]+)', pdbqt_out)
+        score = round(float(match.group(1)), 3)
+
     return score, pdbqt_out
 
 
