@@ -3,6 +3,7 @@
 import argparse
 import os
 import re
+import sys
 import tempfile
 import timeit
 import subprocess
@@ -59,7 +60,7 @@ def mol_dock(mol, config):
               f'--cpu {config["ncpu"]} --addH {config["addH"]} --cnn_scoring {config["cnn_scoring"]} ' \
               f'--cnn {config["cnn"]} --num_modes {config["n_poses"]}'
         start_time = timeit.default_timer()
-        subprocess.run(cmd, shell=True)
+        subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)  # this will trigger CalledProcessError and skip next lines
         dock_time = round(timeit.default_timer() - start_time, 1)
 
         score, pdbqt_out = __get_pdbqt_and_score(output_fname)
@@ -69,6 +70,14 @@ def mol_dock(mol, config):
                   'pdb_block': pdbqt_out,
                   'mol_block': mol_block,
                   'dock_time': dock_time}
+
+    except subprocess.CalledProcessError as e:
+        sys.stderr.write(f'Error caused by docking of {mol_id}\n')
+        sys.stderr.write(str(e) + '\n')
+        sys.stderr.write('STDERR output:\n')
+        sys.stderr.write(e.stderr + '\n')
+        sys.stderr.flush()
+        output = None
 
     finally:
         os.close(output_fd)
@@ -80,7 +89,6 @@ def mol_dock(mol, config):
 
 
 def __parse_config(config_fname):
-
     with open(config_fname) as f:
         config = yaml.safe_load(f)
 

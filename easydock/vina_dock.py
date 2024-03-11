@@ -94,7 +94,7 @@ def mol_dock(mol, config):
               f'--box_size {" ".join(map(str, config["box_size"]))} ' \
               f'-e {config["exhaustiveness"]} --seed {config["seed"]} --nposes {config["n_poses"]} -c {config["ncpu"]}'
         start_time = timeit.default_timer()
-        subprocess.run(cmd, shell=True)
+        subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)  # this will trigger CalledProcessError and skip next lines)
         dock_time = round(timeit.default_timer() - start_time, 1)
 
         with open(output_fname) as f:
@@ -106,6 +106,14 @@ def mol_dock(mol, config):
                           'pdb_block': res['poses'],
                           'mol_block': mol_block,
                           'dock_time': dock_time}
+
+    except subprocess.CalledProcessError as e:
+        sys.stderr.write(f'Error caused by docking of {mol_id}\n')
+        sys.stderr.write(str(e) + '\n')
+        sys.stderr.write('STDERR output:\n')
+        sys.stderr.write(e.stderr + '\n')
+        sys.stderr.flush()
+        output = None
 
     finally:
         os.close(output_fd)
