@@ -18,11 +18,12 @@ class RawTextArgumentDefaultsHelpFormatter(argparse.RawTextHelpFormatter, argpar
 def __get_pdbqt_and_score(ligand_out_fname):
     with open(ligand_out_fname) as f:
         pdbqt_out = f.read()
-    lines = pdbqt_out.split('MODEL')[1].split('\n')
-    score = round(float(lines[1].split('minimizedAffinity ')[1].split('REMARK')[0]), 3)
-    for line in lines:
-        if re.search('CNNaffinity', line):
-            score = round(float(line.split('CNNaffinity ')[1].split('REMARK')[0]), 3)
+    match = re.search(r'REMARK CNNaffinity\s+([\d.]+)', pdbqt_out)
+    if match:
+        score = round(float(match.group(1)), 3)
+    else:
+        match = re.search(r'REMARK minimizedAffinity\s+(-?[\d.]+)', pdbqt_out)
+        score = round(float(match.group(1)), 3)
 
     return score, pdbqt_out
 
