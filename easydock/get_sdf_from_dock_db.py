@@ -84,6 +84,11 @@ def main():
     if args.first_entry:
         sql += " GROUP BY id HAVING MIN(rowid)"
 
+    if args.ids:
+        # https://dba.stackexchange.com/questions/302006/sqlite-return-rows-in-select-in-order
+        case_str = ' '.join(f'WHEN "{mol_id}" THEN {i}' for i, mol_id in enumerate(args.ids, 1))
+        sql += f" ORDER BY CASE mols.id {case_str} END"
+
     if tautomers_exist:
         res = cur.execute(sql, ids + ids)   # ids should be duplicated to be selected from mols and tautomers tables
     else:
