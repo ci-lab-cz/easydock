@@ -239,6 +239,9 @@ def save_sdf(db_fname):
                                                       'FROM mols '
                                                       'WHERE docking_score IS NOT NULL '
                                                       'AND mol_block IS NOT NULL GROUP BY id'):
+            # update mol name in mol block by removing stereo_id
+            mol_id, mol_block = mol_block.split('\n', 1)
+            mol_block = mol_id.rsplit('_', 1)[0] + '\n' + mol_block
             w.write(mol_block + '\n')
             w.write(f'>  <ID>\n{mol_name}\n\n')
             w.write(f'>  <docking_score>\n{score}\n\n')
@@ -323,7 +326,7 @@ def add_protonation(db_fname, tautomerize=True, table_name='mols', add_sql=''):
         with tempfile.NamedTemporaryFile(suffix='.smi', mode='w', encoding='utf-8') as tmp:
             fd, output = tempfile.mkstemp()  # use output file to avoid overflow of stdout in extreme cases
             try:
-                for smi, _, mol_id in data_list:
+                for smi, _, mol_id, stereo_id in data_list:
                     tmp.write(f'{smi}\t{mol_id}_{stereo_id}\n')
                 tmp.flush()
                 cmd_run = ['cxcalc', '-S', '--ignore-error', 'majormicrospecies', '-H', '7.4', '-K',
