@@ -149,6 +149,8 @@ def main():
                              'n_poses: 10\n'
                              'seed: -1\n'
                              'gnina.yml\n')
+    parser.add_argument('-s', '--max_stereoisomers', metavar='INTEGER', type=int, required=False, default=1,
+                        help='maximum number of isomers to enumerate. The default is set to 1.')
     parser.add_argument('--no_protonation', action='store_true', default=False,
                         help='disable protonation of molecules before docking. Protonation requires installed '
                              'cxcalc chemaxon utility.')
@@ -173,8 +175,6 @@ def main():
                         help='number of cpus. This affects only docking on a single server.')
     parser.add_argument('-v', '--verbose', action='store_true', default=False,
                         help='print progress to STDERR.')
-    parser.add_argument('--max_stereoisomers', metavar='N_STEREO', type=int, required=False, default=1,
-                        help='maximum number of isomers to enumerate. The default is set to 1.')
     # parser.add_argument('--table_name', metavar='STRING', required=False, default='mols',
     #                     help='name of the main table in a database.')
 
