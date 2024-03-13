@@ -139,6 +139,7 @@ def restore_setup_from_db(db_fname):
 
     return d, tmpfiles
 
+
 def get_isomers(mol, max_stereoisomers=1):
     opts = StereoEnumerationOptions(tryEmbedding=True, maxIsomers=max_stereoisomers, rand=0xf00d)
     # this is a workaround for rdkit issue - if a double bond has STEREOANY it will cause errors at
@@ -146,11 +147,12 @@ def get_isomers(mol, max_stereoisomers=1):
     try:
         isomers = tuple(EnumerateStereoisomers(mol, options=opts))
     except RuntimeError:
-        for bond in mol[1].GetBonds():
+        for bond in mol.GetBonds():
             if bond.GetStereo() == Chem.BondStereo.STEREOANY:
-                bond.SetStereo(Chem.rdChem.BondStereo.STEREONONE)
+                bond.SetStereo(Chem.BondStereo.STEREONONE)
         isomers = tuple(EnumerateStereoisomers(mol,options=opts))
     return isomers
+
 
 def init_db(db_fname, input_fname, max_stereoisomers=1, prefix=None):
 
