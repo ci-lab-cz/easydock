@@ -174,8 +174,13 @@ To implement support of a custom docking program one should implement a function
 
 ### Changelog
 
+**0.2.9**
+- fix extraction of docking scores for gnina outputs (critial fix) [#23](https://github.com/ci-lab-cz/easydock/pull/23)
+- fix database update freezing upon errors occurred with docking individual docking programs [#22](https://github.com/ci-lab-cz/easydock/issues/22)
+- implement to keep the order of output molecules in get_sdf_from_dock_db script if an argument -d is used
+
 **0.2.8**
-- conversion of PDBQT to Mol by means of Meeko (improvement) [PR19](https://github.com/ci-lab-cz/easydock/pull/19)
+- conversion of PDBQT to Mol by means of Meeko (improvement) [#19](https://github.com/ci-lab-cz/easydock/pull/19)
 - clarify installation instructions
 
 **0.2.7**
