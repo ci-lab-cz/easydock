@@ -49,7 +49,7 @@ Features:
 
 Pipeline:
 - input SMILES are converted in 3D by RDKit, if input is 3D structures in SDF their conformations wil be taken as starting without changes.
-- ligands are protonated by chemaxon at pH 7.4 and the most stable tautomers are generated (optional, requires a Chemaxon license)
+- ligands are protonated by Chemaxon at pH 7.4 and the most stable tautomers are generated (optional, requires a Chemaxon license)
 - molecules are converted in PDBQT format using Meeko
 - docking with `vina`/`gnina`
 - output poses are converted in MOL format and stored into output DB along with docking scores
@@ -58,7 +58,7 @@ Pipeline:
 
 ##### Docking from command line
 
-Docking using `vina` takes input SMILES and a config file. Ligands will not be protonated with Chemaxon, so their supplied charged states will be used. 4 CPU cores will be used (4 molecules will be dock in parallel). When docking will finish an SDF file will be created with top docking poses for each ligand. 
+Docking using `vina` takes input SMILES and a config file. Ligands will not be protonated with Chemaxon, so their supplied charged states will be used. 4 CPU cores will be used (4 molecules will be docked in parallel). When docking will finish an SDF file will be created with top docking poses for each ligand. 
 ```
 run_dock -i input.smi -o output.db --program vina --config config.yml --no_protonation -c 4 --sdf
 ``` 
@@ -125,9 +125,9 @@ run_dock -i input.smi -o output.db --program vina --config config.yml --no_proto
 
 `--nthreads` can be any value. The number of CPUs used for docking of a single molecule will be taken from `config.yml`.
   
-`--dask_report` argument will create at the end of calculations an html-file with performance report (may be useful to tweak docking parameters).  
+`--dask_report` argument will create at the end of calculations a html-file with performance report (may be useful to tweak docking parameters).  
   
-**Important setup issue** - the limit of open files on every server should be increased to the level at least twice the total number of requested workers (file streams are used for inter-node communication by dask).
+**Important setup issue** - the limit of open files on every server should be increased to the level at least twice the total number of requested workers (file streams are used for internode communication by dask).
 
 ##### Data retrieval from the output database
 
@@ -143,7 +143,7 @@ get_sdf_from_dock_db -i output.db -o output.sdf -d mol_1 mol_4 --poses 2
 ```
 Instead of a list of ids a text file can be supplied as an argument `-d`.
 
-Retrieve top poses for compounds with docking score less then -10:
+Retrieve top poses for compounds with docking score less than -10:
 ```
 get_sdf_from_dock_db -i output.db -o output.sdf --fields docking_score --add_sql 'docking_score < -10' 
 ```
@@ -170,7 +170,7 @@ for mol_id, res in docking(mols, dock_func=mol_dock, dock_config='config.yml', n
 
 ##### Customization
 
-To implement support of a custom docking program one should implement a function like `mol_dock` which will take as input an RDKit mol object (named molecule) and an yml-file with all docking parameters. The function should run a command line script/utility and return back a tuple of a molecule name and a dictionary of parameters and their values which should be stored in DB (parameter names should be exactly the same as corresponding field names in DB). For examples, please look at `mol_dock` functions in `vina_dock` or `gnina_dock`.
+To implement support of a custom docking program one should implement a function like `mol_dock` which will take as input an RDKit mol object (named molecule) and a yml-file with all docking parameters. The function should run a command line script/utility and return back a tuple of a molecule name and a dictionary of parameters and their values which should be stored in DB (parameter names should be exactly the same as corresponding field names in DB). For examples, please look at `mol_dock` functions in `vina_dock` or `gnina_dock`.
 
 ### Changelog
 
