@@ -159,7 +159,7 @@ def pdbqt2molblock(pdbqt_block, template_mol, mol_id):
         rdkit_mol = rdkitmol_list[0]
     except Exception:
         traceback.print_exc()
-        sys.stderr.write(f"Parsing PDB was failed (fixing did not help): {mol_id}\n")
+        sys.stderr.write(f"Parsing PDB was failed: {mol_id}\n")
         return None
 
     try:
