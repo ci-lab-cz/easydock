@@ -19,6 +19,8 @@ def main():
     parser.add_argument('-d', '--ids', metavar='mol_ids', required=False, type=str, default=None, nargs='*',
                         help='a list of mol ids in DB or a text file with mol ids on individual lines. '
                              'If omitted all records in DB will be saved to SDF.')
+    parser.add_argument('-s', '--keep_stereo_id', action='store_true', default=False,
+                        help='keep stereo id in molecule names as a suffix after an underscore symbol.')
     parser.add_argument('-f', '--first_entry', action='store_true', default=False,
                         help='retrieve only the first entry of each molecule from the database.')
     parser.add_argument('--add_sql', default=None, type=str,
@@ -93,8 +95,13 @@ def main():
         for item in res:  # (mol_block, ...)
             if ext == 'sdf':
                 mol_block = item[0]
+                mol_id = mol_block.split('\n', 1)[0]
+                if not args.keep_stereo_id:
+                    mol_id = mol_id.rsplit('_', 1)[0]
                 poses = list(args.poses)
                 if 1 in poses or not poses:
+                    if not args.keep_stereo_id:  # replace mol_id in mol_block
+                        mol_block = mol_id + '\n' + mol_block.split('\n', 1)[1]
                     if 1 in poses:
                         q = mol_block.split('\n', 1)
                         f.write(q[0] + '_1\n' + q[1])  # add trailing pose id
@@ -108,12 +115,14 @@ def main():
                     if poses:
                         poses.remove(1)
                 if poses:
-                    pdb_block_list = item[1:][args.fields.index('pdb_block')].split('ENDMDL')[1:-1]
+                    # print(item[1:][args.fields.index('pdb_block')])
+                    # print('=======================================')
+                    pdb_block_list = item[1:][args.fields.index('pdb_block')].split('ENDMDL\n')
+                    # print(pdb_block_list)
                     mol = Chem.MolFromMolBlock(mol_block)
                     for i in poses:  # 1-based
                         try:
-                            mol_id = mol_block.split('\n', 1)[0]
-                            pose_mol_block = pdbqt2molblock(pdb_block_list[i-1], mol, mol_id + f'_{i}')
+                            pose_mol_block = pdbqt2molblock(pdb_block_list[i-1] + 'ENDMDL\n', mol, mol_id + f'_{i}')
                         except IndexError:
                             sys.stderr.write(f'Pose number {i} is not in the PDB block of {mol_id}. '
                                              f'It will be skipped.\n')
