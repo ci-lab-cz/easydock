@@ -151,9 +151,8 @@ def main():
                              'gnina.yml\n')
     parser.add_argument('-s', '--max_stereoisomers', metavar='INTEGER', type=int, required=False, default=1,
                         help='maximum number of isomers to enumerate. The default is set to 1.')
-    parser.add_argument('--no_protonation', action='store_true', default=False,
-                        help='disable protonation of molecules before docking. Protonation requires installed '
-                             'cxcalc chemaxon utility.')
+    parser.add_argument('--protonation', default=None, required=False, choices=['chemaxon'],
+                        help='choose a protonation program supported by EasyDock.')
     parser.add_argument('--no_tautomerization', action='store_true', default=False,
                         help='disable tautomerization of molecules during protonation.')
     parser.add_argument('--sdf', action='store_true', default=False,
@@ -204,8 +203,8 @@ def main():
 
         dask_client = create_dask_client(args.hostfile)
 
-        if not args.no_protonation:
-            add_protonation(args.output, not args.no_tautomerization)
+        if args.protonation:
+            add_protonation(args.output, program=args.protonation, tautomerize=not args.no_tautomerization)
 
         if args.program == 'vina':
             from easydock.vina_dock import mol_dock, pred_dock_time
