@@ -1,6 +1,5 @@
 import os
 import sqlite3
-import subprocess
 import sys
 import tempfile
 from copy import deepcopy
@@ -10,7 +9,7 @@ import yaml
 from easydock import read_input
 from easydock.preparation_for_docking import mol_is_3d
 from easydock.auxiliary import take, mol_name_split, empty_func, empty_generator
-from easydock.protonation import protonate_chemaxon, read_protonate_chemaxon
+from easydock.protonation import protonate_chemaxon, read_protonate_chemaxon, protonate_dimorphite, read_smiles
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem.EnumerateStereoisomers import EnumerateStereoisomers, StereoEnumerationOptions
@@ -336,6 +335,9 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
                 if program == 'chemaxon':
                     protonate_func = partial(protonate_chemaxon, tautomerize=tautomerize)
                     read_func = read_protonate_chemaxon
+                elif program == 'dimorphite':
+                    protonate_func = protonate_dimorphite
+                    read_func = read_smiles
                 else:
                     protonate_func = empty_func
                     read_func = empty_generator

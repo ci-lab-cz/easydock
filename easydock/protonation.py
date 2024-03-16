@@ -1,6 +1,9 @@
+import os.path
 import subprocess
+import sys
 
 from rdkit import Chem
+from easydock.dimorphite_dl124.dimorphite_dl import run as dimorphite_run
 
 
 """
@@ -9,7 +12,7 @@ Each protonation program should have two implemented functions:
 Input file will be SMILES with names separated by tab. Output file format may be any (output file does not have 
 an extension).
 2) read_protonate_xxx, which takes a file name with protonated molecules in the format corresponding to 
-the protonate_xxx function and returns a generator of tuples (SMILES, mol_name)
+the protonate_xxx function and returns a generator of tuples (SMILES, mol_name).
 """
 
 
@@ -27,3 +30,21 @@ def read_protonate_chemaxon(fname):
             smi = mol.GetPropsAsDict().get('MAJORMS', None)
             if smi is not None:
                 yield smi, mol_name
+
+
+def protonate_dimorphite(input_fname, output_fname):
+    executable = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'dimorphite_dl124', 'dimorphite_dl.py')
+    try:
+        subprocess.run(f'python {executable} --smiles_file {input_fname} --output_file {output_fname} --max_variants 1 --silent',
+                       shell=True, text=True, check=True, capture_output=True)
+    except subprocess.CalledProcessError as e:
+        sys.stderr.write(str(e))
+        sys.stderr.write(e.stderr)
+        sys.stderr.flush()
+    # dimorphite_run(smiles_file=input_fname, output_file=output_fname, max_variants=1, silent=True)
+
+
+def read_smiles(fname):
+    with open(fname) as f:
+        for line in f:
+            yield tuple(line.strip().split()[:2])
