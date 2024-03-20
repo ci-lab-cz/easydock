@@ -120,10 +120,7 @@ def main():
                     if poses:
                         poses.remove(1)
                 if poses:
-                    # print(item[1:][args.fields.index('pdb_block')])
-                    # print('=======================================')
-                    pdb_block_list = item[1:][args.fields.index('pdb_block')].split('ENDMDL\n')
-                    # print(pdb_block_list)
+                    pdb_block_list = item[1:][args.fields.index('pdb_block')].strip().split('ENDMDL')
                     mol = Chem.MolFromMolBlock(mol_block)
                     for i in poses:  # 1-based
                         try:
