@@ -1,16 +1,18 @@
 import os
 import sqlite3
-import subprocess
 import sys
 import tempfile
+
 from copy import deepcopy
 from functools import partial
+from math import ceil
+from multiprocessing import Pool
 
 import yaml
 from easydock import read_input
 from easydock.preparation_for_docking import mol_is_3d
 from easydock.auxiliary import take, mol_name_split, empty_func, empty_generator
-from easydock.protonation import protonate_chemaxon, read_protonate_chemaxon
+from easydock.protonation import protonate_chemaxon, read_protonate_chemaxon, protonate_dimorphite, read_smiles
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem.EnumerateStereoisomers import EnumerateStereoisomers, StereoEnumerationOptions
@@ -284,7 +286,70 @@ def select_mols_to_dock(db_conn, table_name='mols', add_sql=None):
             yield mol
 
 
-def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='mols', add_sql=''):
+def protonate_data(data_list, smi_names, mol_names, program='chemaxon', tautomerize=True):
+    output_data_mol = []
+    output_data_smi = []
+    with tempfile.NamedTemporaryFile(suffix='.smi', mode='w', encoding='utf-8') as tmp:
+        for smi, mol_name in data_list:
+            tmp.write(f'{smi}\t{mol_name}\n')
+        tmp.flush()
+
+        fd, output = tempfile.mkstemp()  # use output file to avoid overflow of stdout in extreme cases
+
+        try:
+
+            if program == 'chemaxon':
+                protonate_func = partial(protonate_chemaxon, tautomerize=tautomerize)
+                read_func = read_protonate_chemaxon
+            elif program == 'dimorphite':
+                protonate_func = protonate_dimorphite
+                read_func = read_smiles
+            else:
+                protonate_func = empty_func
+                read_func = empty_generator
+
+            protonate_func(input_fname=tmp.name, output_fname=output)
+            for smi, mol_name in read_func(output):
+                try:
+                    cansmi = Chem.CanonSmiles(smi)
+                except:
+                    sys.stderr.write(f'EASYDOCK ERROR: {mol_name}, smiles {smi} obtained after protonation '
+                                     f'could not be read by RDKit. The molecule was skipped.\n')
+                    continue
+
+                mol_id, stereo_id = mol_name_split(mol_name)
+
+                if mol_name in smi_names:
+                    output_data_smi.append((cansmi, mol_id, stereo_id))
+                elif mol_name in mol_names:
+                    try:
+                        # mol block in chemaxon sdf is an input molecule but with 2D structure
+                        # because input is SMILES
+                        # to assign proper 3D coordinates we load 3D mol from DB, make all bonds single,
+                        # remove Hs and assign bond orders from SMILES
+                        # this should work even if a generated tautomer differs from the input molecule
+                        mol3d = get_mol(conn, mol_id, stereo_id, field_name='source_mol_block')
+                        mol3d = Chem.RemoveHs(Chem.RWMol(mol3d))
+                        for b in mol3d.GetBonds():
+                            b.SetBondType(Chem.BondType.SINGLE)
+                        ref_mol = Chem.RemoveHs(Chem.MolFromSmiles(cansmi))
+                        mol = AllChem.AssignBondOrdersFromTemplate(ref_mol, mol3d)
+                        Chem.AssignStereochemistryFrom3D(mol)  # not sure whether it is necessary
+                        output_data_mol.append((cansmi, Chem.MolToMolBlock(mol), mol_id, stereo_id))
+                    except ValueError:
+                        continue
+
+        finally:
+            os.remove(output)
+            os.close(fd)  
+
+    return output_data_smi, output_data_mol  
+
+def chunk_into_n(lst, n):
+    size = ceil(len(lst) / n)
+    return list(map(lambda x: lst[x * size:x * size + size], list(range(n))))
+
+def add_protonation(db_fname, ncpu: int, program='chemaxon', tautomerize=True, table_name='mols', add_sql=''):
     '''
     Protonate SMILES by Chemaxon cxcalc utility to get molecule ionization states at pH 7.4
     :param db_fname:
@@ -321,61 +386,22 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
         smi_names = set(mol_name for smi, mol_name in data_list_smi)
         mol_names = set(mol_name for smi, mol_name in data_list_mol)
 
+        data_list_all = data_list_mol + data_list_smi
+        data_list_chunk = chunk_into_n(data_list_all, ncpu * 2)
+
         output_data_smi = []
         output_data_mol = []
 
-        with tempfile.NamedTemporaryFile(suffix='.smi', mode='w', encoding='utf-8') as tmp:
-            for smi, mol_name in data_list_smi + data_list_mol:
-                tmp.write(f'{smi}\t{mol_name}\n')
-            tmp.flush()
+        pool = Pool(processes=ncpu)
+        load_protonate_params = partial(protonate_data, smi_names=smi_names, mol_names=mol_names, program=program, tautomerize=tautomerize)
 
-            fd, output = tempfile.mkstemp()  # use output file to avoid overflow of stdout in extreme cases
+        output_data_list = pool.imap_unordered(load_protonate_params, data_list_chunk)
 
-            try:
-
-                if program == 'chemaxon':
-                    protonate_func = partial(protonate_chemaxon, tautomerize=tautomerize)
-                    read_func = read_protonate_chemaxon
-                else:
-                    protonate_func = empty_func
-                    read_func = empty_generator
-
-                protonate_func(input_fname=tmp.name, output_fname=output)
-
-                for smi, mol_name in read_func(output):
-
-                    try:
-                        cansmi = Chem.CanonSmiles(smi)
-                    except:
-                        sys.stderr.write(f'EASYDOCK ERROR: {mol_name}, smiles {smi} obtained after protonation '
-                                         f'could not be read by RDKit. The molecule was skipped.\n')
-                        continue
-
-                    mol_id, stereo_id = mol_name_split(mol_name)
-
-                    if mol_name in smi_names:
-                        output_data_smi.append((cansmi, mol_id, stereo_id))
-                    elif mol_name in mol_names:
-                        try:
-                            # mol block in chemaxon sdf is an input molecule but with 2D structure
-                            # because input is SMILES
-                            # to assign proper 3D coordinates we load 3D mol from DB, make all bonds single,
-                            # remove Hs and assign bond orders from SMILES
-                            # this should work even if a generated tautomer differs from the input molecule
-                            mol3d = get_mol(conn, mol_id, stereo_id, field_name='source_mol_block')
-                            mol3d = Chem.RemoveHs(Chem.RWMol(mol3d))
-                            for b in mol3d.GetBonds():
-                                b.SetBondType(Chem.BondType.SINGLE)
-                            ref_mol = Chem.RemoveHs(Chem.MolFromSmiles(cansmi))
-                            mol = AllChem.AssignBondOrdersFromTemplate(ref_mol, mol3d)
-                            Chem.AssignStereochemistryFrom3D(mol)  # not sure whether it is necessary
-                            output_data_mol.append((cansmi, Chem.MolToMolBlock(mol), mol_id, stereo_id))
-                        except ValueError:
-                            continue
-
-            finally:
-                os.remove(output)
-                os.close(fd)
+        for output_smi, output_mol in output_data_list:
+            if len(output_smi) > 0 :
+                output_data_smi += output_smi
+            elif len(output_mol) > 0 :
+                output_data_mol += output_mol
 
         cur.executemany(f"""UPDATE {table_name}
                        SET 
