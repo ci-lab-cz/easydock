@@ -34,7 +34,7 @@ def read_protonate_chemaxon(fname):
 
 def protonate_dimorphite(input_fname, output_fname):
     executable = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'dimorphite_dl', 'dimorphite_dl.py')
-    dimorphite_run(smiles_file=input_fname, output_file=output_fname, max_variants=1, silent=True, min_ph=7.39, max_ph=7.41)
+    dimorphite_run(smiles_file=input_fname, output_file=output_fname, max_variants=1, silent=True, min_ph=7.4, max_ph=7.4)
 
 
 def read_smiles(fname):
