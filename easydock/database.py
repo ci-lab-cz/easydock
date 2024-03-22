@@ -155,26 +155,52 @@ def get_isomers(mol, max_stereoisomers=1):
     return isomers
 
 
-def init_db(db_fname, input_fname, max_stereoisomers=1, prefix=None):
+def generate_init_data(mol_input, max_stereoisomers, prefix):
+    mol, mol_name = mol_input
+    if prefix:
+        mol_name = f'{prefix}-{mol_name}'
+    if mol_is_3d(mol):
+        smi = Chem.MolToSmiles(mol, isomericSmiles=True)
+        return [['mol', (mol_name, 0, smi, Chem.MolToMolBlock(mol))]]
 
+    else:
+        isomer_list = []
+        isomers = get_isomers(mol, max_stereoisomers)
+        for stereo_id, stereo_mol in enumerate(isomers):
+            smi = Chem.MolToSmiles(stereo_mol, isomericSmiles=True)
+            isomer_list.append(['smi', (mol_name, stereo_id, smi)])
+        return isomer_list
+
+def init_db(db_fname, input_fname, ncpu, max_stereoisomers=1, prefix=None):
+    Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
+    start_init = time.time()
+
+    pool = Pool(processes=ncpu)
     conn = sqlite3.connect(db_fname)
     cur = conn.cursor()
     data_smi = []  # non 3D structures
     data_mol = []  # 3D structures
-    for mol, mol_name in read_input.read_input(input_fname):
-        if prefix:
-            mol_name = f'{prefix}-{mol_name}'
-        if mol_is_3d(mol):
-            smi = Chem.MolToSmiles(mol, isomericSmiles=True)
-            data_mol.append((mol_name, 0, smi, Chem.MolToMolBlock(mol)))
-        else:
-            isomers = get_isomers(mol, max_stereoisomers)
-            for stereo_id, stereo_mol in enumerate(isomers):
-                smi = Chem.MolToSmiles(stereo_mol, isomericSmiles=True)
-                data_smi.append((mol_name, stereo_id, smi))
+    load_data_params = partial(generate_init_data, max_stereoisomers=max_stereoisomers, prefix=prefix)
+
+    data_list = pool.map(load_data_params, read_input.read_input(input_fname), chunksize=1)
+
+    for unique_id_data in data_list:
+        try:
+            for unique_stereo_id_data in unique_id_data:
+                stdin_format, data = unique_stereo_id_data[0], unique_stereo_id_data[1]
+                if stdin_format == 'smi':
+                    data_smi.append(data)
+                elif stdin_format == 'mol':
+                    data_mol.append(data)
+        except TypeError:
+            pass
+
     cur.executemany(f'INSERT INTO mols (id, stereo_id, smi) VALUES(?, ?, ?)', data_smi)
     cur.executemany(f'INSERT INTO mols (id, stereo_id, smi, source_mol_block) VALUES(?, ?, ?, ?)', data_mol)
     conn.commit()
+ 
+    end_init = time.time()
+    print('Initialising data finished in ' + str(end_init - start_init), flush=True)
 
 
 def get_protonation_arg_value(db_conn):
