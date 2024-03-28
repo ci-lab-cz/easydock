@@ -7,6 +7,7 @@ from rdkit import Chem
 from dimorphite_dl.dimorphite_dl import run as dimorphite_run
 from math import ceil
 import tempfile
+import os
 
 """
 Each protonation program should have two implemented functions:
@@ -65,16 +66,11 @@ def protonate_dimorphite(input_fname: str, output_fname: str, ncpu: int):
         for temp_fname in temp_fname_list:
             input_temp_fname, output_temp_fname = temp_fname
 
-            with open(input_temp_fname,'r') as input_smi:
-                input_smi.close()
             with open(output_temp_fname,'r') as output_smi:
                 output_file.write(''.join(output_smi))
-                output_smi.close()
             
-            with open(input_temp_fname,'r') as input_smi:
-                print('hi')
-                print(input_smi)
-
+            os.remove(input_temp_fname)
+            os.remove(output_temp_fname)
 
 def read_smiles(fname):
     with open(fname) as f:
