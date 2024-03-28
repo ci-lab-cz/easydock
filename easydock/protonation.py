@@ -38,11 +38,11 @@ def chunk_into_n(smi_l: list[str], n: int):
     smi_size = ceil(len(smi_l) / n)
     return list(map(lambda x: smi_l[x * smi_size:x * smi_size + smi_size], list(range(n))))
 
-def dummy_protonate_dimorphite(input_output_fname):
+def dummy_protonate_dimorphite(input_output_fname: tuple[str, str]):
     input_fname, output_fname = input_output_fname
     dimorphite_run(smiles_file=input_fname, output_file=output_fname, max_variants=1, silent=True, min_ph=7.4, max_ph=7.4)
 
-def protonate_dimorphite(input_fname: str, output_fname: str, ncpu: int):
+def protonate_dimorphite(input_fname: str, output_fname: str, ncpu: int = 1):
 
     with open(input_fname,'r') as input_file:
         smi_l = input_file.readlines()
