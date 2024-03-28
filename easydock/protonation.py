@@ -47,7 +47,7 @@ def protonate_dimorphite(input_fname: str, output_fname: str, ncpu: int = 1):
     with open(input_fname,'r') as input_file:
         smi_l = input_file.readlines()
 
-    chunk_smi_l = chunk_into_n(smi_l, ncpu)
+    chunk_smi_l = chunk_into_n(smi_l, n=ncpu)
 
     temp_fname_list = []
     for chunk in chunk_smi_l:
