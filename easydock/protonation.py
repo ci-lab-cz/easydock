@@ -1,4 +1,3 @@
-import os.path
 import subprocess
 import sys
 
@@ -6,7 +5,8 @@ from functools import partial
 from multiprocessing import Pool
 from rdkit import Chem
 from dimorphite_dl.dimorphite_dl import run as dimorphite_run
-
+from math import ceil
+import tempfile
 
 """
 Each protonation program should have two implemented functions:
@@ -33,29 +33,48 @@ def read_protonate_chemaxon(fname):
             if smi is not None:
                 yield smi, mol_name
 
-def chunk_into_n_file(fname, number_of_files):
-    with open(fname) as infp:
-        fname_list = [fname[:-4]+'_input'+str(i)+'.smi' for i in range(number_of_files)]
-        files = [open(fname[:-4]+'_input'+str(i)+'.smi','w') for i in range(number_of_files)]
-        for i, line in enumerate(infp):
-            files[i % number_of_files].write(line)
-        for f in files:
-            f.close()
-        return fname_list
+def chunk_into_n(smi_l: list[str], n: int):
+    smi_size = ceil(len(smi_l) / n)
+    return list(map(lambda x: smi_l[x * smi_size:x * smi_size + smi_size], list(range(n))))
 
-def dummy_protonate_dimorphite(input_fname):
-    dimorphite_run(smiles_file=input_fname, output_file=input_fname[:-4]+'_output.smi', max_variants=1, silent=True, min_ph=7.4, max_ph=7.4)
+def dummy_protonate_dimorphite(input_output_fname):
+    input_fname, output_fname = input_output_fname
+    dimorphite_run(smiles_file=input_fname, output_file=output_fname, max_variants=1, silent=True, min_ph=7.4, max_ph=7.4)
 
-def protonate_dimorphite(input_fname, output_fname, ncpu):
+def protonate_dimorphite(input_fname: str, output_fname: str, ncpu: int):
+
+    with open(input_fname,'r') as input_file:
+        smi_l = input_file.readlines()
+
+    chunk_smi_l = chunk_into_n(smi_l, ncpu)
+
+    temp_fname_list = []
+    for chunk in chunk_smi_l:
+        with tempfile.NamedTemporaryFile(suffix='.smi',mode='w',encoding='utf-8', delete=False) as input_tmp:
+
+            input_tmp.write(''.join(chunk))
+            output_tmp = tempfile.NamedTemporaryFile(suffix='.smi',mode='w',encoding='utf-8', delete=False)
+            temp_fname_list.append((input_tmp.name, output_tmp.name))
     
     pool = Pool(ncpu)
-    fname_list = chunk_into_n_file(input_fname, ncpu)
-    
-    with open(output_fname, 'wt') as output_file:
-        pool.map(dummy_protonate_dimorphite, fname_list)
+    pool.map(dummy_protonate_dimorphite, temp_fname_list)
+    pool.close()
+    pool.join()
 
-        for fname in fname_list:
-            output_file.writelines(open(fname[:-4]+'_output.smi','r').readlines())
+    with open(output_fname, 'wt') as output_file:
+        for temp_fname in temp_fname_list:
+            input_temp_fname, output_temp_fname = temp_fname
+
+            with open(input_temp_fname,'r') as input_smi:
+                input_smi.close()
+            with open(output_temp_fname,'r') as output_smi:
+                output_file.write(''.join(output_smi))
+                output_smi.close()
+            
+            with open(input_temp_fname,'r') as input_smi:
+                print('hi')
+                print(input_smi)
+
 
 def read_smiles(fname):
     with open(fname) as f:
