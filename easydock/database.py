@@ -283,7 +283,7 @@ def select_mols_to_dock(db_conn, table_name='mols', add_sql=None):
             yield mol
 
 
-def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='mols', add_sql=''):
+def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='mols', add_sql='', ncpu=1):
     '''
     Protonate SMILES by Chemaxon cxcalc utility to get molecule ionization states at pH 7.4
     :param db_fname:
@@ -336,7 +336,7 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
                     protonate_func = partial(protonate_chemaxon, tautomerize=tautomerize)
                     read_func = read_protonate_chemaxon
                 elif program == 'dimorphite':
-                    protonate_func = protonate_dimorphite
+                    protonate_func = partial(protonate_dimorphite, ncpu=ncpu)
                     read_func = read_smiles
                 else:
                     protonate_func = empty_func
