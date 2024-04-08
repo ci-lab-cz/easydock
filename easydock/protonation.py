@@ -1,14 +1,11 @@
 import os
 import subprocess
-import sys
 import tempfile
 
-from functools import partial
 from math import ceil
 from multiprocessing import Pool
 
 from rdkit import Chem
-from dimorphite_dl.dimorphite_dl import run as dimorphite_run
 
 """
 Each protonation program should have two implemented functions:
@@ -35,13 +32,17 @@ def read_protonate_chemaxon(fname):
             if smi is not None:
                 yield smi, mol_name
 
+
 def chunk_into_n(smi_l: list[str], n: int):
     smi_size = ceil(len(smi_l) / n)
     return list(map(lambda x: smi_l[x * smi_size:x * smi_size + smi_size], list(range(n))))
 
-def dummy_protonate_dimorphite(input_output_fname: tuple[str, str]):
+
+def protonate_dimorphite_mp(input_output_fname: tuple[str, str]):
+    from dimorphite_dl.dimorphite_dl import run as dimorphite_run
     input_fname, output_fname = input_output_fname
     dimorphite_run(smiles_file=input_fname, output_file=output_fname, max_variants=1, silent=True, min_ph=7.4, max_ph=7.4)
+
 
 def protonate_dimorphite(input_fname: str, output_fname: str, ncpu: int = 1):
 
@@ -59,7 +60,7 @@ def protonate_dimorphite(input_fname: str, output_fname: str, ncpu: int = 1):
             temp_fname_list.append((input_tmp.name, output_tmp.name))
     
     pool = Pool(ncpu)
-    pool.map(dummy_protonate_dimorphite, temp_fname_list)
+    pool.map(protonate_dimorphite_mp, temp_fname_list)
     pool.close()
     pool.join()
 
