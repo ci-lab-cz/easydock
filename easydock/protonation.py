@@ -8,7 +8,7 @@ from math import ceil
 from multiprocessing import Pool
 
 from rdkit import Chem
-from read_input import read_input
+from easydock.read_input import read_input
 
 """
 Each protonation program should have two implemented functions:
