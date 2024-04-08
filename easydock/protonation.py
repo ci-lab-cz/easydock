@@ -53,10 +53,9 @@ def protonate_dimorphite(input_fname: str, output_fname: str, ncpu: int = 1):
 
     temp_fname_list = []
     for chunk in chunk_smi_l:
-        with tempfile.NamedTemporaryFile(suffix='.smi',mode='w',encoding='utf-8', delete=False) as input_tmp:
-
+        with tempfile.NamedTemporaryFile(suffix='.smi', mode='w', encoding='utf-8', delete=False) as input_tmp:
             input_tmp.write(''.join(chunk))
-            output_tmp = tempfile.NamedTemporaryFile(suffix='.smi',mode='w',encoding='utf-8', delete=False)
+            output_tmp = tempfile.NamedTemporaryFile(suffix='.smi', mode='w', encoding='utf-8', delete=False)
             temp_fname_list.append((input_tmp.name, output_tmp.name))
     
     pool = Pool(ncpu)
