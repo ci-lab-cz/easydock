@@ -1,13 +1,14 @@
+import os
 import subprocess
 import sys
+import tempfile
 
 from functools import partial
+from math import ceil
 from multiprocessing import Pool
+
 from rdkit import Chem
 from dimorphite_dl.dimorphite_dl import run as dimorphite_run
-from math import ceil
-import tempfile
-import os
 
 """
 Each protonation program should have two implemented functions:
@@ -71,6 +72,7 @@ def protonate_dimorphite(input_fname: str, output_fname: str, ncpu: int = 1):
             
             os.remove(input_temp_fname)
             os.remove(output_temp_fname)
+
 
 def read_smiles(fname):
     with open(fname) as f:
