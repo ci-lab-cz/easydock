@@ -151,7 +151,7 @@ def main():
                              'gnina.yml\n')
     parser.add_argument('-s', '--max_stereoisomers', metavar='INTEGER', type=int, required=False, default=1,
                         help='maximum number of isomers to enumerate. The default is set to 1.')
-    parser.add_argument('--protonation', default=None, required=False, choices=['chemaxon', 'dimorphite'],
+    parser.add_argument('--protonation', default=None, required=False, choices=['chemaxon', 'dimorphite', 'pkasolver'],
                         help='choose a protonation program supported by EasyDock.')
     parser.add_argument('--no_tautomerization', action='store_true', default=False,
                         help='disable tautomerization of molecules during protonation.')

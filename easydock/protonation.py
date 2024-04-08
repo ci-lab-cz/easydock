@@ -98,7 +98,7 @@ def nostd():
     sys.stderr = save_stderr
 
 
-def protonate_pkasolver(input_fname, output_fname, ncpu=1):
+def protonate_pkasolver(input_fname: str, output_fname: str, ncpu: int = 1):
     from pkasolver.query import QueryModel
     model = QueryModel()
     pool = Pool(ncpu)

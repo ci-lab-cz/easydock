@@ -9,7 +9,7 @@ import yaml
 from easydock import read_input
 from easydock.preparation_for_docking import mol_is_3d
 from easydock.auxiliary import take, mol_name_split, empty_func, empty_generator
-from easydock.protonation import protonate_chemaxon, read_protonate_chemaxon, protonate_dimorphite, read_smiles
+from easydock.protonation import protonate_chemaxon, read_protonate_chemaxon, protonate_dimorphite, read_smiles, protonate_pkasolver
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem.EnumerateStereoisomers import EnumerateStereoisomers, StereoEnumerationOptions
@@ -337,6 +337,9 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
                     read_func = read_protonate_chemaxon
                 elif program == 'dimorphite':
                     protonate_func = partial(protonate_dimorphite, ncpu=ncpu)
+                    read_func = read_smiles
+                elif program == 'pkasolver':
+                    protonate_func = partial(protonate_pkasolver, ncpu=ncpu)
                     read_func = read_smiles
                 else:
                     protonate_func = empty_func
