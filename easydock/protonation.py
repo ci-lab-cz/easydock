@@ -1,11 +1,14 @@
+import contextlib
 import os
 import subprocess
+import sys
 import tempfile
 
 from math import ceil
 from multiprocessing import Pool
 
 from rdkit import Chem
+from read_input import read_input
 
 """
 Each protonation program should have two implemented functions:
@@ -78,3 +81,54 @@ def read_smiles(fname):
     with open(fname) as f:
         for line in f:
             yield tuple(line.strip().split()[:2])
+
+
+class DummyFile(object):
+    def write(self, x): pass
+
+
+@contextlib.contextmanager
+def nostd():
+    save_stdout = sys.stdout
+    save_stderr = sys.stderr
+    sys.stdout = DummyFile()
+    sys.stderr = DummyFile()
+    yield
+    sys.stdout = save_stdout
+    sys.stderr = save_stderr
+
+
+def protonate_pkasolver(input_fname, output_fname, ncpu=1):
+    from pkasolver.query import QueryModel
+    model = QueryModel()
+    pool = Pool(ncpu)
+    with open(output_fname, 'wt') as f:
+        for smi, name in pool.imap_unordered(__protonate_pkasolver,
+                                             ((mol, mol_name, model) for (mol, mol_name) in read_input(input_fname))):
+            f.write(f'{smi}\t{name}\n')
+
+
+def __protonate_pkasolver(args):
+    from pkasolver.query import calculate_microstate_pka_values
+    mol, mol_name, model = args
+    ph = 7.4
+    with nostd():
+        states = calculate_microstate_pka_values(mol, only_dimorphite=True, query_model=model)
+    if not states:
+        output_mol = mol
+    else:
+        # select protonated form of the first state with pKa > pH or deprotonated form of the state with the highest pKa
+        output_mol = None
+        for state in states:
+            if state.pka > ph:
+                output_mol = state.protonated_mol
+                break
+        if not output_mol:
+            output_mol = states[-1].deprotonated_mol
+        # fix protonated amides and analogs (about 2% such structures in 23K molecules)
+        output_mol = Chem.RemoveHs(output_mol)
+        ids = output_mol.GetSubstructMatches(Chem.MolFromSmarts('[$([NH+]-[*]=O)]'))
+        if ids:
+            for i in ids:
+                output_mol.GetAtomWithIdx(i[0]).SetFormalCharge(0)
+    return Chem.MolToSmiles(output_mol), mol_name
