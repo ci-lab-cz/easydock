@@ -4,6 +4,7 @@ import subprocess
 import sys
 import tempfile
 
+from functools import partial
 from math import ceil
 from multiprocessing import Pool
 
@@ -103,17 +104,16 @@ def protonate_pkasolver(input_fname: str, output_fname: str, ncpu: int = 1):
     model = QueryModel()
     pool = Pool(ncpu)
     with open(output_fname, 'wt') as f:
-        for smi, name in pool.imap_unordered(__protonate_pkasolver,
-                                             ((mol, mol_name, model) for (mol, mol_name) in read_input(input_fname))):
+        for smi, name in pool.imap_unordered(partial(__protonate_pkasolver, model=model), read_input(input_fname)):
             f.write(f'{smi}\t{name}\n')
 
 
-def __protonate_pkasolver(args):
+def __protonate_pkasolver(args, model):
     from pkasolver.query import calculate_microstate_pka_values
-    mol, mol_name, model = args
+    mol, mol_name = args
     ph = 7.4
-    with nostd():
-        states = calculate_microstate_pka_values(mol, only_dimorphite=True, query_model=model)
+    # with nostd():
+    states = calculate_microstate_pka_values(mol, only_dimorphite=False, query_model=model)
     if not states:
         output_mol = mol
     else:
