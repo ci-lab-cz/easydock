@@ -1,7 +1,6 @@
 import contextlib
 import os
 import subprocess
-import sys
 import tempfile
 
 from functools import partial
@@ -84,35 +83,20 @@ def read_smiles(fname):
             yield tuple(line.strip().split()[:2])
 
 
-class DummyFile(object):
-    def write(self, x): pass
-
-
-@contextlib.contextmanager
-def nostd():
-    save_stdout = sys.stdout
-    save_stderr = sys.stderr
-    sys.stdout = DummyFile()
-    sys.stderr = DummyFile()
-    yield
-    sys.stdout = save_stdout
-    sys.stderr = save_stderr
-
-
 def protonate_pkasolver(input_fname: str, output_fname: str, ncpu: int = 1):
     from pkasolver.query import QueryModel
     model = QueryModel()
-    pool = Pool(ncpu)
-    with open(output_fname, 'wt') as f:
-        for smi, name in pool.imap_unordered(partial(__protonate_pkasolver, model=model), read_input(input_fname)):
-            f.write(f'{smi}\t{name}\n')
+    with contextlib.redirect_stdout(None):
+        pool = Pool(ncpu)
+        with open(output_fname, 'wt') as f:
+            for smi, name in pool.imap_unordered(partial(__protonate_pkasolver, model=model), read_input(input_fname)):
+                f.write(f'{smi}\t{name}\n')
 
 
 def __protonate_pkasolver(args, model):
     from pkasolver.query import calculate_microstate_pka_values
     mol, mol_name = args
     ph = 7.4
-    # with nostd():
     states = calculate_microstate_pka_values(mol, only_dimorphite=False, query_model=model)
     if not states:
         output_mol = mol
