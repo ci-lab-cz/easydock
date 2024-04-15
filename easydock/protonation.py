@@ -84,13 +84,20 @@ def read_smiles(fname):
 
 
 def protonate_pkasolver(input_fname: str, output_fname: str, ncpu: int = 1):
+    import torch
     from pkasolver.query import QueryModel
     model = QueryModel()
     with contextlib.redirect_stdout(None):
-        pool = Pool(ncpu)
-        with open(output_fname, 'wt') as f:
-            for smi, name in pool.imap_unordered(partial(__protonate_pkasolver, model=model), read_input(input_fname)):
-                f.write(f'{smi}\t{name}\n')
+        if torch.cuda.is_available() or ncpu == 1:
+            with open(output_fname, 'wt') as f:
+                for mol, mol_name in read_input(input_fname):
+                    smi, name = __protonate_pkasolver((mol, mol_name), model=model)
+                    f.write(f'{smi}\t{name}\n')
+        else:
+            pool = Pool(ncpu)
+            with open(output_fname, 'wt') as f:
+                for smi, name in pool.imap_unordered(partial(__protonate_pkasolver, model=model), read_input(input_fname)):
+                    f.write(f'{smi}\t{name}\n')
 
 
 def __protonate_pkasolver(args, model):
