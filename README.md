@@ -44,11 +44,11 @@ Features:
 - the major script `run_dock` supports docking with `vina` and `gnina` (`gnina` also supports `smina` and its custom scoring functions)
 - can be used as a command line utility or imported as a python module
 - stereoisomers can be enumerated for unspecified chiral centers and double bonds
-- several protonation options: chemaxon and pkasolver
+- several protonation options: chemaxon and pkasolver (check notes below)
 - supports distributed computing using `dask` library
 - supports docking of boron-containing compounds using `vina` and `smina` (boron is replaced with carbon before docking and returned back)
 - all outputs are stored in an SQLite database
-- interrupted calculations can be restarted by invoking the same command or by supplying just a single argument - the existing output database
+- interrupted calculations can be continued by invoking the same command or by supplying just a single argument - the existing output database
 - `get_sdf_from_dock_db` is used to extract data from output DB
 
 Pipeline:
