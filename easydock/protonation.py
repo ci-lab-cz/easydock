@@ -41,7 +41,7 @@ def chunk_into_n(smi_l: list[str], n: int):
     return list(map(lambda x: smi_l[x * smi_size:x * smi_size + smi_size], list(range(n))))
 
 
-def protonate_dimorphite_mp(input_output_fname: tuple[str, str]):
+def __protonate_dimorphite_mp(input_output_fname: tuple[str, str]):
     from dimorphite_dl.dimorphite_dl import run as dimorphite_run
     input_fname, output_fname = input_output_fname
     dimorphite_run(smiles_file=input_fname, output_file=output_fname, max_variants=1, silent=True, min_ph=7.4, max_ph=7.4)
@@ -62,7 +62,7 @@ def protonate_dimorphite(input_fname: str, output_fname: str, ncpu: int = 1):
             temp_fname_list.append((input_tmp.name, output_tmp.name))
     
     pool = Pool(ncpu)
-    pool.map(protonate_dimorphite_mp, temp_fname_list)
+    pool.map(__protonate_dimorphite_mp, temp_fname_list)
     pool.close()
     pool.join()
 
