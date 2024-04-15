@@ -13,6 +13,7 @@ from easydock.protonation import protonate_chemaxon, read_protonate_chemaxon, pr
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem.EnumerateStereoisomers import EnumerateStereoisomers, StereoEnumerationOptions
+from rdkit.Chem.SaltRemover import SaltRemover
 
 
 def create_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', 'protein_setup'), unique_smi=False):
@@ -160,7 +161,14 @@ def init_db(db_fname, input_fname, max_stereoisomers=1, prefix=None):
     cur = conn.cursor()
     data_smi = []  # non 3D structures
     data_mol = []  # 3D structures
+    salt_remover = SaltRemover()
     for mol, mol_name in read_input.read_input(input_fname):
+        if len(Chem.GetMolFrags(mol, asMols=False, sanitizeFrags=False)) > 1:
+            mol = salt_remover.StripMol(mol, dontRemoveEverything=True)
+            if len(Chem.GetMolFrags(mol, asMols=False, sanitizeFrags=False)) > 1:
+                sys.stderr.write(f'EASYDOCK Warning: molecule {mol.GetProp("_Name")} was skipped, because it has multiple components which could not be fixed by SaltRemover\n')
+                continue
+            sys.stderr.write(f'EASYDOCK Warning: molecule {mol.GetProp("_Name")}, salts were sripped\n')
         if prefix:
             mol_name = f'{prefix}-{mol_name}'
         if mol_is_3d(mol):
