@@ -31,7 +31,7 @@ pip install torch==1.13.1+cpu  --extra-index-url https://download.pytorch.org/wh
 pip install torch-geometric==2.0.1
 pip install torch_scatter==2.1.1+pt113cpu -f https://data.pyg.org/whl/torch-1.13.1%2Bcpu.html
 pip install torch_sparse==0.6.17+pt113cpu -f https://data.pyg.org/whl/torch-1.13.1%2Bcpu.html
-pip install torch_spline_conv==1.2.2+pt113cpu -f https://data.pyg.org/whl/torch-1.13.1%2Bcpu.html```
+pip install torch_spline_conv==1.2.2+pt113cpu -f https://data.pyg.org/whl/torch-1.13.1%2Bcpu.html
 pip install git+https://github.com/Feriolet/dimorphite_dl.git
 pip install git+https://github.com/DrrDom/pkasolver.git
 ```
@@ -182,11 +182,17 @@ for mol_id, res in docking(mols, dock_func=mol_dock, dock_config='config.yml', n
 
 To implement support of a custom docking program one should implement a function like `mol_dock` which will take as input an RDKit mol object (named molecule) and a yml-file with all docking parameters. The function should run a command line script/utility and return back a tuple of a molecule name and a dictionary of parameters and their values which should be stored in DB (parameter names should be exactly the same as corresponding field names in DB). For examples, please look at `mol_dock` functions in `vina_dock` or `gnina_dock`.
 
+### Notes
+
 ##### Protonation notes
 
 pkasolver enumerated protonation states and the closest to pH 7.4 is chosen. In some cases it may return invalid SMILES, e.g. `O=C(N1CCN(CC1)C(=O)C=2C=CC=C(C#CC3CC3)C2)C=4NN=C5CCCC45 -> O=C(c1cccc(C#CC2CC2)c1)N1CC[NH](C(=O)c2[nH]nc3c2CCC3)CC1`, which will be skipped and a corresponding warning message will appear.
 
 Please note, that protonation states generated with `pkasolver` were not validated. So, check protonation states.
+
+##### Multiple CPUs
+
+Please pay attention for `--ncpu` argument if you use `--protonation pkasolver`. For `ncpu` > 1 it may result in some errors. Please report this issue. 
 
 ### Changelog
 
