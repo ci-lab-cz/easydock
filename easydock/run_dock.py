@@ -152,7 +152,7 @@ def main():
                              'gnina.yml\n')
     parser.add_argument('-s', '--max_stereoisomers', metavar='INTEGER', type=int, required=False, default=1,
                         help='maximum number of isomers to enumerate. The default is set to 1.')
-    parser.add_argument('--protonation', default=None, required=False, choices=['chemaxon'],
+    parser.add_argument('--protonation', default=None, required=False, choices=['chemaxon', 'pkasolver'],
                         help='choose a protonation program supported by EasyDock.')
     parser.add_argument('--no_tautomerization', action='store_true', default=False,
                         help='disable tautomerization of molecules during protonation.')
@@ -193,7 +193,10 @@ def main():
 
         if not os.path.isfile(args.output):
             create_db(args.output, args)
-            init_db(args.output, args.input, args.max_stereoisomers, args.prefix)
+            start_init = time.time()
+            init_db(args.output, args.input, args.ncpu, args.max_stereoisomers, args.prefix)
+            end_init = time.time()
+            print(f'initializing database done in {(end_init - start_init):.2f}s', flush=True)
         else:
             args_dict, tmpfiles = restore_setup_from_db(args.output)
             # this will ignore stored values of those args which were supplied via command line
@@ -204,11 +207,11 @@ def main():
 
         dask_client = create_dask_client(args.hostfile)
 
-        start = time.time()
+        start_protonation = time.time()
         if args.protonation:
-            add_protonation(args.output, args.ncpu, program=args.protonation, tautomerize=not args.no_tautomerization)
-        end = time.time()
-        print('protonation done in ' + str(end - start), flush=True)
+            add_protonation(args.output, program=args.protonation, tautomerize=not args.no_tautomerization, ncpu=args.ncpu)
+        end_protonation = time.time()
+        print(f'protonation done in {(end_protonation - start_protonation):.2f}s', flush=True)
 
         if args.program == 'vina':
             from easydock.vina_dock import mol_dock, pred_dock_time

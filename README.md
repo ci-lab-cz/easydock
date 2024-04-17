@@ -12,45 +12,49 @@ pip install git+https://github.com/ci-lab-cz/easydock.git
 
 ### Dependencies
 
-from conda
+- from conda
 ```
 conda install -c conda-forge python=3.9 numpy=1.20 rdkit scipy dask distributed
 ```
 
-from pypi
+- from pypi
+
 ```
-pip install meeko
+pip install paramiko meeko vina
 ```
 
-to use multiple servers for docking install `paramiko` (backend of `dask` if launched from the command line)
-```
-pip install paramiko
-```
+- (optional) installation of `gnina/smina` is described at https://github.com/gnina/gnina
 
-Installation of `vina`
+- (optional) installation of a `pkasolver` fork to enable protonation with this tool. We recommend to install and use CPU-based version, however, one may try a GPU supported one (look at the dependencies in `pkasolver` package).
 ```
-pip install vina
+pip install torch==1.13.1+cpu  --extra-index-url https://download.pytorch.org/whl/cpu
+pip install torch-geometric==2.0.1
+pip install torch_scatter==2.1.1+pt113cpu -f https://data.pyg.org/whl/torch-1.13.1%2Bcpu.html
+pip install torch_sparse==0.6.17+pt113cpu -f https://data.pyg.org/whl/torch-1.13.1%2Bcpu.html
+pip install torch_spline_conv==1.2.2+pt113cpu -f https://data.pyg.org/whl/torch-1.13.1%2Bcpu.html
+pip install git+https://github.com/Feriolet/dimorphite_dl.git
+pip install git+https://github.com/DrrDom/pkasolver.git
 ```
-
-Installation of `gnina/smina` is described at https://github.com/gnina/gnina
 
 ### Description
 
-Fully automatic pipeline for molecular docking.  
+The fully automatic pipeline for molecular docking.  
 
 Features:
 - the major script `run_dock` supports docking with `vina` and `gnina` (`gnina` also supports `smina` and its custom scoring functions)
 - can be used as a command line utility or imported as a python module
+- stereoisomers can be enumerated for unspecified chiral centers and double bonds
+- several protonation options: chemaxon and pkasolver (check notes below)
 - supports distributed computing using `dask` library
 - supports docking of boron-containing compounds using `vina` and `smina` (boron is replaced with carbon before docking and returned back)
 - all outputs are stored in an SQLite database
-- interrupted calculations can be restarted by invoking the same command or by supplying just a single argument - the existing output database
+- interrupted calculations can be continued by invoking the same command or by supplying just a single argument - the existing output database
 - `get_sdf_from_dock_db` is used to extract data from output DB
 
 Pipeline:
 - input SMILES are converted in 3D by RDKit, if input is 3D structures in SDF their conformations wil be taken as starting without changes.
 - up to a specified number of stereoisomers are enumerated for molecules with undefined chiral centers or double bond configurations (by default 1 random but reproducible stereoisomer is generated)
-- ligands are protonated by Chemaxon at pH 7.4 and the most stable tautomers are generated (optional, requires a Chemaxon license)
+- ligands are protonated by Chemaxon/pKasolver at pH 7.4 and the most stable tautomers are generated (optional, requires a Chemaxon license)
 - molecules are converted in PDBQT format using Meeko
 - docking with `vina`/`gnina`
 - output poses are converted in MOL format and stored into output DB along with docking scores
@@ -177,6 +181,18 @@ for mol_id, res in docking(mols, dock_func=mol_dock, dock_config='config.yml', n
 ##### Customization
 
 To implement support of a custom docking program one should implement a function like `mol_dock` which will take as input an RDKit mol object (named molecule) and a yml-file with all docking parameters. The function should run a command line script/utility and return back a tuple of a molecule name and a dictionary of parameters and their values which should be stored in DB (parameter names should be exactly the same as corresponding field names in DB). For examples, please look at `mol_dock` functions in `vina_dock` or `gnina_dock`.
+
+### Notes
+
+##### Protonation notes
+
+pkasolver enumerated protonation states and the closest to pH 7.4 is chosen. In some cases it may return invalid SMILES, e.g. `O=C(N1CCN(CC1)C(=O)C=2C=CC=C(C#CC3CC3)C2)C=4NN=C5CCCC45 -> O=C(c1cccc(C#CC2CC2)c1)N1CC[NH](C(=O)c2[nH]nc3c2CCC3)CC1`, which will be skipped and a corresponding warning message will appear.
+
+Please note, that protonation states generated with `pkasolver` were not validated. So, check protonation states.
+
+##### Multiple CPUs
+
+Please pay attention for `--ncpu` argument if you use `--protonation pkasolver`. For `ncpu` > 1 it may result in some errors. Please report this issue. 
 
 ### Changelog
 

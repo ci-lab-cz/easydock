@@ -1,20 +1,20 @@
-import time
 import os
 import sqlite3
-import subprocess
 import sys
 import tempfile
 from copy import deepcopy
 from functools import partial
-
+from multiprocessing import Pool
+from typing import Optional
 import yaml
 from easydock import read_input
 from easydock.preparation_for_docking import mol_is_3d
 from easydock.auxiliary import take, mol_name_split, empty_func, empty_generator
-from easydock.protonation import protonate_chemaxon, read_protonate_chemaxon
+from easydock.protonation import protonate_chemaxon, read_protonate_chemaxon, protonate_dimorphite, read_smiles, protonate_pkasolver
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem.EnumerateStereoisomers import EnumerateStereoisomers, StereoEnumerationOptions
+from rdkit.Chem.SaltRemover import SaltRemover
 
 
 def create_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', 'protein_setup'), unique_smi=False):
@@ -155,9 +155,19 @@ def get_isomers(mol, max_stereoisomers=1):
         isomers = tuple(EnumerateStereoisomers(mol,options=opts))
     return isomers
 
-
-def generate_init_data(mol_input, max_stereoisomers, prefix):
+MolBlock = str
+Smi = str
+def generate_init_data(mol_input: tuple[Chem.Mol, str], max_stereoisomers: int, prefix: str) -> list[list[str, tuple[str, int, Smi, Optional[MolBlock]]]]:
+    salt_remover = SaltRemover()
     mol, mol_name = mol_input
+
+    if len(Chem.GetMolFrags(mol, asMols=False, sanitizeFrags=False)) > 1:
+        mol = salt_remover.StripMol(mol, dontRemoveEverything=True)
+        if len(Chem.GetMolFrags(mol, asMols=False, sanitizeFrags=False)) > 1:
+            sys.stderr.write(f'EASYDOCK Warning: molecule {mol.GetProp("_Name")} was skipped, because it has multiple components which could not be fixed by SaltRemover\n')
+            return None
+        sys.stderr.write(f'EASYDOCK Warning: molecule {mol.GetProp("_Name")}, salts were sripped\n')
+        
     if prefix:
         mol_name = f'{prefix}-{mol_name}'
     if mol_is_3d(mol):
@@ -172,9 +182,8 @@ def generate_init_data(mol_input, max_stereoisomers, prefix):
             isomer_list.append(['smi', (mol_name, stereo_id, smi)])
         return isomer_list
 
-def init_db(db_fname, input_fname, ncpu, max_stereoisomers=1, prefix=None):
+def init_db(db_fname: str, input_fname: str, ncpu: int, max_stereoisomers=1, prefix: str=None):
     Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
-    start_init = time.time()
 
     pool = Pool(processes=ncpu)
     conn = sqlite3.connect(db_fname)
@@ -182,13 +191,15 @@ def init_db(db_fname, input_fname, ncpu, max_stereoisomers=1, prefix=None):
     data_smi = []  # non 3D structures
     data_mol = []  # 3D structures
     load_data_params = partial(generate_init_data, max_stereoisomers=max_stereoisomers, prefix=prefix)
-
     data_list = pool.map(load_data_params, read_input.read_input(input_fname), chunksize=1)
 
-    for unique_id_data in data_list:
+    for data_with_unique_id in data_list:
         try:
-            for unique_stereo_id_data in unique_id_data:
-                stdin_format, data = unique_stereo_id_data[0], unique_stereo_id_data[1]
+            if data_with_unique_id is None:
+                continue
+
+            for data_with_unique_stereo_id in data_with_unique_id:
+                stdin_format, data = data_with_unique_stereo_id[0], data_with_unique_stereo_id[1]
                 if stdin_format == 'smi':
                     data_smi.append(data)
                 elif stdin_format == 'mol':
@@ -199,10 +210,6 @@ def init_db(db_fname, input_fname, ncpu, max_stereoisomers=1, prefix=None):
     cur.executemany(f'INSERT INTO mols (id, stereo_id, smi) VALUES(?, ?, ?)', data_smi)
     cur.executemany(f'INSERT INTO mols (id, stereo_id, smi, source_mol_block) VALUES(?, ?, ?, ?)', data_mol)
     conn.commit()
- 
-    end_init = time.time()
-    print('Initialising data finished in ' + str(end_init - start_init), flush=True)
-
 
 def get_protonation_arg_value(db_conn):
     """
@@ -311,7 +318,7 @@ def select_mols_to_dock(db_conn, table_name='mols', add_sql=None):
             yield mol
 
 
-def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='mols', add_sql=''):
+def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='mols', add_sql='', ncpu=1):
     '''
     Protonate SMILES by Chemaxon cxcalc utility to get molecule ionization states at pH 7.4
     :param db_fname:
@@ -363,6 +370,12 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
                 if program == 'chemaxon':
                     protonate_func = partial(protonate_chemaxon, tautomerize=tautomerize)
                     read_func = read_protonate_chemaxon
+                elif program == 'dimorphite':
+                    protonate_func = partial(protonate_dimorphite, ncpu=ncpu)
+                    read_func = read_smiles
+                elif program == 'pkasolver':
+                    protonate_func = partial(protonate_pkasolver, ncpu=ncpu)
+                    read_func = read_smiles
                 else:
                     protonate_func = empty_func
                     read_func = empty_generator
