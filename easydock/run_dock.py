@@ -207,11 +207,13 @@ def main():
 
         dask_client = create_dask_client(args.hostfile)
 
-        start_protonation = time.time()
         if args.protonation:
+            start_protonation = time.time()
             add_protonation(args.output, program=args.protonation, tautomerize=not args.no_tautomerization, ncpu=args.ncpu)
-        end_protonation = time.time()
-        print(f'protonation done in {(end_protonation - start_protonation):.2f}s', flush=True)
+            end_protonation = time.time()
+            print(f'protonation done in {(end_protonation - start_protonation):.2f}s', flush=True)
+        else:
+            print('protonation skipped')    
 
         if args.program == 'vina':
             from easydock.vina_dock import mol_dock, pred_dock_time
