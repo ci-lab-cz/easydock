@@ -155,6 +155,7 @@ def get_isomers(mol, max_stereoisomers=1):
         isomers = tuple(EnumerateStereoisomers(mol,options=opts))
     return isomers
 
+
 MolBlock = str
 Smi = str
 def generate_init_data(mol_input: tuple[Chem.Mol, str], max_stereoisomers: int, prefix: str) -> list[list[str, tuple[str, int, Smi, Optional[MolBlock]]]]:
@@ -182,6 +183,7 @@ def generate_init_data(mol_input: tuple[Chem.Mol, str], max_stereoisomers: int, 
             isomer_list.append(['smi', (mol_name, stereo_id, smi)])
         return isomer_list
 
+
 def init_db(db_fname: str, input_fname: str, ncpu: int, max_stereoisomers=1, prefix: str=None):
     Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
 
@@ -193,23 +195,18 @@ def init_db(db_fname: str, input_fname: str, ncpu: int, max_stereoisomers=1, pre
     load_data_params = partial(generate_init_data, max_stereoisomers=max_stereoisomers, prefix=prefix)
     data_list = pool.map(load_data_params, read_input.read_input(input_fname), chunksize=1)
 
-    for data_with_unique_id in data_list:
-        try:
-            if data_with_unique_id is None:
-                continue
-
-            for data_with_unique_stereo_id in data_with_unique_id:
-                stdin_format, data = data_with_unique_stereo_id[0], data_with_unique_stereo_id[1]
-                if stdin_format == 'smi':
+    for item in data_list:
+        if item is not None:
+            for input_format, data in item:
+                if input_format == 'smi':
                     data_smi.append(data)
-                elif stdin_format == 'mol':
+                elif input_format == 'mol':
                     data_mol.append(data)
-        except TypeError:
-            pass
 
     cur.executemany(f'INSERT INTO mols (id, stereo_id, smi) VALUES(?, ?, ?)', data_smi)
     cur.executemany(f'INSERT INTO mols (id, stereo_id, smi, source_mol_block) VALUES(?, ?, ?, ?)', data_mol)
     conn.commit()
+
 
 def get_protonation_arg_value(db_conn):
     """
