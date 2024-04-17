@@ -4,6 +4,7 @@ import argparse
 import os
 import sqlite3
 import sys
+import time
 from functools import partial
 from multiprocessing import Pool
 
@@ -192,7 +193,10 @@ def main():
 
         if not os.path.isfile(args.output):
             create_db(args.output, args)
-            init_db(args.output, args.input, args.max_stereoisomers, args.prefix)
+            start_init = time.time()
+            init_db(args.output, args.input, args.ncpu, args.max_stereoisomers, args.prefix)
+            end_init = time.time()
+            print(f'initializing database done in {(end_init - start_init):.2f}s', flush=True)
         else:
             args_dict, tmpfiles = restore_setup_from_db(args.output)
             # this will ignore stored values of those args which were supplied via command line
@@ -204,7 +208,12 @@ def main():
         dask_client = create_dask_client(args.hostfile)
 
         if args.protonation:
+            start_protonation = time.time()
             add_protonation(args.output, program=args.protonation, tautomerize=not args.no_tautomerization, ncpu=args.ncpu)
+            end_protonation = time.time()
+            print(f'protonation done in {(end_protonation - start_protonation):.2f}s', flush=True)
+        else:
+            print('protonation skipped')    
 
         if args.program == 'vina':
             from easydock.vina_dock import mol_dock, pred_dock_time

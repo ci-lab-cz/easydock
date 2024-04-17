@@ -4,7 +4,8 @@ import sys
 import tempfile
 from copy import deepcopy
 from functools import partial
-
+from multiprocessing import Pool
+from typing import Optional
 import yaml
 from easydock import read_input
 from easydock.preparation_for_docking import mol_is_3d
@@ -154,35 +155,61 @@ def get_isomers(mol, max_stereoisomers=1):
         isomers = tuple(EnumerateStereoisomers(mol,options=opts))
     return isomers
 
+MolBlock = str
+Smi = str
+def generate_init_data(mol_input: tuple[Chem.Mol, str], max_stereoisomers: int, prefix: str) -> list[list[str, tuple[str, int, Smi, Optional[MolBlock]]]]:
+    salt_remover = SaltRemover()
+    mol, mol_name = mol_input
 
-def init_db(db_fname, input_fname, max_stereoisomers=1, prefix=None):
+    if len(Chem.GetMolFrags(mol, asMols=False, sanitizeFrags=False)) > 1:
+        mol = salt_remover.StripMol(mol, dontRemoveEverything=True)
+        if len(Chem.GetMolFrags(mol, asMols=False, sanitizeFrags=False)) > 1:
+            sys.stderr.write(f'EASYDOCK Warning: molecule {mol.GetProp("_Name")} was skipped, because it has multiple components which could not be fixed by SaltRemover\n')
+            return None
+        sys.stderr.write(f'EASYDOCK Warning: molecule {mol.GetProp("_Name")}, salts were sripped\n')
+        
+    if prefix:
+        mol_name = f'{prefix}-{mol_name}'
+    if mol_is_3d(mol):
+        smi = Chem.MolToSmiles(mol, isomericSmiles=True)
+        return [['mol', (mol_name, 0, smi, Chem.MolToMolBlock(mol))]]
 
+    else:
+        isomer_list = []
+        isomers = get_isomers(mol, max_stereoisomers)
+        for stereo_id, stereo_mol in enumerate(isomers):
+            smi = Chem.MolToSmiles(stereo_mol, isomericSmiles=True)
+            isomer_list.append(['smi', (mol_name, stereo_id, smi)])
+        return isomer_list
+
+def init_db(db_fname: str, input_fname: str, ncpu: int, max_stereoisomers=1, prefix: str=None):
+    Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
+
+    pool = Pool(processes=ncpu)
     conn = sqlite3.connect(db_fname)
     cur = conn.cursor()
     data_smi = []  # non 3D structures
     data_mol = []  # 3D structures
-    salt_remover = SaltRemover()
-    for mol, mol_name in read_input.read_input(input_fname):
-        if len(Chem.GetMolFrags(mol, asMols=False, sanitizeFrags=False)) > 1:
-            mol = salt_remover.StripMol(mol, dontRemoveEverything=True)
-            if len(Chem.GetMolFrags(mol, asMols=False, sanitizeFrags=False)) > 1:
-                sys.stderr.write(f'EASYDOCK Warning: molecule {mol.GetProp("_Name")} was skipped, because it has multiple components which could not be fixed by SaltRemover\n')
+    load_data_params = partial(generate_init_data, max_stereoisomers=max_stereoisomers, prefix=prefix)
+    data_list = pool.map(load_data_params, read_input.read_input(input_fname), chunksize=1)
+
+    for data_with_unique_id in data_list:
+        try:
+            if data_with_unique_id is None:
                 continue
-            sys.stderr.write(f'EASYDOCK Warning: molecule {mol.GetProp("_Name")}, salts were sripped\n')
-        if prefix:
-            mol_name = f'{prefix}-{mol_name}'
-        if mol_is_3d(mol):
-            smi = Chem.MolToSmiles(mol, isomericSmiles=True)
-            data_mol.append((mol_name, 0, smi, Chem.MolToMolBlock(mol)))
-        else:
-            isomers = get_isomers(mol, max_stereoisomers)
-            for stereo_id, stereo_mol in enumerate(isomers):
-                smi = Chem.MolToSmiles(stereo_mol, isomericSmiles=True)
-                data_smi.append((mol_name, stereo_id, smi))
+
+            for data_with_unique_stereo_id in data_with_unique_id:
+                stdin_format, data = data_with_unique_stereo_id[0], data_with_unique_stereo_id[1]
+                if stdin_format == 'smi':
+                    data_smi.append(data)
+                elif stdin_format == 'mol':
+                    data_mol.append(data)
+        except TypeError:
+            pass
+
     cur.executemany(f'INSERT INTO mols (id, stereo_id, smi) VALUES(?, ?, ?)', data_smi)
     cur.executemany(f'INSERT INTO mols (id, stereo_id, smi, source_mol_block) VALUES(?, ?, ?, ?)', data_mol)
     conn.commit()
-
 
 def get_protonation_arg_value(db_conn):
     """
