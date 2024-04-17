@@ -32,6 +32,7 @@ pip install torch-geometric==2.0.1
 pip install torch_scatter==2.1.1+pt113cpu -f https://data.pyg.org/whl/torch-1.13.1%2Bcpu.html
 pip install torch_sparse==0.6.17+pt113cpu -f https://data.pyg.org/whl/torch-1.13.1%2Bcpu.html
 pip install torch_spline_conv==1.2.2+pt113cpu -f https://data.pyg.org/whl/torch-1.13.1%2Bcpu.html
+pip install cairosvg svgutils
 pip install git+https://github.com/Feriolet/dimorphite_dl.git
 pip install git+https://github.com/DrrDom/pkasolver.git
 ```
