@@ -54,6 +54,7 @@ Features:
 
 Pipeline:
 - input SMILES are converted in 3D by RDKit, if input is 3D structures in SDF their conformations wil be taken as starting without changes.
+- compounds having salts were stripped, if this fails the whole compound is omitted reporting to STDERR 
 - up to a specified number of stereoisomers are enumerated for molecules with undefined chiral centers or double bond configurations (by default 1 random but reproducible stereoisomer is generated)
 - ligands are protonated by Chemaxon/pKasolver at pH 7.4 and the most stable tautomers are generated (optional, requires a Chemaxon license)
 - molecules are converted in PDBQT format using Meeko
