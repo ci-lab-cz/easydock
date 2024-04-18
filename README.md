@@ -44,6 +44,7 @@ The fully automatic pipeline for molecular docking.
 Features:
 - the major script `run_dock` supports docking with `vina` and `gnina` (`gnina` also supports `smina` and its custom scoring functions)
 - can be used as a command line utility or imported as a python module
+- input molecules are checked for salts and attempted to fix by SaltRemover 
 - stereoisomers can be enumerated for unspecified chiral centers and double bonds
 - several protonation options: chemaxon and pkasolver (check notes below)
 - supports distributed computing using `dask` library
@@ -54,7 +55,7 @@ Features:
 
 Pipeline:
 - input SMILES are converted in 3D by RDKit, if input is 3D structures in SDF their conformations wil be taken as starting without changes.
-- compounds having salts were stripped, if this fails the whole compound is omitted reporting to STDERR 
+- compounds having salts were stripped, if this fails the whole compound will be omitted for docking reporting to STDERR 
 - up to a specified number of stereoisomers are enumerated for molecules with undefined chiral centers or double bond configurations (by default 1 random but reproducible stereoisomer is generated)
 - ligands are protonated by Chemaxon/pKasolver at pH 7.4 and the most stable tautomers are generated (optional, requires a Chemaxon license)
 - molecules are converted in PDBQT format using Meeko
