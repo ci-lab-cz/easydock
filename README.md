@@ -199,6 +199,12 @@ Please pay attention for `--ncpu` argument if you use `--protonation pkasolver`.
 
 ### Changelog
 
+**0.3.1**
+- add pkasolver as a protonation tool ([@Feriolet](https://github.com/Feriolet)) [#17](https://github.com/ci-lab-cz/easydock/issues/17)
+- add preparation step which tries to strip salts [#30](https://github.com/ci-lab-cz/easydock/issues/30)
+- database structure was modified to store input molecules before pre-preocessing [#31](https://github.com/ci-lab-cz/easydock/pull/31)
+- speed of database initialization was improved [#29](https://github.com/ci-lab-cz/easydock/pull/29)
+
 **0.3.0**
 - add optional enumeration of stereoisomers. This partially breaks compatibility - docking of molecules in databases which were created by the previous version cannot be continued with this version. Everything else including API is compatible [#21](https://github.com/ci-lab-cz/easydock/pull/21)
 - fix minor errors in retrieving non-top poses by `get_sdf_from_dock_db`
