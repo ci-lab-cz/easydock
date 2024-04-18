@@ -202,7 +202,7 @@ Please pay attention for `--ncpu` argument if you use `--protonation pkasolver`.
 **0.3.1**
 - add pkasolver as a protonation tool ([@Feriolet](https://github.com/Feriolet)) [#17](https://github.com/ci-lab-cz/easydock/issues/17)
 - add preparation step which tries to strip salts [#30](https://github.com/ci-lab-cz/easydock/issues/30)
-- database structure was modified to store input molecules before pre-preocessing [#31](https://github.com/ci-lab-cz/easydock/pull/31)
+- database structure was modified to store input molecules before pre-preprocessing [#31](https://github.com/ci-lab-cz/easydock/pull/31)
 - speed of database initialization was improved [#29](https://github.com/ci-lab-cz/easydock/pull/29)
 
 **0.3.0**
