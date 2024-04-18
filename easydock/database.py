@@ -5,7 +5,7 @@ import tempfile
 from copy import deepcopy
 from functools import partial
 from multiprocessing import Pool
-from typing import Optional
+from typing import Optional, Union
 import yaml
 from easydock import read_input
 from easydock.preparation_for_docking import mol_is_3d
@@ -37,8 +37,10 @@ def create_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', '
                 (
                  id TEXT,
                  stereo_id TEXT,
+                 smi_input TEXT,
                  smi TEXT {'UNIQUE' if unique_smi else ''},
                  smi_protonated TEXT,
+                 source_mol_block_input TEXT,
                  source_mol_block TEXT,
                  source_mol_block_protonated TEXT,
                  docking_score REAL,
@@ -158,29 +160,35 @@ def get_isomers(mol, max_stereoisomers=1):
 
 MolBlock = str
 Smi = str
-def generate_init_data(mol_input: tuple[Chem.Mol, str], max_stereoisomers: int, prefix: str) -> list[list[str, tuple[str, int, Smi, Optional[MolBlock]]]]:
+def generate_init_data(mol_input: tuple[Chem.Mol, str], max_stereoisomers: int, prefix: str) -> list[list[str, tuple[str, int, Union[Smi, MolBlock], Smi, Optional[MolBlock]]]]:
     salt_remover = SaltRemover()
     mol, mol_name = mol_input
+
+    mol_input = mol
+    smi_input = Chem.MolToSmiles(mol, isomericSmiles=True)
 
     if len(Chem.GetMolFrags(mol, asMols=False, sanitizeFrags=False)) > 1:
         mol = salt_remover.StripMol(mol, dontRemoveEverything=True)
         if len(Chem.GetMolFrags(mol, asMols=False, sanitizeFrags=False)) > 1:
             sys.stderr.write(f'EASYDOCK Warning: molecule {mol.GetProp("_Name")} was skipped, because it has multiple components which could not be fixed by SaltRemover\n')
-            return None
+            if mol_is_3d(mol):
+                return [['mol', (mol_name, None, None, Chem.MolToMolBlock(mol_input), None)]]
+            else:
+                return [['smi', (mol_name, None, smi_input, None)]]
         sys.stderr.write(f'EASYDOCK Warning: molecule {mol.GetProp("_Name")}, salts were sripped\n')
         
     if prefix:
         mol_name = f'{prefix}-{mol_name}'
     if mol_is_3d(mol):
         smi = Chem.MolToSmiles(mol, isomericSmiles=True)
-        return [['mol', (mol_name, 0, smi, Chem.MolToMolBlock(mol))]]
+        return [['mol', (mol_name, 0, smi, Chem.MolToMolBlock(mol_input), Chem.MolToMolBlock(mol))]]
 
     else:
         isomer_list = []
         isomers = get_isomers(mol, max_stereoisomers)
         for stereo_id, stereo_mol in enumerate(isomers):
             smi = Chem.MolToSmiles(stereo_mol, isomericSmiles=True)
-            isomer_list.append(['smi', (mol_name, stereo_id, smi)])
+            isomer_list.append(['smi', (mol_name, stereo_id, smi_input, smi)])
         return isomer_list
 
 
@@ -203,8 +211,8 @@ def init_db(db_fname: str, input_fname: str, ncpu: int, max_stereoisomers=1, pre
                 elif input_format == 'mol':
                     data_mol.append(data)
 
-    cur.executemany(f'INSERT INTO mols (id, stereo_id, smi) VALUES(?, ?, ?)', data_smi)
-    cur.executemany(f'INSERT INTO mols (id, stereo_id, smi, source_mol_block) VALUES(?, ?, ?, ?)', data_mol)
+    cur.executemany(f'INSERT INTO mols (id, stereo_id, smi_input, smi) VALUES(?, ?, ?, ?)', data_smi)
+    cur.executemany(f'INSERT INTO mols (id, stereo_id, smi, source_mol_block_input, source_mol_block) VALUES(?, ?, ?, ?, ?)', data_mol)
     conn.commit()
 
 
