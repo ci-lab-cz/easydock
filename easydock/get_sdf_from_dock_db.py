@@ -88,7 +88,7 @@ def main():
 
     if args.ids:
         # https://dba.stackexchange.com/questions/302006/sqlite-return-rows-in-select-in-order
-        case_str = ' '.join(f'WHEN "{mol_id}" THEN {i}' for i, mol_id in enumerate(args.ids, 1))
+        case_str = ' '.join(f'WHEN "{mol_id}" THEN {i}' for i, mol_id in enumerate(ids, 1))
         sql += f" ORDER BY CASE mols.id {case_str} END"
 
     if tautomers_exist:
