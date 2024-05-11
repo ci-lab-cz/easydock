@@ -11,7 +11,7 @@ from rdkit.Chem import AllChem
 import numpy as np
 from sklearn.cluster import AgglomerativeClustering
 from rdkit.Chem.rdMolAlign import AlignMolConformers
-from typing import Optional
+from typing import Optional, Iterator
 
 def cpu_type(x):
     return max(1, min(int(x), cpu_count()))
@@ -60,7 +60,7 @@ def mk_prepare_ligand(mol, verbose=False):
     return pdbqt_string_list
 
 
-def GetConformerRMSFromAtomIds(mol: Chem.Mol, confId1: int, confId2: int, atomIds: Optional[bool | list[int]]=None, prealigned: bool=False):
+def GetConformerRMSFromAtomIds(mol: Chem.Mol, confId1: int, confId2: int, atomIds: Optional[bool | list[int]]=None, prealigned: bool=False) -> float:
     """ Returns the RMS between two conformations based on the atomIds passed as the input.
         By default, the conformers will be aligned to the first conformer
         before the RMS calculation and, as a side-effect, the second will be left
@@ -95,7 +95,7 @@ def GetConformerRMSFromAtomIds(mol: Chem.Mol, confId1: int, confId2: int, atomId
     ssr /= mol.GetNumAtoms()
     return np.sqrt(ssr)
 
-def GetConformerRMSMatrixForSaturatedRingMolecule(mol: Chem.Mol, atomIds:list[list[int]]=None, prealigned: bool=False):
+def GetConformerRMSMatrixForSaturatedRingMolecule(mol: Chem.Mol, atomIds:list[list[int]]=None, prealigned: bool=False) -> list[float]:
     """ Returns the RMS matrix of the conformers of a molecule based on the alignment and rmsd of saturated ring.
         The function calculates the mean of the RMSD of each saturated ring with the GetConformerRMSFromAtomIds.
         The alignment is done per ring (for example, three alignments are done for three saturated ring) 
@@ -158,7 +158,7 @@ def GetConformerRMSMatrixForSaturatedRingMolecule(mol: Chem.Mol, atomIds:list[li
     return list(np.mean(cmat_list_array, axis=0))
   
 
-def mol_embedding_3d(mol: Chem.Mol, seed: int=43):
+def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
 
     def find_saturated_ring(mol: Chem.Mol):
         atom_list = mol.GetAtoms()
@@ -174,7 +174,7 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43):
 
         return saturated_ring_list
 
-    def gen_conf(mole: Chem.Mol, useRandomCoords: bool, randomSeed: int, has_saturated_ring: bool):
+    def gen_conf(mole: Chem.Mol, useRandomCoords: bool, randomSeed: int, has_saturated_ring: bool) -> tuple[Chem.Mol, float]:
         params = AllChem.ETKDGv3()
         params.useRandomCoords = useRandomCoords
         params.randomSeed = randomSeed
@@ -185,7 +185,7 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43):
             conf_stat = AllChem.EmbedMolecule(mole, params)
         return mole, conf_stat
     
-    def remove_confs_rms(mol: Chem.Mol, saturated_ring_list: list[list[int]], rms: float=0.25, keep_nconf: Optional[bool | int]=None):
+    def remove_confs_rms(mol: Chem.Mol, saturated_ring_list: list[list[int]], rms: float=0.25, keep_nconf: Optional[bool | int]=None) -> Chem.Mol:
         """
         The function uses AgglomerativeClustering to select conformers.
 
@@ -195,7 +195,7 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43):
         :return:
         """
 
-        def gen_ids(ids):
+        def gen_ids(ids: int) -> Iterator[int, int]:
             for i in range(1, len(ids)):
                 for j in range(0, i):
                     yield j, i
