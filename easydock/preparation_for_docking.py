@@ -88,7 +88,7 @@ def GetConformerRMSFromAtomIds(mol, confId1, confId2, atomIds=None, prealigned=F
     conf1 = mol.GetConformer(id=confId1)
     conf2 = mol.GetConformer(id=confId2)
     ssr = 0
-    for i in [id for id in atomIds]:
+    for i in atomIds:
         d = conf1.GetAtomPosition(i).Distance(conf2.GetAtomPosition(i))
         ssr += d * d
     ssr /= mol.GetNumAtoms()
