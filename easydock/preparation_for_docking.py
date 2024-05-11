@@ -11,6 +11,7 @@ from rdkit.Chem import AllChem
 import numpy as np
 from sklearn.cluster import AgglomerativeClustering
 from rdkit.Chem.rdMolAlign import AlignMolConformers
+from typing import Optional
 
 def cpu_type(x):
     return max(1, min(int(x), cpu_count()))
@@ -59,7 +60,7 @@ def mk_prepare_ligand(mol, verbose=False):
     return pdbqt_string_list
 
 
-def GetConformerRMSFromAtomIds(mol, confId1, confId2, atomIds=None, prealigned=False):
+def GetConformerRMSFromAtomIds(mol: Chem.Mol, confId1: int, confId2: int, atomIds: Optional[bool | list[int]]=None, prealigned: bool=False):
     """ Returns the RMS between two conformations based on the atomIds passed as the input.
         By default, the conformers will be aligned to the first conformer
         before the RMS calculation and, as a side-effect, the second will be left
@@ -94,7 +95,7 @@ def GetConformerRMSFromAtomIds(mol, confId1, confId2, atomIds=None, prealigned=F
     ssr /= mol.GetNumAtoms()
     return np.sqrt(ssr)
 
-def GetConformerRMSMatrixForSaturatedRingMolecule(mol, atomIds=None, prealigned=False):
+def GetConformerRMSMatrixForSaturatedRingMolecule(mol: Chem.Mol, atomIds:list[list[int]]=None, prealigned: bool=False):
     """ Returns the RMS matrix of the conformers of a molecule based on the alignment and rmsd of saturated ring.
         The function calculates the mean of the RMSD of each saturated ring with the GetConformerRMSFromAtomIds.
         The alignment is done per ring (for example, three alignments are done for three saturated ring) 
@@ -184,7 +185,7 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43):
             conf_stat = AllChem.EmbedMolecule(mole, params)
         return mole, conf_stat
     
-    def remove_confs_rms(mol, saturated_ring_list, rms=0.25, keep_nconf=None):
+    def remove_confs_rms(mol: Chem.Mol, saturated_ring_list: list[list[int]], rms: float=0.25, keep_nconf: Optional[bool | int]=None):
         """
         The function uses AgglomerativeClustering to select conformers.
 
