@@ -47,6 +47,8 @@ def mk_prepare_ligand(mol, verbose=False):
 
             for setup in mol_setups:
                 pdbqt_string, is_ok, error_msg = PDBQTWriterLegacy.write_string(setup)
+                if not is_ok:
+                    print(f"{mol.GetProp('_Name')} has error in converting to pdbqt: {error_msg}")
                 pdbqt_string_list.append(pdbqt_string)
                 if verbose:
                     print(f"{setup}")
