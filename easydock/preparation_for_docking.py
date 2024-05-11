@@ -160,7 +160,7 @@ def GetConformerRMSMatrixForSaturatedRingMolecule(mol: Chem.Mol, atomIds:list[li
 
 def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
 
-    def find_saturated_ring(mol: Chem.Mol):
+    def find_saturated_ring(mol: Chem.Mol) -> list[list[int]]:
         atom_list = mol.GetAtoms()
         ssr = Chem.GetSymmSSSR(mol)
         saturated_ring_list = []
