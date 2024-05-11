@@ -8,7 +8,9 @@ from meeko import (MoleculePreparation, PDBQTMolecule, PDBQTWriterLegacy,
                    RDKitMolCreate)
 from rdkit import Chem
 from rdkit.Chem import AllChem
-
+import numpy as np
+from sklearn.cluster import AgglomerativeClustering
+from rdkit.Chem.rdMolAlign import AlignMolConformers
 
 def cpu_type(x):
     return max(1, min(int(x), cpu_count()))
@@ -35,13 +37,18 @@ def mol_from_smi_or_molblock(ligand_string):
 
 
 def mk_prepare_ligand(mol, verbose=False):
+    pdbqt_string_list = []
     preparator = MoleculePreparation(hydrate=False, flexible_amides=False, rigid_macrocycles=True, min_ring_size=7, max_ring_size=33)
     try:
-        mol_setups = preparator.prepare(mol)
-        for setup in mol_setups:
-            pdbqt_string, is_ok, error_msg = PDBQTWriterLegacy.write_string(setup)
-            if verbose:
-                print(f"{setup}")
+        cids = [x.GetId() for x in mol.GetConformers()]
+        for cid in cids:
+            mol_setups = preparator.prepare(mol, conformer_id=cid)
+
+            for setup in mol_setups:
+                pdbqt_string, is_ok, error_msg = PDBQTWriterLegacy.write_string(setup)
+                pdbqt_string_list.append(pdbqt_string)
+                if verbose:
+                    print(f"{setup}")
     except Exception:
         sys.stderr.write(
             "Warning. Incorrect mol object to convert to pdbqt. Continue. \n"
@@ -49,29 +56,201 @@ def mk_prepare_ligand(mol, verbose=False):
         traceback.print_exc()
         pdbqt_string = None
 
-    return pdbqt_string
+    return pdbqt_string_list
 
 
-def mol_embedding_3d(mol, seed=43):
+def GetConformerRMSFromAtomIds(mol, confId1, confId2, atomIds=None, prealigned=False):
+    """ Returns the RMS between two conformations based on the atomIds passed as the input.
+        By default, the conformers will be aligned to the first conformer
+        before the RMS calculation and, as a side-effect, the second will be left
+        in the aligned state.
 
-    def gen_conf(mole, useRandomCoords, randomSeed):
+    Arguments:
+        - mol:        the molecule
+        - confId1:    the id of the first conformer
+        - confId2:    the id of the second conformer
+        - atomIds:    (optional) list of atom ids to use a points for
+                        alingment **AND RMSD** calculation- defaults to all atoms
+        - prealigned: (optional) by default the conformers are assumed
+                        be unaligned and the second conformer be aligned
+                        to the first
+
+    """
+  # align the conformers if necessary
+  # Note: the reference conformer is always the first one
+    if not prealigned:
+        if atomIds:
+            AlignMolConformers(mol, confIds=[confId1, confId2], atomIds=atomIds)
+        else:
+            AlignMolConformers(mol, confIds=[confId1, confId2])
+
+  # calculate the RMS between the two conformations
+    conf1 = mol.GetConformer(id=confId1)
+    conf2 = mol.GetConformer(id=confId2)
+    ssr = 0
+    for i in [id for id in atomIds]:
+        d = conf1.GetAtomPosition(i).Distance(conf2.GetAtomPosition(i))
+        ssr += d * d
+    ssr /= mol.GetNumAtoms()
+    return np.sqrt(ssr)
+
+def GetConformerRMSMatrixForSaturatedRingMolecule(mol, atomIds=None, prealigned=False):
+    """ Returns the RMS matrix of the conformers of a molecule based on the alignment and rmsd of saturated ring.
+        The function calculates the mean of the RMSD of each saturated ring with the GetConformerRMSFromAtomIds.
+        The alignment is done per ring (for example, three alignments are done for three saturated ring) 
+        
+        By default, the conformers will be aligned to the first conformer
+        before the RMS calculation and, as a side-effect, the second will be left
+        in the aligned state.
+
+    As a side-effect, the conformers will be aligned to the first
+    conformer (i.e. the reference) and will left in the aligned state.
+
+    Arguments:
+        - mol:     the molecule
+        - atomIds: (optional) list of atom ids to use a points for
+                    alingment - defaults to all atoms
+        - prealigned: (optional) by default the conformers are assumed
+                        be unaligned and will therefore be aligned to the
+                        first conformer
+
+    Note that the returned RMS matrix is symmetrical, i.e. it is the
+    lower half of the matrix, e.g. for 5 conformers::
+
+        rmsmatrix = [ a,
+                      b, c,
+                      d, e, f,
+                      g, h, i, j]
+
+    where a is the RMS between conformers 0 and 1, b is the RMS between
+    conformers 0 and 2, etc.
+    This way it can be directly used as distance matrix in e.g. Butina
+    clustering.
+
+    """
+
+    cmat_list = []
+    for atom_id_in_ring in atomIds:
+        # if necessary, align the conformers
+        # Note: the reference conformer is always the first one
+        rmsvals = []
+        confIds = [conf.GetId() for conf in mol.GetConformers()]
+        if not prealigned:
+            if atom_id_in_ring:
+                AlignMolConformers(mol, atomIds=atom_id_in_ring, RMSlist=rmsvals)
+            else:
+                AlignMolConformers(mol, RMSlist=rmsvals)
+        else:  # already prealigned
+            for i in range(1, len(confIds)):
+                rmsvals.append(GetConformerRMSFromAtomIds(mol, confIds[0], confIds[i], atomIds=atom_id_in_ring, prealigned=prealigned))
+        # loop over the conformations (except the reference one)
+        cmat_per_ring = []
+        for i in range(1, len(confIds)):
+            cmat_per_ring.append(rmsvals[i - 1])
+            for j in range(1, i):
+                cmat_per_ring.append(GetConformerRMSFromAtomIds(mol, confIds[i], confIds[j], atomIds=atom_id_in_ring, prealigned=True))
+
+        cmat_list.append(np.array(cmat_per_ring))
+
+    cmat_list_array = np.array(cmat_list)
+
+    return list(np.mean(cmat_list_array, axis=0))
+  
+
+def mol_embedding_3d(mol: Chem.Mol, seed: int=43):
+
+    def find_saturated_ring(mol: Chem.Mol):
+        atom_list = mol.GetAtoms()
+        ssr = Chem.GetSymmSSSR(mol)
+        saturated_ring_list = []
+        for ring in ssr:
+            is_atom_saturated_array = np.array([atom_list[atom_id].GetHybridization() == Chem.HybridizationType.SP3 for atom_id in ring])
+            is_ring_unsaturated = np.any(np.nonzero(is_atom_saturated_array==0))
+            if is_ring_unsaturated:
+                continue
+
+            saturated_ring_list.append(ring)
+
+        return saturated_ring_list
+
+    def gen_conf(mole: Chem.Mol, useRandomCoords: bool, randomSeed: int, has_saturated_ring: bool):
         params = AllChem.ETKDGv3()
         params.useRandomCoords = useRandomCoords
         params.randomSeed = randomSeed
-        conf_stat = AllChem.EmbedMolecule(mole, params)
+        if has_saturated_ring:
+            #10 is used as default according to the C language documentation iirc, but I have to specify the numbers.
+            conf_stat = AllChem.EmbedMultipleConfs(mole, 10, params)
+        else:
+            conf_stat = AllChem.EmbedMolecule(mole, params)
         return mole, conf_stat
+    
+    def remove_confs_rms(mol, saturated_ring_list, rms=0.25, keep_nconf=None):
+        """
+        The function uses AgglomerativeClustering to select conformers.
 
+        :param mol: input molecule with multiple conformers
+        :param rms: discard conformers which are closer than given value to a kept conformer
+        :param keep_nconf: keep at most the given number of conformers. This parameter has precedence over rms
+        :return:
+        """
+
+        def gen_ids(ids):
+            for i in range(1, len(ids)):
+                for j in range(0, i):
+                    yield j, i
+
+        if keep_nconf and mol.GetNumConformers() <= keep_nconf:
+            return mol
+
+        if mol.GetNumConformers() <= 1:
+            return mol
+
+        mol_tmp = Chem.RemoveHs(mol)   # calc rms for heavy atoms only
+        rms_ = GetConformerRMSMatrixForSaturatedRingMolecule(mol_tmp, atomIds=saturated_ring_list, prealigned=False)
+
+        cids = [c.GetId() for c in mol_tmp.GetConformers()]
+        arr = np.zeros((len(cids), len(cids)))
+        for (i, j), v in zip(gen_ids(cids), rms_):
+            arr[i, j] = v
+            arr[j, i] = v
+        if keep_nconf:
+            cl = AgglomerativeClustering(n_clusters=keep_nconf, linkage='complete', metric='precomputed').fit(arr)
+        else:
+            cl = AgglomerativeClustering(n_clusters=None, linkage='complete', metric='precomputed', distance_threshold=rms).fit(arr)
+
+        keep_ids = []
+        for i in set(cl.labels_):
+            ids = np.where(cl.labels_ == i)[0]
+            j = arr[np.ix_(ids, ids)].mean(axis=0).argmin()
+            keep_ids.append(cids[j])
+        remove_ids = set(cids) - set(keep_ids)
+
+        for cid in sorted(remove_ids, reverse=True):
+            mol.RemoveConformer(cid)
+
+        return mol
+    
+        
     if not isinstance(mol, Chem.Mol):
         return None
+    
+    saturated_ring = find_saturated_ring(mol)
+    has_saturated_ring = (len(saturated_ring)>0)
+
     mol = Chem.AddHs(mol, addCoords=True)
     if not mol_is_3d(mol):  # only for non 3D input structures
-        mol, conf_stat = gen_conf(mol, useRandomCoords=False, randomSeed=seed)
+        mol, conf_stat = gen_conf(mol, useRandomCoords=False, randomSeed=seed, has_saturated_ring=has_saturated_ring)
         if conf_stat == -1:
             # if molecule is big enough and rdkit cannot generate a conformation - use params.useRandomCoords = True
-            mol, conf_stat = gen_conf(mol, useRandomCoords=True, randomSeed=seed)
+            mol, conf_stat = gen_conf(mol, useRandomCoords=True, randomSeed=seed, has_saturated_ring=has_saturated_ring)
             if conf_stat == -1:
                 return None
         AllChem.UFFOptimizeMolecule(mol, maxIters=100)
+        print(f"[For Testing Only] {mol.GetProp('_Name')} has {len(saturated_ring)} saturated ring")
+        print(f"[For Testing Only] Before removing conformation: {mol.GetProp('_Name')} has {mol.GetNumConformers()} conf")
+        mol = remove_confs_rms(mol, saturated_ring)
+        print(f"[For Testing Only] After removing conformation: {mol.GetProp('_Name')} has {mol.GetNumConformers()} conf")
+        
     return mol
 
 
