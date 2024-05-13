@@ -142,6 +142,7 @@ def GetConformerRMSMatrixForSaturatedRingMolecule(mol: Chem.Mol, atomIds:list[li
     """
 
     cmat_list = []
+    total_ring_atoms = sum([len(atom_in_ring) for atom_in_ring in atomIds])
     for atom_id_in_ring in atomIds:
         # if necessary, align the conformers
         # Note: the reference conformer is always the first one
@@ -162,11 +163,10 @@ def GetConformerRMSMatrixForSaturatedRingMolecule(mol: Chem.Mol, atomIds:list[li
             for j in range(1, i):
                 cmat_per_ring.append(GetConformerRMSFromAtomIds(mol, confIds[i], confIds[j], atomIds=atom_id_in_ring, prealigned=True))
 
-        cmat_list.append(np.array(cmat_per_ring))
+        cmat_list.append(np.square(np.array(cmat_per_ring))*len(atom_id_in_ring))
 
     cmat_list_array = np.array(cmat_list)
-
-    return list(np.mean(cmat_list_array, axis=0))
+    return list(np.sqrt(np.sum(cmat_list_array, axis=0)/total_ring_atoms))
   
 
 def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
@@ -176,7 +176,7 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
         saturated_ring_list = []
         for ring in ssr:
             is_atom_saturated_array = [mol.GetAtomWithIdx(atom_id).GetHybridization() == Chem.HybridizationType.SP3 for atom_id in ring]
-            if all(is_atom_saturated_array):
+            if any(is_atom_saturated_array):
                 saturated_ring_list.append(ring)
         return saturated_ring_list
 
@@ -236,21 +236,16 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
         if mol.GetNumConformers() == 1:
             return mol
         
-        if keep_nconf:
-            if mol.GetNumConformers() <= keep_nconf:
-                return mol
-            
-            cids = [c.GetId() for c in mol.GetConformers()]
-            arr = arr[np.ix_(cids, cids)]
-
+        if keep_nconf and mol.GetNumConformers() > keep_nconf:
+            arr = arr[np.ix_(keep_ids, keep_ids)]
             cl = AgglomerativeClustering(n_clusters=keep_nconf, linkage='complete', metric='precomputed').fit(arr)
 
-            keep_ids = []
+            keep_ids_nconf_filter = []
             for i in set(cl.labels_):
                 ids = np.where(cl.labels_ == i)[0]
                 j = arr[np.ix_(ids, ids)].mean(axis=0).argmin()
-                keep_ids.append(cids[j])
-            remove_ids = set(cids) - set(keep_ids)
+                keep_ids_nconf_filter.append(cids[j])
+            remove_ids = set(keep_ids) - set(keep_ids_nconf_filter)
 
             for cid in sorted(remove_ids, reverse=True):
                 mol.RemoveConformer(cid)
