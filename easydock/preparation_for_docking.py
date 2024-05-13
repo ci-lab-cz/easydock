@@ -176,9 +176,8 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
         saturated_ring_list = []
         for ring in ssr:
             is_atom_saturated_array = [mol.GetAtomWithIdx(atom_id).GetHybridization() == Chem.HybridizationType.SP3 for atom_id in ring]
-            if any(is_atom_saturated_array):
+            if all(is_atom_saturated_array):
                 saturated_ring_list.append(ring)
-
         return saturated_ring_list
 
     def gen_conf(mole: Chem.Mol, useRandomCoords: bool, randomSeed: int, has_saturated_ring: bool) -> tuple[Chem.Mol, float]:
