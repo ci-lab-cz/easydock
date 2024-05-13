@@ -49,6 +49,8 @@ def mk_prepare_ligand(mol, verbose=False):
                 pdbqt_string, is_ok, error_msg = PDBQTWriterLegacy.write_string(setup)
                 if not is_ok:
                     print(f"{mol.GetProp('_Name')} has error in converting to pdbqt: {error_msg}")
+                    return None
+                
                 pdbqt_string_list.append(pdbqt_string)
                 if verbose:
                     print(f"{setup}")
@@ -57,12 +59,12 @@ def mk_prepare_ligand(mol, verbose=False):
             "Warning. Incorrect mol object to convert to pdbqt. Continue. \n"
         )
         traceback.print_exc()
-        pdbqt_string = None
+        pdbqt_string_list = None
 
     return pdbqt_string_list
 
 
-def GetConformerRMSFromAtomIds(mol: Chem.Mol, confId1: int, confId2: int, atomIds: Optional[bool | list[int]]=None, prealigned: bool=False) -> float:
+def GetConformerRMSFromAtomIds(mol: Chem.Mol, confId1: int, confId2: int, atomIds: Optional[list[int]]=None, prealigned: bool=False) -> float:
     """ Returns the RMS between two conformations based on the atomIds passed as the input.
         By default, the conformers will be aligned to the first conformer
         before the RMS calculation and, as a side-effect, the second will be left
@@ -91,10 +93,17 @@ def GetConformerRMSFromAtomIds(mol: Chem.Mol, confId1: int, confId2: int, atomId
     conf1 = mol.GetConformer(id=confId1)
     conf2 = mol.GetConformer(id=confId2)
     ssr = 0
-    for i in atomIds:
-        d = conf1.GetAtomPosition(i).Distance(conf2.GetAtomPosition(i))
-        ssr += d * d
-    ssr /= mol.GetNumAtoms()
+    if atomIds:
+        for i in atomIds:
+            d = conf1.GetAtomPosition(i).Distance(conf2.GetAtomPosition(i))
+            ssr += d * d
+        ssr /= len(atomIds)
+    else:
+        for i in range(mol.GetNumAtoms()):
+            d = conf1.GetAtomPosition(i).Distance(conf2.GetAtomPosition(i))
+            ssr += d * d
+        ssr /= mol.GetNumAtoms()
+
     return np.sqrt(ssr)
 
 def GetConformerRMSMatrixForSaturatedRingMolecule(mol: Chem.Mol, atomIds:list[list[int]]=None, prealigned: bool=False) -> list[float]:
@@ -163,16 +172,12 @@ def GetConformerRMSMatrixForSaturatedRingMolecule(mol: Chem.Mol, atomIds:list[li
 def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
 
     def find_saturated_ring(mol: Chem.Mol) -> list[list[int]]:
-        atom_list = mol.GetAtoms()
         ssr = Chem.GetSymmSSSR(mol)
         saturated_ring_list = []
         for ring in ssr:
-            is_atom_saturated_array = np.array([atom_list[atom_id].GetHybridization() == Chem.HybridizationType.SP3 for atom_id in ring])
-            is_ring_unsaturated = np.any(np.nonzero(is_atom_saturated_array==0))
-            if is_ring_unsaturated:
-                continue
-
-            saturated_ring_list.append(ring)
+            is_atom_saturated_array = [mol.GetAtomWithIdx(atom_id).GetHybridization() == Chem.HybridizationType.SP3 for atom_id in ring]
+            if any(is_atom_saturated_array):
+                saturated_ring_list.append(ring)
 
         return saturated_ring_list
 
@@ -187,7 +192,7 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
             conf_stat = AllChem.EmbedMolecule(mole, params)
         return mole, conf_stat
     
-    def remove_confs_rms(mol: Chem.Mol, saturated_ring_list: list[list[int]], rms: float=0.25, keep_nconf: Optional[bool | int]=None) -> Chem.Mol:
+    def remove_confs_rms(mol: Chem.Mol, saturated_ring_list: list[list[int]], rms: float=0.25, keep_nconf: Optional[int]=None) -> Chem.Mol:
         """
         The function uses AgglomerativeClustering to select conformers.
 
@@ -197,7 +202,7 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
         :return:
         """
 
-        def gen_ids(ids: int) -> Iterator[int, int]:
+        def gen_ids(ids: int) -> Iterator[int]:
             for i in range(1, len(ids)):
                 for j in range(0, i):
                     yield j, i
@@ -216,10 +221,8 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
         for (i, j), v in zip(gen_ids(cids), rms_):
             arr[i, j] = v
             arr[j, i] = v
-        if keep_nconf:
-            cl = AgglomerativeClustering(n_clusters=keep_nconf, linkage='complete', metric='precomputed').fit(arr)
-        else:
-            cl = AgglomerativeClustering(n_clusters=None, linkage='complete', metric='precomputed', distance_threshold=rms).fit(arr)
+
+        cl = AgglomerativeClustering(n_clusters=None, linkage='complete', metric='precomputed', distance_threshold=rms).fit(arr)
 
         keep_ids = []
         for i in set(cl.labels_):
@@ -231,14 +234,39 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
         for cid in sorted(remove_ids, reverse=True):
             mol.RemoveConformer(cid)
 
+        if mol.GetNumConformers() == 1:
+            return mol
+        
+        if keep_nconf:
+            if mol.GetNumConformers() <= keep_nconf:
+                return mol
+            
+            cids = [c.GetId() for c in mol.GetConformers()]
+            arr = np.zeros((len(cids), len(cids)))
+            for (i, j), v in zip(gen_ids(cids), rms_):
+                arr[i, j] = v
+                arr[j, i] = v
+            
+            cl = AgglomerativeClustering(n_clusters=keep_nconf, linkage='complete', metric='precomputed').fit(arr)
+
+            keep_ids = []
+            for i in set(cl.labels_):
+                ids = np.where(cl.labels_ == i)[0]
+                j = arr[np.ix_(ids, ids)].mean(axis=0).argmin()
+                keep_ids.append(cids[j])
+            remove_ids = set(cids) - set(keep_ids)
+
+            for cid in sorted(remove_ids, reverse=True):
+                mol.RemoveConformer(cid)
+        
         return mol
     
         
     if not isinstance(mol, Chem.Mol):
         return None
     
-    saturated_ring = find_saturated_ring(mol)
-    has_saturated_ring = (len(saturated_ring)>0)
+    saturated_rings = find_saturated_ring(mol)
+    has_saturated_ring = (len(saturated_rings)>0)
 
     mol = Chem.AddHs(mol, addCoords=True)
     if not mol_is_3d(mol):  # only for non 3D input structures
@@ -249,9 +277,9 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
             if conf_stat == -1:
                 return None
         AllChem.UFFOptimizeMolecule(mol, maxIters=100)
-        print(f"[For Testing Only] {mol.GetProp('_Name')} has {len(saturated_ring)} saturated ring")
+        print(f"[For Testing Only] {mol.GetProp('_Name')} has {len(saturated_rings)} saturated ring")
         print(f"[For Testing Only] Before removing conformation: {mol.GetProp('_Name')} has {mol.GetNumConformers()} conf")
-        mol = remove_confs_rms(mol, saturated_ring)
+        mol = remove_confs_rms(mol, saturated_rings)
         print(f"[For Testing Only] After removing conformation: {mol.GetProp('_Name')} has {mol.GetNumConformers()} conf")
         
     return mol

@@ -118,7 +118,6 @@ def mol_dock(mol, config):
             sys.stderr.write('STDERR output:\n')
             sys.stderr.write(e.stderr + '\n')
             sys.stderr.flush()
-            output = None
 
         finally:
             os.close(output_fd)
@@ -130,6 +129,10 @@ def mol_dock(mol, config):
     print(f'[For Testing Only Sanity check]: There are {len(dock_output_conformer_list)} {mol_id} conformers that has been docked')
     print(f'\n')
     docking_score_list = [float(conformer_output['docking_score']) for conformer_output in dock_output_conformer_list]
+
+    if not docking_score_list:
+        return mol_id, None
+    
     output = dock_output_conformer_list[docking_score_list.index(min(docking_score_list))]
     output['dock_time'] = dock_time
 
