@@ -242,10 +242,7 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
                 return mol
             
             cids = [c.GetId() for c in mol.GetConformers()]
-            arr = np.zeros((len(cids), len(cids)))
-            for (i, j), v in zip(gen_ids(cids), rms_):
-                arr[i, j] = v
-                arr[j, i] = v
+            arr = arr[np.ix_(cids, cids)]
             
             cl = AgglomerativeClustering(n_clusters=keep_nconf, linkage='complete', metric='precomputed').fit(arr)
 
@@ -279,7 +276,7 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
         AllChem.UFFOptimizeMolecule(mol, maxIters=100)
         print(f"[For Testing Only] {mol.GetProp('_Name')} has {len(saturated_rings)} saturated ring")
         print(f"[For Testing Only] Before removing conformation: {mol.GetProp('_Name')} has {mol.GetNumConformers()} conf")
-        mol = remove_confs_rms(mol, saturated_rings)
+        mol = remove_confs_rms(mol, saturated_rings,keep_nconf=1)
         print(f"[For Testing Only] After removing conformation: {mol.GetProp('_Name')} has {mol.GetNumConformers()} conf")
         
     return mol
