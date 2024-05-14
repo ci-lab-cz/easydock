@@ -212,10 +212,9 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
         if mol.GetNumConformers() <= 1:
             return mol
 
-        mol_tmp = Chem.RemoveHs(mol)   # calc rms for heavy atoms only
-        rms_ = GetConformerRMSMatrixForSaturatedRingMolecule(mol_tmp, atomIds=saturated_ring_list, prealigned=False)
+        rms_ = GetConformerRMSMatrixForSaturatedRingMolecule(Chem.RemoveHs(mol), atomIds=saturated_ring_list, prealigned=False)
 
-        cids = [c.GetId() for c in mol_tmp.GetConformers()]
+        cids = [c.GetId() for c in mol.GetConformers()]
         arr = np.zeros((len(cids), len(cids)))
         for (i, j), v in zip(gen_ids(cids), rms_):
             arr[i, j] = v
@@ -233,25 +232,23 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
         for cid in sorted(remove_ids, reverse=True):
             mol.RemoveConformer(cid)
 
-        if mol.GetNumConformers() == 1:
-            return mol
-        
-        if keep_nconf and mol.GetNumConformers() > keep_nconf:
-            arr = arr[np.ix_(keep_ids, keep_ids)]
+        if keep_nconf and mol.GetNumConformers() > keep_nconf and mol.GetNumConformers() > 1:
+            ids = np.in1d(cids, keep_ids)
+            arr = arr[np.ix_(ids, ids)]   # here other indexing operation should be used, because ids is a boolean array
             cl = AgglomerativeClustering(n_clusters=keep_nconf, linkage='complete', metric='precomputed').fit(arr)
 
-            keep_ids_nconf_filter = []
+            keep_ids = []
+            cids = [c.GetId() for c in mol.GetConformers()]
             for i in set(cl.labels_):
                 ids = np.where(cl.labels_ == i)[0]
                 j = arr[np.ix_(ids, ids)].mean(axis=0).argmin()
-                keep_ids_nconf_filter.append(cids[j])
-            remove_ids = set(keep_ids) - set(keep_ids_nconf_filter)
+                keep_ids.append(cids[j])
+            remove_ids = set(cids) - set(keep_ids)
 
             for cid in sorted(remove_ids, reverse=True):
                 mol.RemoveConformer(cid)
-        
+
         return mol
-    
         
     if not isinstance(mol, Chem.Mol):
         return None
@@ -270,7 +267,7 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
         AllChem.UFFOptimizeMolecule(mol, maxIters=100)
         print(f"[For Testing Only] {mol.GetProp('_Name')} has {len(saturated_rings)} saturated ring")
         print(f"[For Testing Only] Before removing conformation: {mol.GetProp('_Name')} has {mol.GetNumConformers()} conf")
-        mol = remove_confs_rms(mol, saturated_rings)
+        mol = remove_confs_rms(mol, saturated_rings, keep_nconf=1)
         print(f"[For Testing Only] After removing conformation: {mol.GetProp('_Name')} has {mol.GetNumConformers()} conf")
         
     return mol
