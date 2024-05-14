@@ -267,7 +267,7 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
         AllChem.UFFOptimizeMolecule(mol, maxIters=100)
         print(f"[For Testing Only] {mol.GetProp('_Name')} has {len(saturated_rings)} saturated ring")
         print(f"[For Testing Only] Before removing conformation: {mol.GetProp('_Name')} has {mol.GetNumConformers()} conf")
-        mol = remove_confs_rms(mol, saturated_rings, keep_nconf=1)
+        mol = remove_confs_rms(mol, saturated_rings)
         print(f"[For Testing Only] After removing conformation: {mol.GetProp('_Name')} has {mol.GetNumConformers()} conf")
         
     return mol
