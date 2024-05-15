@@ -155,7 +155,7 @@ def main():
     parser.add_argument('--protonation', default=None, required=False, choices=['chemaxon', 'pkasolver'],
                         help='choose a protonation program supported by EasyDock.')
     parser.add_argument('--no_tautomerization', action='store_true', default=False,
-                        help='disable tautomerization of molecules during protonation.')
+                        help='disable tautomerization of molecules during protonation (applicable to chemaxon only).')
     parser.add_argument('--sdf', action='store_true', default=False,
                         help='save best docked poses to SDF file with the same name as output DB.')
     parser.add_argument('--hostfile', metavar='FILENAME', required=False, type=filepath_type, default=None,
@@ -165,9 +165,9 @@ def main():
                              'calculations will run on a single machine as usual.')
     parser.add_argument('--dask_report', default=False, type=filepath_type,
                         help='save Dask report to HTML file. It will have the same name as the output database.')
-    # parser.add_argument('--tmpdir', metavar='DIRNAME', required=False, type=filepath_type, default=None,
-    #                     help='path to a dir where to store temporary files accessible to a program. '
-    #                          'Normally should be used,')
+    parser.add_argument('--tmpdir', metavar='DIRNAME', required=False, type=filepath_type, default=None,
+                        help='path to a dir where to store temporary setup files accessible to a program. '
+                             'Normally should be used if calculations with dask have to be continued,')
     parser.add_argument('--prefix', metavar='STRING', required=False, type=str, default=None,
                         help='prefix which will be added to all molecule names. This might be useful if multiple '
                              'repeated runs are made which will be analyzed together.')
@@ -184,8 +184,8 @@ def main():
     allowed_args = ['output', 'hostfile', 'dask_report', 'ncpu', 'verbose']
     supplied_args = tuple(arg for arg in supplied_args if arg in allowed_args)
 
-    # if args.tmpdir is not None:
-    #     tempfile.tempdir = args.tmpdir
+    if args.tmpdir is None and args.hostfile is not None and os.path.isfile(args.output):
+        sys.stderr.write('To continue calculations with Dask support please specify temporary directory\n')
 
     tmpfiles = []  # store text files which were saved to the setup table
 
@@ -198,7 +198,7 @@ def main():
             end_init = time.time()
             print(f'initializing database done in {(end_init - start_init):.2f}s', flush=True)
         else:
-            args_dict, tmpfiles = restore_setup_from_db(args.output)
+            args_dict, tmpfiles = restore_setup_from_db(args.output, args.tmpdir)
             # this will ignore stored values of those args which were supplied via command line
             # command line args have precedence over stored ones
             for arg in supplied_args:
