@@ -7,7 +7,7 @@ from multiprocessing import cpu_count
 from meeko import (MoleculePreparation, PDBQTMolecule, PDBQTWriterLegacy,
                    RDKitMolCreate)
 from rdkit import Chem
-from rdkit.Chem import AllChem
+from rdkit.Chem import AllChem, Draw
 import numpy as np
 from sklearn.cluster import AgglomerativeClustering
 from rdkit.Chem.rdMolAlign import AlignMolConformers
@@ -171,13 +171,22 @@ def GetConformerRMSMatrixForSaturatedRingMolecule(mol: Chem.Mol, atomIds:list[li
 
 def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
 
-    def find_saturated_ring(mol: Chem.Mol) -> list[list[int]]:
+    def find_saturated_ring_with_substituent(mol: Chem.Mol) -> list[list[int]]:
         ssr = Chem.GetSymmSSSR(mol)
         saturated_ring_list = []
-        for ring in ssr:
-            is_atom_saturated_array = [mol.GetAtomWithIdx(atom_id).GetHybridization() == Chem.HybridizationType.SP3 for atom_id in ring]
+        for ring_idx in ssr:
+            is_atom_saturated_array = [mol.GetAtomWithIdx(atom_id).GetHybridization() == Chem.HybridizationType.SP3 for atom_id in ring_idx]
             if any(is_atom_saturated_array):
-                saturated_ring_list.append(ring)
+                ring_and_substituent_idx = []
+                for ring_atom_idx in ring_idx:
+                    ring_and_substituent_idx += [x.GetIdx() for x in mol.GetAtomWithIdx(ring_atom_idx).GetNeighbors()]
+                ring_and_substituent_idx = list(set(ring_and_substituent_idx))
+                saturated_ring_list.append(ring_and_substituent_idx)
+
+        #to show that the function pick the correct neighbors and inspect visually.
+        #to be removed before merging the PR
+        img = Draw.MolsToGridImage([mol],highlightAtomLists=[list(set([ x for ring in saturated_ring_list for x in ring]))])
+        img.save(f'images/{mol}_{mol.GetProp("_Name")}.png')
         return saturated_ring_list
 
     def gen_conf(mole: Chem.Mol, useRandomCoords: bool, randomSeed: int, has_saturated_ring: bool) -> tuple[Chem.Mol, float]:
@@ -186,7 +195,7 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
         params.randomSeed = randomSeed
         if has_saturated_ring:
             #10 is used as default according to the C language documentation iirc, but I have to specify the numbers.
-            conf_stat = AllChem.EmbedMultipleConfs(mole, 10, params)
+            conf_stat = AllChem.EmbedMultipleConfs(mole, 100, params)
         else:
             conf_stat = AllChem.EmbedMolecule(mole, params)
         return mole, conf_stat
@@ -253,8 +262,8 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
     if not isinstance(mol, Chem.Mol):
         return None
     
-    saturated_rings = find_saturated_ring(mol)
-    has_saturated_ring = (len(saturated_rings)>0)
+    saturated_rings_with_substituents = find_saturated_ring_with_substituent(mol)
+    has_saturated_ring = (len(saturated_rings_with_substituents)>0)
 
     mol = Chem.AddHs(mol, addCoords=True)
     if not mol_is_3d(mol):  # only for non 3D input structures
@@ -265,11 +274,18 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
             if conf_stat == -1:
                 return None
         AllChem.UFFOptimizeMolecule(mol, maxIters=100)
-        print(f"[For Testing Only] {mol.GetProp('_Name')} has {len(saturated_rings)} saturated ring")
+
+        writer = Chem.SDWriter(f'conformer/{mol.GetProp("_Name")}_before_remove.sdf')
+        for cid in [c.GetId() for c in mol.GetConformers()]:
+            writer.write(mol, confId=cid)
+        print(f"[For Testing Only] {mol.GetProp('_Name')} has {len(saturated_rings_with_substituents)} saturated ring")
         print(f"[For Testing Only] Before removing conformation: {mol.GetProp('_Name')} has {mol.GetNumConformers()} conf")
-        mol = remove_confs_rms(mol, saturated_rings)
+        mol = remove_confs_rms(mol, saturated_rings_with_substituents)
         print(f"[For Testing Only] After removing conformation: {mol.GetProp('_Name')} has {mol.GetNumConformers()} conf")
         
+        writer = Chem.SDWriter(f'conformer/{mol.GetProp("_Name")}_after_remove.sdf')
+        for cid in [c.GetId() for c in mol.GetConformers()]:
+            writer.write(mol, confId=cid)
     return mol
 
 
