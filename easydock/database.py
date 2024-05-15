@@ -91,7 +91,7 @@ def create_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', '
     conn.close()
 
 
-def restore_setup_from_db(db_fname):
+def restore_setup_from_db(db_fname, tmpdir=None):
     """
     Reads stored YAML and creates temporary text files from additional fields in the setup table.
     Returns a dictionary of args and values to be assigned to argparse namespace
@@ -112,6 +112,8 @@ def restore_setup_from_db(db_fname):
     del values['yaml']
 
     tmpfiles = []
+    backup_tempdir = tempfile.tempdir
+    tempfile.tempdir = tmpdir
 
     try:
 
@@ -142,6 +144,9 @@ def restore_setup_from_db(db_fname):
         for fname in tmpfiles:
             os.unlink(fname)
         raise e
+
+    finally:
+        tempfile.tempdir = backup_tempdir
 
     return d, tmpfiles
 
