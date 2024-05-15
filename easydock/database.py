@@ -2,10 +2,12 @@ import os
 import sqlite3
 import sys
 import tempfile
+import traceback
 from copy import deepcopy
 from functools import partial
 from multiprocessing import Pool
 from typing import Optional, Union
+
 import yaml
 from easydock import read_input
 from easydock.preparation_for_docking import mol_is_3d
@@ -417,7 +419,10 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
                             mol = AllChem.AssignBondOrdersFromTemplate(ref_mol, mol3d)
                             Chem.AssignStereochemistryFrom3D(mol)  # not sure whether it is necessary
                             output_data_mol.append((cansmi, Chem.MolToMolBlock(mol), mol_id, stereo_id))
-                        except ValueError:
+                        except:
+                            traceback.print_exc()
+                            sys.stderr.write(f'EASYDOCK ERROR: {mol_id}, 3D geomery could not be re-created after '
+                                             f'protonation. The molecule was skipped.\n')
                             continue
 
             finally:
