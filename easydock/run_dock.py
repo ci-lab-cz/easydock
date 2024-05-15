@@ -198,7 +198,7 @@ def main():
             end_init = time.time()
             print(f'initializing database done in {(end_init - start_init):.2f}s', flush=True)
         else:
-            args_dict, tmpfiles = restore_setup_from_db(args.output)
+            args_dict, tmpfiles = restore_setup_from_db(args.output, args.tmpdir)
             # this will ignore stored values of those args which were supplied via command line
             # command line args have precedence over stored ones
             for arg in supplied_args:
