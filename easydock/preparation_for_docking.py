@@ -230,12 +230,12 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
             arr[j, i] = v
 
         cl = AgglomerativeClustering(n_clusters=None, linkage='complete', metric='precomputed', distance_threshold=rms).fit(arr)
-
+        print(cl.labels_)
         keep_ids = []
         for i in set(cl.labels_):
             ids = np.where(cl.labels_ == i)[0]
             j = arr[np.ix_(ids, ids)].mean(axis=0).argmin()
-            keep_ids.append(cids[j])
+            keep_ids.append(cids[ids[j]])
         remove_ids = set(cids) - set(keep_ids)
 
         for cid in sorted(remove_ids, reverse=True):
@@ -251,7 +251,7 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
             for i in set(cl.labels_):
                 ids = np.where(cl.labels_ == i)[0]
                 j = arr[np.ix_(ids, ids)].mean(axis=0).argmin()
-                keep_ids.append(cids[j])
+                keep_ids.append(cids[ids[j]])
             remove_ids = set(cids) - set(keep_ids)
 
             for cid in sorted(remove_ids, reverse=True):
@@ -280,10 +280,12 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
             writer.write(mol, confId=cid)
         print(f"[For Testing Only] {mol.GetProp('_Name')} has {len(saturated_rings_with_substituents)} saturated ring")
         print(f"[For Testing Only] Before removing conformation: {mol.GetProp('_Name')} has {mol.GetNumConformers()} conf")
-        mol = remove_confs_rms(mol, saturated_rings_with_substituents)
+        mol = remove_confs_rms(mol, saturated_rings_with_substituents, rms=0.5)
         print(f"[For Testing Only] After removing conformation: {mol.GetProp('_Name')} has {mol.GetNumConformers()} conf")
         
-        writer = Chem.SDWriter(f'conformer/{mol.GetProp("_Name")}_after_remove.sdf')
+        AlignMolConformers(mol)
+
+        writer = Chem.SDWriter(f'conformer2/{mol.GetProp("_Name")}_after_remove_050.sdf')
         for cid in [c.GetId() for c in mol.GetConformers()]:
             writer.write(mol, confId=cid)
     return mol
