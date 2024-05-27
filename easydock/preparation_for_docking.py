@@ -230,7 +230,6 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
             arr[j, i] = v
 
         cl = AgglomerativeClustering(n_clusters=None, linkage='complete', metric='precomputed', distance_threshold=rms).fit(arr)
-        print(cl.labels_)
         keep_ids = []
         for i in set(cl.labels_):
             ids = np.where(cl.labels_ == i)[0]
@@ -240,6 +239,29 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
 
         for cid in sorted(remove_ids, reverse=True):
             mol.RemoveConformer(cid)
+
+        while True:
+
+            ids = np.in1d(cids, keep_ids)
+            arr = arr[np.ix_(ids, ids)]
+
+            if len(arr) == 2 or not ((arr < rms) & (arr !=0)).any():
+                break
+
+            cids = [c.GetId() for c in mol.GetConformers()]
+
+            #keep ids with maximum rms
+            max_rms_ids = np.unravel_index(np.argmax(arr, axis=None), arr.shape)
+            count_below_rms = np.count_nonzero((arr < rms) & (arr !=0), axis=1)
+
+            max_count_below_rms_ids = np.argwhere(count_below_rms == np.amax(count_below_rms))
+            remove_ids = np.setdiff1d(max_count_below_rms_ids, np.array(max_rms_ids))
+            remove_cids = [cids[id] for id in remove_ids]
+
+            keep_ids = np.array(list(set(cids) - set(list(remove_cids))))
+
+            for cid in sorted(remove_cids, reverse=True):
+                mol.RemoveConformer(cid)
 
         if keep_nconf and mol.GetNumConformers() > keep_nconf and mol.GetNumConformers() > 1:
             ids = np.in1d(cids, keep_ids)
@@ -280,12 +302,12 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
             writer.write(mol, confId=cid)
         print(f"[For Testing Only] {mol.GetProp('_Name')} has {len(saturated_rings_with_substituents)} saturated ring")
         print(f"[For Testing Only] Before removing conformation: {mol.GetProp('_Name')} has {mol.GetNumConformers()} conf")
-        mol = remove_confs_rms(mol, saturated_rings_with_substituents, rms=0.5)
+        mol = remove_confs_rms(mol, saturated_rings_with_substituents, rms=0.1)
         print(f"[For Testing Only] After removing conformation: {mol.GetProp('_Name')} has {mol.GetNumConformers()} conf")
         
         AlignMolConformers(mol)
 
-        writer = Chem.SDWriter(f'conformer2/{mol.GetProp("_Name")}_after_remove_050.sdf')
+        writer = Chem.SDWriter(f'conformer3/{mol.GetProp("_Name")}_after_remove_030.sdf')
         for cid in [c.GetId() for c in mol.GetConformers()]:
             writer.write(mol, confId=cid)
     return mol
