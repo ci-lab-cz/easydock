@@ -240,13 +240,11 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
         for cid in sorted(remove_ids, reverse=True):
             mol.RemoveConformer(cid)
 
-        from time import sleep
         while True:
-            sleep(0.5)
             ids = np.in1d(cids, keep_ids)
             arr = arr[np.ix_(ids, ids)]
 
-            #sometimes clustering result gives matrix < rms
+            #sometimes clustering result gives matrix < rms when rms is high enough
             if all(arr[arr != 0] < rms) or not any(arr[arr != 0] < rms):
                 break
 
