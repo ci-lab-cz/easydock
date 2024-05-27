@@ -88,7 +88,7 @@ def protonate_pkasolver(input_fname: str, output_fname: str, ncpu: int = 1):
     from pkasolver.query import QueryModel
 
     estimated_smi = os.path.getsize(input_fname)//70
-    chunksize = min(max(0, estimated_smi / ncpu), 500)
+    chunksize = min(max(1, estimated_smi / ncpu), 500)
     model = QueryModel()
     with contextlib.redirect_stdout(None):
         if torch.cuda.is_available() or ncpu == 1:
