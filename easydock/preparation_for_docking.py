@@ -240,12 +240,14 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
         for cid in sorted(remove_ids, reverse=True):
             mol.RemoveConformer(cid)
 
+        from time import sleep
         while True:
-
+            sleep(0.5)
             ids = np.in1d(cids, keep_ids)
             arr = arr[np.ix_(ids, ids)]
 
-            if len(arr) == 2 or not ((arr < rms) & (arr !=0)).any():
+            #sometimes clustering result gives matrix < rms
+            if all(arr[arr != 0] < rms) or not any(arr[arr != 0] < rms):
                 break
 
             cids = [c.GetId() for c in mol.GetConformers()]
@@ -256,6 +258,10 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
 
             max_count_below_rms_ids = np.argwhere(count_below_rms == np.amax(count_below_rms))
             remove_ids = np.setdiff1d(max_count_below_rms_ids, np.array(max_rms_ids))
+
+            # remove max rms if remove id is empty
+            if len(remove_ids) ==0:
+                remove_ids = np.setdiff1d(max_count_below_rms_ids, np.array([]))
             remove_cids = [cids[id] for id in remove_ids]
 
             keep_ids = np.array(list(set(cids) - set(list(remove_cids))))
@@ -302,12 +308,12 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
             writer.write(mol, confId=cid)
         print(f"[For Testing Only] {mol.GetProp('_Name')} has {len(saturated_rings_with_substituents)} saturated ring")
         print(f"[For Testing Only] Before removing conformation: {mol.GetProp('_Name')} has {mol.GetNumConformers()} conf")
-        mol = remove_confs_rms(mol, saturated_rings_with_substituents, rms=0.1)
+        mol = remove_confs_rms(mol, saturated_rings_with_substituents, rms=0.5)
         print(f"[For Testing Only] After removing conformation: {mol.GetProp('_Name')} has {mol.GetNumConformers()} conf")
         
         AlignMolConformers(mol)
 
-        writer = Chem.SDWriter(f'conformer3/{mol.GetProp("_Name")}_after_remove_030.sdf')
+        writer = Chem.SDWriter(f'conformer3/{mol.GetProp("_Name")}_after_remove_050.sdf')
         for cid in [c.GetId() for c in mol.GetConformers()]:
             writer.write(mol, confId=cid)
     return mol
