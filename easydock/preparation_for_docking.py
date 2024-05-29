@@ -171,9 +171,19 @@ def GetConformerRMSMatrixForSaturatedRingMolecule(mol: Chem.Mol, atomIds:list[li
 
 def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
 
-    def find_saturated_ring_with_substituent(mol: Chem.Mol) -> list[list[int]]:
+    def find_saturated_ring(mol: Chem.Mol) -> list[list[int]]:
         ssr = Chem.GetSymmSSSR(mol)
         saturated_ring_list = []
+        for ring_idx in ssr:
+            is_atom_saturated_array = [mol.GetAtomWithIdx(atom_id).GetHybridization() == Chem.HybridizationType.SP3 for atom_id in ring_idx]
+            if any(is_atom_saturated_array):
+                saturated_ring_list.append(ring_idx)      
+
+        return saturated_ring_list
+     
+    def find_saturated_ring_with_substituent(mol: Chem.Mol) -> list[list[int]]:
+        ssr = Chem.GetSymmSSSR(mol)
+        saturated_ring_with_substituent_list = []
         for ring_idx in ssr:
             is_atom_saturated_array = [mol.GetAtomWithIdx(atom_id).GetHybridization() == Chem.HybridizationType.SP3 for atom_id in ring_idx]
             if any(is_atom_saturated_array):
@@ -181,13 +191,13 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
                 for ring_atom_idx in ring_idx:
                     ring_and_substituent_idx += [x.GetIdx() for x in mol.GetAtomWithIdx(ring_atom_idx).GetNeighbors()]
                 ring_and_substituent_idx = list(set(ring_and_substituent_idx))
-                saturated_ring_list.append(ring_and_substituent_idx)
+                saturated_ring_with_substituent_list.append(ring_and_substituent_idx)
 
         #to show that the function pick the correct neighbors and inspect visually.
         #to be removed before merging the PR
-        img = Draw.MolsToGridImage([mol],highlightAtomLists=[list(set([ x for ring in saturated_ring_list for x in ring]))])
+        img = Draw.MolsToGridImage([mol],highlightAtomLists=[list(set([ x for ring in saturated_ring_with_substituent_list for x in ring]))])
         img.save(f'images/{mol}_{mol.GetProp("_Name")}.png')
-        return saturated_ring_list
+        return saturated_ring_with_substituent_list
 
     def gen_conf(mole: Chem.Mol, useRandomCoords: bool, randomSeed: int, has_saturated_ring: bool) -> tuple[Chem.Mol, float]:
         params = AllChem.ETKDGv3()
@@ -200,6 +210,14 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
             conf_stat = AllChem.EmbedMolecule(mole, params)
         return mole, conf_stat
     
+    def calculate_ring_nconf(saturated_ring_ids: list[int]) -> int:
+        if len(saturated_ring_ids) <= 6:
+            return 2
+        elif len(saturated_ring_ids) == 7:
+            return 3
+        else:
+            return 4
+        
     def remove_confs_rms(mol: Chem.Mol, saturated_ring_list: list[list[int]], rms: float=0.25, keep_nconf: Optional[int]=None) -> Chem.Mol:
         """
         The function uses AgglomerativeClustering to select conformers.
@@ -250,14 +268,14 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
 
             cids = [c.GetId() for c in mol.GetConformers()]
 
-            #keep ids with maximum rms
+            #keep ids with maximum rms. This assume that even if maximum rms has among the highest num of low rms, removing other conformer is sufficient
             max_rms_ids = np.unravel_index(np.argmax(arr, axis=None), arr.shape)
             count_below_rms = np.count_nonzero((arr < rms) & (arr !=0), axis=1)
 
             max_count_below_rms_ids = np.argwhere(count_below_rms == np.amax(count_below_rms))
             remove_ids = np.setdiff1d(max_count_below_rms_ids, np.array(max_rms_ids))
 
-            # remove max rms if remove id is empty
+            # remove max rms if remove id is empty to prevent endless while loop
             if len(remove_ids) ==0:
                 remove_ids = np.setdiff1d(max_count_below_rms_ids, np.array([]))
             remove_cids = [cids[id] for id in remove_ids]
@@ -288,6 +306,7 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
     if not isinstance(mol, Chem.Mol):
         return None
     
+    saturated_ring_list = find_saturated_ring(mol)
     saturated_rings_with_substituents = find_saturated_ring_with_substituent(mol)
     has_saturated_ring = (len(saturated_rings_with_substituents)>0)
 
@@ -306,12 +325,12 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
             writer.write(mol, confId=cid)
         print(f"[For Testing Only] {mol.GetProp('_Name')} has {len(saturated_rings_with_substituents)} saturated ring")
         print(f"[For Testing Only] Before removing conformation: {mol.GetProp('_Name')} has {mol.GetNumConformers()} conf")
-        mol = remove_confs_rms(mol, saturated_rings_with_substituents, rms=0.5)
+        mol = remove_confs_rms(mol, saturated_rings_with_substituents, rms=1, keep_nconf= sum([calculate_ring_nconf(saturated_ring) for saturated_ring in saturated_ring_list]))
         print(f"[For Testing Only] After removing conformation: {mol.GetProp('_Name')} has {mol.GetNumConformers()} conf")
-        
+
         AlignMolConformers(mol)
 
-        writer = Chem.SDWriter(f'conformer3/{mol.GetProp("_Name")}_after_remove_050.sdf')
+        writer = Chem.SDWriter(f'conformer_keepnconf/{mol.GetProp("_Name")}_after_remove_100.sdf')
         for cid in [c.GetId() for c in mol.GetConformers()]:
             writer.write(mol, confId=cid)
     return mol
