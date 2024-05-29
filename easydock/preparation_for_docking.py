@@ -181,22 +181,15 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
 
         return saturated_ring_list
      
-    def find_saturated_ring_with_substituent(mol: Chem.Mol) -> list[list[int]]:
-        ssr = Chem.GetSymmSSSR(mol)
+    def find_saturated_ring_with_substituent(saturated_ring_list: list[list[int]], mol: Chem.Mol) -> list[list[int]]:
         saturated_ring_with_substituent_list = []
-        for ring_idx in ssr:
-            is_atom_saturated_array = [mol.GetAtomWithIdx(atom_id).GetHybridization() == Chem.HybridizationType.SP3 for atom_id in ring_idx]
-            if any(is_atom_saturated_array):
+        for ring_idx in saturated_ring_list:
                 ring_and_substituent_idx = []
                 for ring_atom_idx in ring_idx:
                     ring_and_substituent_idx += [x.GetIdx() for x in mol.GetAtomWithIdx(ring_atom_idx).GetNeighbors()]
                 ring_and_substituent_idx = list(set(ring_and_substituent_idx))
                 saturated_ring_with_substituent_list.append(ring_and_substituent_idx)
 
-        #to show that the function pick the correct neighbors and inspect visually.
-        #to be removed before merging the PR
-        img = Draw.MolsToGridImage([mol],highlightAtomLists=[list(set([ x for ring in saturated_ring_with_substituent_list for x in ring]))])
-        img.save(f'images/{mol}_{mol.GetProp("_Name")}.png')
         return saturated_ring_with_substituent_list
 
     def gen_conf(mole: Chem.Mol, useRandomCoords: bool, randomSeed: int, has_saturated_ring: bool) -> tuple[Chem.Mol, float]:
@@ -307,7 +300,7 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
         return None
     
     saturated_ring_list = find_saturated_ring(mol)
-    saturated_rings_with_substituents = find_saturated_ring_with_substituent(mol)
+    saturated_rings_with_substituents = find_saturated_ring_with_substituent(saturated_ring_list, mol)
     has_saturated_ring = (len(saturated_rings_with_substituents)>0)
 
     mol = Chem.AddHs(mol, addCoords=True)
@@ -320,9 +313,6 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
                 return None
         AllChem.UFFOptimizeMolecule(mol, maxIters=100)
 
-        writer = Chem.SDWriter(f'conformer/{mol.GetProp("_Name")}_before_remove.sdf')
-        for cid in [c.GetId() for c in mol.GetConformers()]:
-            writer.write(mol, confId=cid)
         print(f"[For Testing Only] {mol.GetProp('_Name')} has {len(saturated_rings_with_substituents)} saturated ring")
         print(f"[For Testing Only] Before removing conformation: {mol.GetProp('_Name')} has {mol.GetNumConformers()} conf")
         mol = remove_confs_rms(mol, saturated_rings_with_substituents, rms=1, keep_nconf= sum([calculate_ring_nconf(saturated_ring) for saturated_ring in saturated_ring_list]))
@@ -330,9 +320,6 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
 
         AlignMolConformers(mol)
 
-        writer = Chem.SDWriter(f'conformer_keepnconf/{mol.GetProp("_Name")}_after_remove_100.sdf')
-        for cid in [c.GetId() for c in mol.GetConformers()]:
-            writer.write(mol, confId=cid)
     return mol
 
 
