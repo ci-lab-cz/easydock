@@ -251,33 +251,6 @@ def mol_embedding_3d(mol: Chem.Mol, seed: int=43) -> Chem.Mol:
         for cid in sorted(remove_ids, reverse=True):
             mol.RemoveConformer(cid)
 
-        while True:
-            ids = np.in1d(cids, keep_ids)
-            arr = arr[np.ix_(ids, ids)]
-
-            #sometimes clustering result gives matrix < rms when rms is high enough
-            if all(arr[arr != 0] < rms) or not any(arr[arr != 0] < rms):
-                break
-
-            cids = [c.GetId() for c in mol.GetConformers()]
-
-            #keep ids with maximum rms. This assume that even if maximum rms has among the highest num of low rms, removing other conformer is sufficient
-            max_rms_ids = np.unravel_index(np.argmax(arr, axis=None), arr.shape)
-            count_below_rms = np.count_nonzero((arr < rms) & (arr !=0), axis=1)
-
-            max_count_below_rms_ids = np.argwhere(count_below_rms == np.amax(count_below_rms))
-            remove_ids = np.setdiff1d(max_count_below_rms_ids, np.array(max_rms_ids))
-
-            # remove max rms if remove id is empty to prevent endless while loop
-            if len(remove_ids) ==0:
-                remove_ids = np.setdiff1d(max_count_below_rms_ids, np.array([]))
-            remove_cids = [cids[id] for id in remove_ids]
-
-            keep_ids = np.array(list(set(cids) - set(list(remove_cids))))
-
-            for cid in sorted(remove_cids, reverse=True):
-                mol.RemoveConformer(cid)
-
         if keep_nconf and mol.GetNumConformers() > keep_nconf and mol.GetNumConformers() > 1:
             ids = np.in1d(cids, keep_ids)
             arr = arr[np.ix_(ids, ids)]   # here other indexing operation should be used, because ids is a boolean array
