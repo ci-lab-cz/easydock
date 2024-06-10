@@ -38,7 +38,7 @@ def create_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', '
     cur.execute(f"""CREATE TABLE IF NOT EXISTS mols
                 (
                  id TEXT,
-                 stereo_id TEXT,
+                 stereo_id TEXT DEFAULT 0,
                  smi_input TEXT,
                  smi TEXT {'UNIQUE' if unique_smi else ''},
                  smi_protonated TEXT,
