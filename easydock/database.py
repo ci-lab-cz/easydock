@@ -2,10 +2,12 @@ import os
 import sqlite3
 import sys
 import tempfile
+import traceback
 from copy import deepcopy
 from functools import partial
 from multiprocessing import Pool
 from typing import Optional, Union
+
 import yaml
 from easydock import read_input
 from easydock.preparation_for_docking import mol_is_3d
@@ -36,7 +38,7 @@ def create_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', '
     cur.execute(f"""CREATE TABLE IF NOT EXISTS mols
                 (
                  id TEXT,
-                 stereo_id TEXT,
+                 stereo_id TEXT DEFAULT 0,
                  smi_input TEXT,
                  smi TEXT {'UNIQUE' if unique_smi else ''},
                  smi_protonated TEXT,
@@ -89,7 +91,7 @@ def create_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', '
     conn.close()
 
 
-def restore_setup_from_db(db_fname):
+def restore_setup_from_db(db_fname, tmpdir=None):
     """
     Reads stored YAML and creates temporary text files from additional fields in the setup table.
     Returns a dictionary of args and values to be assigned to argparse namespace
@@ -110,6 +112,8 @@ def restore_setup_from_db(db_fname):
     del values['yaml']
 
     tmpfiles = []
+    backup_tempdir = tempfile.tempdir
+    tempfile.tempdir = tmpdir
 
     try:
 
@@ -140,6 +144,9 @@ def restore_setup_from_db(db_fname):
         for fname in tmpfiles:
             os.unlink(fname)
         raise e
+
+    finally:
+        tempfile.tempdir = backup_tempdir
 
     return d, tmpfiles
 
@@ -417,7 +424,10 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
                             mol = AllChem.AssignBondOrdersFromTemplate(ref_mol, mol3d)
                             Chem.AssignStereochemistryFrom3D(mol)  # not sure whether it is necessary
                             output_data_mol.append((cansmi, Chem.MolToMolBlock(mol), mol_id, stereo_id))
-                        except ValueError:
+                        except:
+                            traceback.print_exc()
+                            sys.stderr.write(f'EASYDOCK ERROR: {mol_id}, 3D geomery could not be re-created after '
+                                             f'protonation. The molecule was skipped.\n')
                             continue
 
             finally:
