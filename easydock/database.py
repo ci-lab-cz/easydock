@@ -121,10 +121,13 @@ def restore_setup_from_db(db_fname, tmpdir=None):
             if colname == 'config':
                 continue
             if colname in list(d.keys()):
-                suffix = '.' + d[colname].rsplit('.', 1)[1]
-                tmppath = tempfile.mkstemp(suffix=suffix, text=True)
-                d[colname] = tmppath[1]
-                tmpfiles.append(tmppath[1])
+                if d[colname] is not None:
+                    suffix = '.' + d[colname].rsplit('.', 1)[1]
+                    tmppath = tempfile.mkstemp(suffix=suffix, text=True)
+                    d[colname] = tmppath[1]
+                    tmpfiles.append(tmppath[1])
+                else:
+                    continue  # skip empty fields (e.g. protein_h)
             elif colname in c.keys():
                 suffix = '.' + c[colname].rsplit('.', 1)[1]
                 tmppath = tempfile.mkstemp(suffix=suffix, text=True)
