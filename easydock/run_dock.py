@@ -11,7 +11,7 @@ from multiprocessing import Pool
 from rdkit import Chem
 from rdkit.Chem.rdMolDescriptors import CalcNumRotatableBonds
 from easydock.database import create_db, restore_setup_from_db, init_db, update_db, save_sdf, select_mols_to_dock, \
-    add_protonation
+    add_protonation, populate_setup_db
 from easydock.preparation_for_docking import cpu_type, filepath_type
 
 
@@ -131,17 +131,23 @@ def main():
                                                  'will be ignored with the exception of hostfile, dask_report, ncpu '
                                                  'and verbose.',
                                      formatter_class=RawTextArgumentDefaultsHelpFormatter)
-    parser.add_argument('-i', '--input', metavar='FILENAME', required=False, type=filepath_type,
+    input_output_group = parser.add_argument_group('Input/output files')
+    init_group = parser.add_argument_group('Initialization parameters')
+    docking_group = parser.add_argument_group('docking parameter groups')
+    dock_n_init_group = parser.add_argument_group('Applicable for both docking and initialization parameters')
+    
+    input_output_group.add_argument('-i', '--input', metavar='FILENAME', required=False, type=filepath_type,
                         help='input file with molecules (SMI, SDF, SDF.GZ, PKL). Maybe be omitted if output DB was '
                              'previosuly created. In this case calculations will be continued from the interrupted '
                              'point.')
-    parser.add_argument('-o', '--output', metavar='FILENAME', required=True, type=filepath_type,
+    input_output_group.add_argument('-o', '--output', metavar='FILENAME', required=True, type=filepath_type,
                         help='output SQLite DB with scores and poses in PDBQT and MOL formats. It also stores '
                              'other information (input structures, protein pdbqt file and grid box config). '
                              'If output DB exists all other inputs will be ignored and calculations will be continued.')
-    parser.add_argument('--program', metavar='STRING', required=False, choices=['vina', 'gnina'],
+
+    docking_group.add_argument('--program', metavar='STRING', required=False, choices=['vina', 'gnina'],
                         help='name of a docking program. Choices: vina, gnina')
-    parser.add_argument('--config', metavar='FILENAME', required=False, type=filepath_type,
+    docking_group.add_argument('--config', metavar='FILENAME', required=False, type=filepath_type,
                         help='YAML file with parameters used by docking program.\n'
                              'vina.yml\n'
                              'protein: path to pdbqt file with a protein\n'
@@ -150,30 +156,32 @@ def main():
                              'n_poses: 10\n'
                              'seed: -1\n'
                              'gnina.yml\n')
-    parser.add_argument('-s', '--max_stereoisomers', metavar='INTEGER', type=int, required=False, default=1,
+
+    init_group.add_argument('-s', '--max_stereoisomers', metavar='INTEGER', type=int, required=False, default=1,
                         help='maximum number of isomers to enumerate. The default is set to 1.')
-    parser.add_argument('--protonation', default=None, required=False, choices=['chemaxon', 'pkasolver'],
+    init_group.add_argument('--protonation', default=None, required=False, choices=['chemaxon', 'pkasolver'],
                         help='choose a protonation program supported by EasyDock.')
-    parser.add_argument('--no_tautomerization', action='store_true', default=False,
+    init_group.add_argument('--no_tautomerization', action='store_true', default=False,
                         help='disable tautomerization of molecules during protonation (applicable to chemaxon only).')
-    parser.add_argument('--sdf', action='store_true', default=False,
+    docking_group.add_argument('--sdf', action='store_true', default=False,
                         help='save best docked poses to SDF file with the same name as output DB.')
-    parser.add_argument('--hostfile', metavar='FILENAME', required=False, type=filepath_type, default=None,
+    init_group.add_argument('--hostfile', metavar='FILENAME', required=False, type=filepath_type, default=None,
                         help='text file with addresses of nodes of dask SSH cluster. The most typical, it can be '
                              'passed as $PBS_NODEFILE variable from inside a PBS script. The first line in this file '
                              'will be the address of the scheduler running on the standard port 8786. If omitted, '
                              'calculations will run on a single machine as usual.')
-    parser.add_argument('--dask_report', default=False, type=filepath_type,
+    docking_group.add_argument('--dask_report', default=False, type=filepath_type,
                         help='save Dask report to HTML file. It will have the same name as the output database.')
-    parser.add_argument('--tmpdir', metavar='DIRNAME', required=False, type=filepath_type, default=None,
+    docking_group.add_argument('--tmpdir', metavar='DIRNAME', required=False, type=filepath_type, default=None,
                         help='path to a dir where to store temporary setup files accessible to a program. '
                              'Normally should be used if calculations with dask have to be continued,')
-    parser.add_argument('--prefix', metavar='STRING', required=False, type=str, default=None,
+    init_group.add_argument('--prefix', metavar='STRING', required=False, type=str, default=None,
                         help='prefix which will be added to all molecule names. This might be useful if multiple '
                              'repeated runs are made which will be analyzed together.')
-    parser.add_argument('-c', '--ncpu', default=1, type=cpu_type,
+    
+    dock_n_init_group.add_argument('-c', '--ncpu', default=1, type=cpu_type,
                         help='number of cpus. This affects only docking on a single server.')
-    parser.add_argument('-v', '--verbose', action='store_true', default=False,
+    docking_group.add_argument('-v', '--verbose', action='store_true', default=False,
                         help='print progress to STDERR.')
     # parser.add_argument('--table_name', metavar='STRING', required=False, default='mols',
     #                     help='name of the main table in a database.')
@@ -181,7 +189,7 @@ def main():
     args = parser.parse_args()
     supplied_args = get_supplied_args(parser)
     # allow update of only given arguments
-    allowed_args = ['output', 'hostfile', 'dask_report', 'ncpu', 'verbose']
+    allowed_args = ['output', 'hostfile', 'dask_report', 'ncpu', 'verbose', 'config', 'program']
     supplied_args = tuple(arg for arg in supplied_args if arg in allowed_args)
 
     if args.tmpdir is None and args.hostfile is not None and os.path.isfile(args.output):
@@ -215,39 +223,41 @@ def main():
         else:
             print('protonation skipped')    
 
-        if args.program == 'vina':
-            from easydock.vina_dock import mol_dock, pred_dock_time
-        elif args.program == 'gnina':
-            from easydock.gnina_dock import mol_dock
-            from easydock.vina_dock import pred_dock_time
-        else:
-            raise ValueError(f'Illegal program argument was supplied: {args.program}')
+        if args.config:
+            populate_setup_db(args.output, args)
+            if args.program == 'vina':
+                from easydock.vina_dock import mol_dock, pred_dock_time
+            elif args.program == 'gnina':
+                from easydock.gnina_dock import mol_dock
+                from easydock.vina_dock import pred_dock_time
+            else:
+                raise ValueError(f'Illegal program argument was supplied: {args.program}')
 
-        if args.dask_report:
-            dask_report_fname = os.path.splitext(args.output)[0] + '.html'
-        else:
-            dask_report_fname = None
+            if args.dask_report:
+                dask_report_fname = os.path.splitext(args.output)[0] + '.html'
+            else:
+                dask_report_fname = None
 
-        with sqlite3.connect(args.output, timeout=60) as conn:
-            mols = select_mols_to_dock(conn)
-            i = 0
-            for i, (mol_id, res) in enumerate(docking(mols,
-                                                      dock_func=mol_dock,
-                                                      dock_config=args.config,
-                                                      priority_func=pred_dock_time,
-                                                      ncpu=args.ncpu,
-                                                      dask_client=dask_client,
-                                                      dask_report_fname=dask_report_fname),
-                                              1):
-                if res:
-                    update_db(conn, mol_id, res)
-                if args.verbose and i % 100 == 0:
-                    sys.stderr.write(f'\r{i} molecules were processed')
-            if args.verbose:
-                sys.stderr.write(f'\n{i} molecules were processed\n')
+            with sqlite3.connect(args.output, timeout=60) as conn:
+                mols = select_mols_to_dock(conn)
+                i = 0
+                for i, (mol_id, res) in enumerate(docking(mols,
+                                                        dock_func=mol_dock,
+                                                        dock_config=args.config,
+                                                        priority_func=pred_dock_time,
+                                                        ncpu=args.ncpu,
+                                                        dask_client=dask_client,
+                                                        dask_report_fname=dask_report_fname),
+                                                1):
+                    if res:
+                        update_db(conn, mol_id, res)
+                    if args.verbose and i % 100 == 0:
+                        sys.stderr.write(f'\r{i} molecules were processed')
+                if args.verbose:
+                    sys.stderr.write(f'\n{i} molecules were processed\n')
 
-        if args.sdf:
-            save_sdf(args.output)
+            if args.sdf:
+                save_sdf(args.output)
 
     finally:
 
