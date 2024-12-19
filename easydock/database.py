@@ -66,9 +66,29 @@ def create_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', '
                          'duplicated. Please fix this.\n')
 
     sql = f"CREATE TABLE setup ({', '.join(v + ' TEXT' for v in args_fields)})"
+
     cur.execute(sql)
     conn.commit()
 
+    d = deepcopy(args.__dict__)
+    values = [yaml.safe_dump(d)]
+    for v in args_to_save:
+        if d[v] is not None:
+            values.append(open(d[v]).read())
+        else:
+            values.append(None)
+
+    if args_to_save:
+        cur.execute(f"INSERT INTO setup (yaml, {','.join(args_to_save)}) VALUES (?, {','.join('?' * len(args_to_save))})", values)
+    else:
+        cur.execute(f"INSERT INTO setup (yaml) VALUES (?)", values)
+        
+    conn.commit()
+    conn.close()
+
+def populate_setup_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', 'protein_setup')):
+    conn = sqlite3.connect(db_fname)
+    cur = conn.cursor()
     d = deepcopy(args.__dict__)
     values = [yaml.safe_dump(d), open(d['config']).read()]
 
@@ -85,6 +105,8 @@ def create_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', '
         else:
             values.append(None)
 
+    cur.execute(f'DELETE FROM setup')
+    conn.commit()
     cur.execute(f"INSERT INTO setup VALUES ({','.join('?' * len(values))})", values)
     conn.commit()
 
@@ -107,7 +129,10 @@ def restore_setup_from_db(db_fname, tmpdir=None):
     conn.close()
 
     d = yaml.safe_load(values['yaml'])
-    c = yaml.safe_load(values['config'])
+    try:
+        c = yaml.safe_load(values['config'])
+    except AttributeError:
+        c = {}
 
     del values['yaml']
 
@@ -118,13 +143,16 @@ def restore_setup_from_db(db_fname, tmpdir=None):
     try:
 
         for colname, value in values.items():
-            if colname == 'config':
+            if colname in ['config', 'protein', 'protein_setup']:
                 continue
             if colname in list(d.keys()):
-                suffix = '.' + d[colname].rsplit('.', 1)[1]
-                tmppath = tempfile.mkstemp(suffix=suffix, text=True)
-                d[colname] = tmppath[1]
-                tmpfiles.append(tmppath[1])
+                if d[colname] is not None:
+                    suffix = '.' + d[colname].rsplit('.', 1)[1]
+                    tmppath = tempfile.mkstemp(suffix=suffix, text=True)
+                    d[colname] = tmppath[1]
+                    tmpfiles.append(tmppath[1])
+                else:
+                    continue  # skip empty fields (e.g. protein_h)
             elif colname in c.keys():
                 suffix = '.' + c[colname].rsplit('.', 1)[1]
                 tmppath = tempfile.mkstemp(suffix=suffix, text=True)
@@ -134,11 +162,12 @@ def restore_setup_from_db(db_fname, tmpdir=None):
                 raise KeyError(f'During loading no relevant argument name was found to match the loading field name: {colname}')
             open(tmppath[1], 'wt').write(value)
 
-        tmppath = tempfile.mkstemp(suffix='.yml', text=True)
-        d['config'] = tmppath[1]
-        tmpfiles.append(tmppath[1])
-        with open(tmppath[1], 'wt') as f:
-            yaml.safe_dump(c, f)
+        if c:
+            tmppath = tempfile.mkstemp(suffix='.yml', text=True)
+            d['config'] = tmppath[1]
+            tmpfiles.append(tmppath[1])
+            with open(tmppath[1], 'wt') as f:
+                yaml.safe_dump(c, f)
 
     except Exception as e:
         for fname in tmpfiles:

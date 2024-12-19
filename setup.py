@@ -28,5 +28,6 @@ setuptools.setup(
     },
     entry_points={'console_scripts':
                       ['run_dock = easydock.run_dock:main',
-                       'get_sdf_from_dock_db = easydock.get_sdf_from_dock_db:main']}
+                       'get_sdf_from_dock_db = easydock.get_sdf_from_dock_db:main',
+                       'make_clean_copy = easydock.make_clean_copy:main']}
 )
