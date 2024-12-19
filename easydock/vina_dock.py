@@ -75,66 +75,51 @@ def mol_dock(mol, config):
 
     config = __parse_config(config)
 
-
-    
     mol_id = mol.GetProp('_Name')
-    ligand_pdbqt_list = ligand_preparation(mol, boron_replacement=True)
-
-    if ligand_pdbqt_list is None:
+    ligand_pdbqt = ligand_preparation(mol, boron_replacement=True)
+    if ligand_pdbqt is None:
         return mol_id, None
 
-    dock_output_conformer_list = []
-    start_time = timeit.default_timer()
-    for ligand_pdbqt in ligand_pdbqt_list:
-        output_fd, output_fname = tempfile.mkstemp(suffix='_output.json', text=True)
-        ligand_fd, ligand_fname = tempfile.mkstemp(suffix='_ligand.pdbqt', text=True)
+    output_fd, output_fname = tempfile.mkstemp(suffix='_output.json', text=True)
+    ligand_fd, ligand_fname = tempfile.mkstemp(suffix='_ligand.pdbqt', text=True)
 
-        try:
-            with open(ligand_fname, 'wt') as f:
-                f.write(ligand_pdbqt)
+    try:
+        with open(ligand_fname, 'wt') as f:
+            f.write(ligand_pdbqt)
 
-            p = os.path.realpath(__file__)
-            python_exec = sys.executable
-            cmd = f'{python_exec} {os.path.dirname(p)}/vina_dock_cli.py -l {ligand_fname} -p {config["protein"]} ' \
-                f'-o {output_fname} --center {" ".join(map(str, config["center"]))} ' \
-                f'--box_size {" ".join(map(str, config["box_size"]))} ' \
-                f'-e {config["exhaustiveness"]} --seed {config["seed"]} --nposes {config["n_poses"]} -c {config["ncpu"]}'
-            subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)  # this will trigger CalledProcessError and skip next lines)
+        p = os.path.realpath(__file__)
+        python_exec = sys.executable
+        cmd = f'{python_exec} {os.path.dirname(p)}/vina_dock_cli.py -l {ligand_fname} -p {config["protein"]} ' \
+              f'-o {output_fname} --center {" ".join(map(str, config["center"]))} ' \
+              f'--box_size {" ".join(map(str, config["box_size"]))} ' \
+              f'-e {config["exhaustiveness"]} --seed {config["seed"]} --nposes {config["n_poses"]} -c {config["ncpu"]}'
+        start_time = timeit.default_timer()
+        subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)  # this will trigger CalledProcessError and skip next lines)
+        dock_time = round(timeit.default_timer() - start_time, 1)
 
-            with open(output_fname) as f:
-                res = f.read()
-                if res:
-                    res = json.loads(res)
-                    mol_block = pdbqt2molblock(res['poses'].split('MODEL')[1], mol, mol_id)
-                    output = {'docking_score': res['docking_score'],
-                            'pdb_block': res['poses'],
-                            'mol_block': mol_block}
-                    
-                    dock_output_conformer_list.append(output)
-            
-        except subprocess.CalledProcessError as e:
-            sys.stderr.write(f'Error caused by docking of {mol_id}\n')
-            sys.stderr.write(str(e) + '\n')
-            sys.stderr.write('STDERR output:\n')
-            sys.stderr.write(e.stderr + '\n')
-            sys.stderr.flush()
+        with open(output_fname) as f:
+            res = f.read()
+            if res:
+                res = json.loads(res)
+                mol_block = pdbqt2molblock(res['poses'].split('MODEL')[1], mol, mol_id)
+                output = {'docking_score': res['docking_score'],
+                          'pdb_block': res['poses'],
+                          'mol_block': mol_block,
+                          'dock_time': dock_time}
 
-        finally:
-            os.close(output_fd)
-            os.close(ligand_fd)
-            os.unlink(ligand_fname)
-            os.unlink(output_fname)
+    except subprocess.CalledProcessError as e:
+        sys.stderr.write(f'Error caused by docking of {mol_id}\n')
+        sys.stderr.write(str(e) + '\n')
+        sys.stderr.write('STDERR output:\n')
+        sys.stderr.write(e.stderr + '\n')
+        sys.stderr.flush()
+        output = None
 
-    dock_time = round(timeit.default_timer() - start_time, 1)
-    print(f'[For Testing Only Sanity check]: There are {len(dock_output_conformer_list)} {mol_id} conformers that has been docked')
-    print(f'\n')
-    docking_score_list = [float(conformer_output['docking_score']) for conformer_output in dock_output_conformer_list]
-
-    if not docking_score_list:
-        return mol_id, None
-    
-    output = dock_output_conformer_list[docking_score_list.index(min(docking_score_list))]
-    output['dock_time'] = dock_time
+    finally:
+        os.close(output_fd)
+        os.close(ligand_fd)
+        os.unlink(ligand_fname)
+        os.unlink(output_fname)
 
     return mol_id, output
 
