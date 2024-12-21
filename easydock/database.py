@@ -91,8 +91,10 @@ def populate_setup_db(db_fname, args, args_to_save=(), config_args_to_save=('pro
     cur = conn.cursor()
     d = deepcopy(args.__dict__)
     values = [yaml.safe_dump(d), open(d['config']).read()]
+    update_sql_line = 'UPDATE setup SET yaml = ?, config = ?, '
 
     for v in args_to_save:
+        update_sql_line += v + ' = ?, '
         if d[v] is not None:
             values.append(open(d[v]).read())
         else:
@@ -100,14 +102,14 @@ def populate_setup_db(db_fname, args, args_to_save=(), config_args_to_save=('pro
 
     config_dict = yaml.safe_load(open(args.config))
     for v in config_args_to_save:
+        update_sql_line += v + ' = ?, '
         if config_dict[v] is not None:
             values.append(open(config_dict[v]).read())
         else:
             values.append(None)
 
-    cur.execute(f'DELETE FROM setup')
-    conn.commit()
-    cur.execute(f"INSERT INTO setup VALUES ({','.join('?' * len(values))})", values)
+    update_sql_line = update_sql_line[:-2] + ' WHERE config IS NULL'
+    cur.execute(update_sql_line, values)
     conn.commit()
 
     conn.close()
@@ -143,7 +145,7 @@ def restore_setup_from_db(db_fname, tmpdir=None):
     try:
 
         for colname, value in values.items():
-            if colname in ['config', 'protein', 'protein_setup']:
+            if colname in ['config'] or value is None:
                 continue
             if colname in list(d.keys()):
                 if d[colname] is not None:
