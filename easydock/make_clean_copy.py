@@ -1,13 +1,13 @@
 import sqlite3
-import os
 import argparse
+import shutil
 from easydock.preparation_for_docking import filepath_type
 
 class RawTextArgumentDefaultsHelpFormatter(argparse.RawTextHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
     pass
 
 def create_clean_db_copy(db_fname, new_db_fname):
-    os.system(f'cp {db_fname} {new_db_fname}')
+    shutil.copyfile(db_fname, new_db_fname)
     conn = sqlite3.connect(new_db_fname)
     cur = conn.cursor()
     cur.execute(f"""UPDATE mols SET docking_score = NULL,
