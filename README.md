@@ -199,6 +199,13 @@ Please pay attention for `--ncpu` argument if you use `--protonation pkasolver`.
 
 ### Changelog
 
+**0.3.2**
+- catch and report all exceptions when reconstruct 3D geometry of protonated molecules
+- support of temporary directories [#26](https://github.com/ci-lab-cz/easydock/issues/26) [#36](https://github.com/ci-lab-cz/easydock/pull/36)
+- speed up pkasolver [#39](https://github.com/ci-lab-cz/easydock/pull/39) [#35](https://github.com/ci-lab-cz/easydock/issues/35)
+- stereo_id column default value set to 0
+- fix reading setup table if some fields are empty
+
 **0.3.1**
 - add pkasolver as a protonation tool ([@Feriolet](https://github.com/Feriolet)) [#17](https://github.com/ci-lab-cz/easydock/issues/17)
 - add preparation step which tries to strip salts [#30](https://github.com/ci-lab-cz/easydock/issues/30)
