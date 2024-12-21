@@ -133,8 +133,8 @@ def main():
                                      formatter_class=RawTextArgumentDefaultsHelpFormatter)
     input_output_group = parser.add_argument_group('Input/output files')
     init_group = parser.add_argument_group('Initialization parameters')
-    docking_group = parser.add_argument_group('docking parameter groups')
-    dock_n_init_group = parser.add_argument_group('Applicable for both docking and initialization parameters')
+    docking_group = parser.add_argument_group('Docking parameters')
+    common_argument_group = parser.add_argument_group('Common parameters for both docking and initialization)')
     
     input_output_group.add_argument('-i', '--input', metavar='FILENAME', required=False, type=filepath_type,
                         help='input file with molecules (SMI, SDF, SDF.GZ, PKL). Maybe be omitted if output DB was '
@@ -165,7 +165,7 @@ def main():
                         help='disable tautomerization of molecules during protonation (applicable to chemaxon only).')
     docking_group.add_argument('--sdf', action='store_true', default=False,
                         help='save best docked poses to SDF file with the same name as output DB.')
-    init_group.add_argument('--hostfile', metavar='FILENAME', required=False, type=filepath_type, default=None,
+    docking_group.add_argument('--hostfile', metavar='FILENAME', required=False, type=filepath_type, default=None,
                         help='text file with addresses of nodes of dask SSH cluster. The most typical, it can be '
                              'passed as $PBS_NODEFILE variable from inside a PBS script. The first line in this file '
                              'will be the address of the scheduler running on the standard port 8786. If omitted, '
@@ -179,9 +179,9 @@ def main():
                         help='prefix which will be added to all molecule names. This might be useful if multiple '
                              'repeated runs are made which will be analyzed together.')
     
-    dock_n_init_group.add_argument('-c', '--ncpu', default=1, type=cpu_type,
+    common_argument_group.add_argument('-c', '--ncpu', default=1, type=cpu_type,
                         help='number of cpus. This affects only docking on a single server.')
-    docking_group.add_argument('-v', '--verbose', action='store_true', default=False,
+    common_argument_group.add_argument('-v', '--verbose', action='store_true', default=False,
                         help='print progress to STDERR.')
     # parser.add_argument('--table_name', metavar='STRING', required=False, default='mols',
     #                     help='name of the main table in a database.')
