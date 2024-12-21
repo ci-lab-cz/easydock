@@ -16,8 +16,20 @@ def create_clean_db_copy(db_fname, new_db_fname):
                                     dock_time = NULL,
                                     time = NULL   """)
     conn.commit()
+
+    res = cur.execute('SELECT * FROM setup')
+    removed_colnames = [d[0] for d in res.description if d[0] != 'yaml']
+    remove_col_sql_line = 'UPDATE setup SET '
+    for colnames in removed_colnames:
+        remove_col_sql_line += colnames + ' = NULL, '
+    remove_col_sql_line = remove_col_sql_line[:-2]
+
+    cur.execute(remove_col_sql_line)
+    conn.commit()    
     cur.execute(f'VACUUM')
     conn.commit()
+
+    conn.close()
 
 def main():
     parser = argparse.ArgumentParser(description='Create a clean copy of docked database file to be reused for another program or protein target'
