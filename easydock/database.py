@@ -89,28 +89,30 @@ def create_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', '
 def populate_setup_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', 'protein_setup')):
     conn = sqlite3.connect(db_fname)
     cur = conn.cursor()
-    d = deepcopy(args.__dict__)
-    values = [yaml.safe_dump(d), open(d['config']).read()]
-    update_sql_line = 'UPDATE setup SET yaml = ?, config = ?, '
+    
+    if cur.execute('SELECT config FROM setup').fetchone()[0] is None:
+        d = deepcopy(args.__dict__)
+        values = [yaml.safe_dump(d), open(d['config']).read()]
+        update_sql_line = 'UPDATE setup SET yaml = ?, config = ?, '
 
-    for v in args_to_save:
-        update_sql_line += v + ' = ?, '
-        if d[v] is not None:
-            values.append(open(d[v]).read())
-        else:
-            values.append(None)
+        for v in args_to_save:
+            update_sql_line += v + ' = ?, '
+            if d[v] is not None:
+                values.append(open(d[v]).read())
+            else:
+                values.append(None)
 
-    config_dict = yaml.safe_load(open(args.config))
-    for v in config_args_to_save:
-        update_sql_line += v + ' = ?, '
-        if config_dict[v] is not None:
-            values.append(open(config_dict[v]).read())
-        else:
-            values.append(None)
+        config_dict = yaml.safe_load(open(args.config))
+        for v in config_args_to_save:
+            update_sql_line += v + ' = ?, '
+            if config_dict[v] is not None:
+                values.append(open(config_dict[v]).read())
+            else:
+                values.append(None)
 
-    update_sql_line = update_sql_line[:-2] + ' WHERE config IS NULL'
-    cur.execute(update_sql_line, values)
-    conn.commit()
+        update_sql_line = update_sql_line[:-2] + ' WHERE config IS NULL'
+        cur.execute(update_sql_line, values)
+        conn.commit()
 
     conn.close()
 
