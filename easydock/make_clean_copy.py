@@ -18,13 +18,11 @@ def create_clean_db_copy(db_fname, new_db_fname):
     conn.commit()
 
     res = cur.execute('SELECT * FROM setup')
-    removed_colnames = [d[0] for d in res.description if d[0] != 'yaml']
-    remove_col_sql_line = 'UPDATE setup SET '
-    for colnames in removed_colnames:
-        remove_col_sql_line += colnames + ' = NULL, '
-    remove_col_sql_line = remove_col_sql_line[:-2]
+    remove_colnames = [d[0] for d in res.description if d[0] != 'yaml']
+    sql = 'UPDATE setup SET ' +  ','.join(f'{item} = NULL' for item in remove_colnames)
+    sql = sql[:-2]
 
-    cur.execute(remove_col_sql_line)
+    cur.execute(sql)
     conn.commit()    
     cur.execute(f'VACUUM')
     conn.commit()
