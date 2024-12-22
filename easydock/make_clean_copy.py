@@ -20,7 +20,6 @@ def create_clean_db_copy(db_fname, new_db_fname):
     res = cur.execute('SELECT * FROM setup')
     remove_colnames = [d[0] for d in res.description if d[0] != 'yaml']
     sql = 'UPDATE setup SET ' +  ','.join(f'{item} = NULL' for item in remove_colnames)
-    sql = sql[:-2]
 
     cur.execute(sql)
     conn.commit()    
