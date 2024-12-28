@@ -261,6 +261,7 @@ def init_db(db_fname: str, input_fname: str, ncpu: int, max_stereoisomers=1, pre
         from itertools import islice
         mol_input = islice(mol_input, last_index, None)
 
+    #chunks based on cpu number
     for chunk in split_generator_to_chunks(mol_input, ncpu):
         data_smi = []  # non 3D structures
         data_mol = []  # 3D structures
