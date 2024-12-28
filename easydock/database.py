@@ -5,6 +5,7 @@ import tempfile
 import traceback
 from copy import deepcopy
 from functools import partial
+from math import ceil
 from multiprocessing import Pool
 from typing import Optional, Union
 
@@ -233,6 +234,19 @@ def generate_init_data(mol_input: tuple[Chem.Mol, str], max_stereoisomers: int, 
             isomer_list.append(['smi', (mol_name, stereo_id, smi_input, smi)])
         return isomer_list
 
+def split_generator_to_chunks(generator, chunk_size):
+    """Yield successive chunks from a generator"""
+    chunk = []
+
+    for item in generator:
+        if len(chunk) >= chunk_size:
+            yield chunk
+            chunk = [item]
+        else:
+            chunk.append(item)
+
+    if chunk:
+        yield chunk
 
 def init_db(db_fname: str, input_fname: str, ncpu: int, max_stereoisomers=1, prefix: str=None):
     Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
@@ -240,23 +254,29 @@ def init_db(db_fname: str, input_fname: str, ncpu: int, max_stereoisomers=1, pre
     pool = Pool(processes=ncpu)
     conn = sqlite3.connect(db_fname)
     cur = conn.cursor()
-    data_smi = []  # non 3D structures
-    data_mol = []  # 3D structures
-    load_data_params = partial(generate_init_data, max_stereoisomers=max_stereoisomers, prefix=prefix)
-    data_list = pool.map(load_data_params, read_input.read_input(input_fname), chunksize=1)
+    mol_input = read_input.read_input(input_fname)
 
-    for item in data_list:
-        if item is not None:
-            for input_format, data in item:
-                if input_format == 'smi':
-                    data_smi.append(data)
-                elif input_format == 'mol':
-                    data_mol.append(data)
+    last_index = cur.execute('SELECT COUNT(smi_input) FROM mols WHERE (stereo_id = 0 OR stereo_id IS NULL)').fetchone()[0]
+    if last_index:        
+        from itertools import islice
+        mol_input = islice(mol_input, last_index, None)
 
-    cur.executemany(f'INSERT INTO mols (id, stereo_id, smi_input, smi) VALUES(?, ?, ?, ?)', data_smi)
-    cur.executemany(f'INSERT INTO mols (id, stereo_id, smi, source_mol_block_input, source_mol_block) VALUES(?, ?, ?, ?, ?)', data_mol)
-    conn.commit()
+    for chunk in split_generator_to_chunks(mol_input, ncpu):
+        data_smi = []  # non 3D structures
+        data_mol = []  # 3D structures
+        load_data_params = partial(generate_init_data, max_stereoisomers=max_stereoisomers, prefix=prefix)
+        data_list = pool.map(load_data_params, chunk, chunksize=1)
+        for item in data_list:
+            if item is not None:
+                for input_format, data in item:
+                    if input_format == 'smi':
+                        data_smi.append(data)
+                    elif input_format == 'mol':
+                        data_mol.append(data)
 
+        cur.executemany(f'INSERT INTO mols (id, stereo_id, smi_input, smi) VALUES(?, ?, ?, ?)', data_smi)
+        cur.executemany(f'INSERT INTO mols (id, stereo_id, smi, source_mol_block_input, source_mol_block) VALUES(?, ?, ?, ?, ?)', data_mol)
+        conn.commit()
 
 def get_protonation_arg_value(db_conn):
     """

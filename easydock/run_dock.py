@@ -201,10 +201,6 @@ def main():
 
         if not os.path.isfile(args.output):
             create_db(args.output, args)
-            start_init = time.time()
-            init_db(args.output, args.input, args.ncpu, args.max_stereoisomers, args.prefix)
-            end_init = time.time()
-            print(f'initializing database done in {(end_init - start_init):.2f}s', flush=True)
         else:
             args_dict, tmpfiles = restore_setup_from_db(args.output, args.tmpdir)
             # this will ignore stored values of those args which were supplied via command line
@@ -213,6 +209,10 @@ def main():
                 del args_dict[arg]
             args.__dict__.update(args_dict)
 
+        start_init = time.time()
+        init_db(args.output, args.input, args.ncpu, args.max_stereoisomers, args.prefix)
+        end_init = time.time()
+        print(f'initializing database done in {(end_init - start_init):.2f}s', flush=True)
         dask_client = create_dask_client(args.hostfile)
 
         if args.protonation:
