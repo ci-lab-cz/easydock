@@ -184,7 +184,34 @@ def restore_setup_from_db(db_fname, tmpdir=None):
 
     return d, tmpfiles
 
+import signal
+import functools
 
+#https://stackoverflow.com/questions/75928586/how-to-stop-the-execution-of-a-function-in-python-after-a-certain-time/75928879#75928879
+def timeout(seconds=5, default=None):
+
+    def decorator(func):
+
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+
+            def handle_timeout(signum, frame):
+                raise TimeoutError()
+
+            signal.signal(signal.SIGALRM, handle_timeout)
+            signal.alarm(seconds)
+
+            result = func(*args, **kwargs)
+
+            signal.alarm(0)
+
+            return result
+
+        return wrapper
+
+    return decorator
+
+@timeout(seconds=300, default=None)
 def get_isomers(mol, max_stereoisomers=1):
     opts = StereoEnumerationOptions(tryEmbedding=True, maxIsomers=max_stereoisomers, rand=0xf00d)
     # this is a workaround for rdkit issue - if a double bond has STEREOANY it will cause errors at
@@ -196,6 +223,7 @@ def get_isomers(mol, max_stereoisomers=1):
             if bond.GetStereo() == Chem.BondStereo.STEREOANY:
                 bond.SetStereo(Chem.BondStereo.STEREONONE)
         isomers = tuple(EnumerateStereoisomers(mol,options=opts))
+    
     return isomers
 
 
@@ -228,10 +256,13 @@ def generate_init_data(mol_input: tuple[Chem.Mol, str], max_stereoisomers: int, 
 
     else:
         isomer_list = []
-        isomers = get_isomers(mol, max_stereoisomers)
-        for stereo_id, stereo_mol in enumerate(isomers):
-            smi = Chem.MolToSmiles(stereo_mol, isomericSmiles=True)
-            isomer_list.append(['smi', (mol_name, stereo_id, smi_input, smi)])
+        try:
+            isomers = get_isomers(mol, max_stereoisomers)
+            for stereo_id, stereo_mol in enumerate(isomers):
+                smi = Chem.MolToSmiles(stereo_mol, isomericSmiles=True)
+                isomer_list.append(['smi', (mol_name, stereo_id, smi_input, smi)])
+        except TimeoutError:
+            isomer_list.append(['smi', (mol_name, 0, smi_input, None)])
         return isomer_list
 
 def split_generator_to_chunks(generator, chunk_size):
