@@ -217,9 +217,9 @@ def generate_init_data(mol_input: tuple[Chem.Mol, str], max_stereoisomers: int, 
             sys.stderr.write(f'EASYDOCK Warning: molecule {mol.GetProp("_Name")} will be skipped for docking, '
                              f'because it has multiple components which could not be fixed by SaltRemover\n')
             if mol_is_3d(mol):
-                return [['mol', (mol_name, None, None, Chem.MolToMolBlock(mol_input), None)]]
+                return [['mol', (mol_name, 0, None, Chem.MolToMolBlock(mol_input), None)]]
             else:
-                return [['smi', (mol_name, None, smi_input, None)]]
+                return [['smi', (mol_name, 0, smi_input, None)]]
         sys.stderr.write(f'EASYDOCK Warning: molecule {mol.GetProp("_Name")}, salts were stripped\n')
         
     if mol_is_3d(mol):
@@ -256,7 +256,7 @@ def init_db(db_fname: str, input_fname: str, ncpu: int, max_stereoisomers=1, pre
     cur = conn.cursor()
     mol_input = read_input.read_input(input_fname)
 
-    last_index = cur.execute('SELECT COUNT(smi_input) FROM mols WHERE (stereo_id = 0 OR stereo_id IS NULL)').fetchone()[0]
+    last_index = cur.execute('SELECT COUNT(smi_input) FROM mols WHERE (stereo_id = 0)').fetchone()[0]
     if last_index:        
         from itertools import islice
         mol_input = islice(mol_input, last_index, None)
