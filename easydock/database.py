@@ -310,6 +310,14 @@ def init_db(db_fname: str, input_fname: str, ncpu: int, max_stereoisomers=1, pre
         cur.executemany(f'INSERT INTO mols (id, stereo_id, smi, source_mol_block_input, source_mol_block) VALUES(?, ?, ?, ?, ?)', data_mol)
         conn.commit()
 
+def check_init_status_db(db_fname: str, db_col_list: str):
+    conn = sqlite3.connect(db_fname)
+    cur = conn.cursor()
+    if cur.execute('SELECT * FROM mols WHERE ' + 'OR '.join(f'{item} IS NOT NULL ' for item in db_col_list)).fetchone() is None:
+        return False
+    else:
+        return True
+    
 def get_protonation_arg_value(db_conn):
     """
     Returns True if molecules have to be protonated and False otherwise
