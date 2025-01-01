@@ -12,7 +12,7 @@ from typing import Optional, Union
 import yaml
 from easydock import read_input
 from easydock.preparation_for_docking import mol_is_3d
-from easydock.auxiliary import take, mol_name_split, empty_func, empty_generator
+from easydock.auxiliary import take, mol_name_split, empty_func, empty_generator, timeout
 from easydock.protonation import protonate_chemaxon, read_protonate_chemaxon, protonate_dimorphite, read_smiles, protonate_pkasolver
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -184,33 +184,6 @@ def restore_setup_from_db(db_fname, tmpdir=None):
 
     return d, tmpfiles
 
-import signal
-import functools
-
-#https://stackoverflow.com/questions/75928586/how-to-stop-the-execution-of-a-function-in-python-after-a-certain-time/75928879#75928879
-def timeout(seconds=5, default=None):
-
-    def decorator(func):
-
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-
-            def handle_timeout(signum, frame):
-                raise TimeoutError()
-
-            signal.signal(signal.SIGALRM, handle_timeout)
-            signal.alarm(seconds)
-
-            result = func(*args, **kwargs)
-
-            signal.alarm(0)
-
-            return result
-
-        return wrapper
-
-    return decorator
-
 @timeout(seconds=300, default=None)
 def get_isomers(mol, max_stereoisomers=1):
     opts = StereoEnumerationOptions(tryEmbedding=True, maxIsomers=max_stereoisomers, rand=0xf00d)
@@ -310,13 +283,13 @@ def init_db(db_fname: str, input_fname: str, ncpu: int, max_stereoisomers=1, pre
         cur.executemany(f'INSERT INTO mols (id, stereo_id, smi, source_mol_block_input, source_mol_block) VALUES(?, ?, ?, ?, ?)', data_mol)
         conn.commit()
 
-def check_init_status_db(db_fname: str, db_col_list: str):
+def check_db_status(db_fname: str, db_col_list: str):
     conn = sqlite3.connect(db_fname)
     cur = conn.cursor()
-    if cur.execute('SELECT * FROM mols WHERE ' + 'OR '.join(f'{item} IS NOT NULL ' for item in db_col_list)).fetchone() is None:
-        return False
-    else:
+    if cur.execute('SELECT COUNT(ROWID) FROM mols WHERE ' + 'OR '.join(f'{item} IS NOT NULL ' for item in db_col_list)).fetchone()[0]:
         return True
+    else:
+        return False
     
 def get_protonation_arg_value(db_conn):
     """
