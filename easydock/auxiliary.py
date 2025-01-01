@@ -18,6 +18,7 @@ def empty_generator(*args, **kwargs):
     return
     yield
 
+
 #https://stackoverflow.com/questions/75928586/how-to-stop-the-execution-of-a-function-in-python-after-a-certain-time/75928879#75928879
 def timeout(seconds=5, default=None):
 
@@ -41,3 +42,18 @@ def timeout(seconds=5, default=None):
         return wrapper
 
     return decorator
+
+
+def split_generator_to_chunks(generator, chunk_size):
+    """Yield successive chunks from a generator"""
+    chunk = []
+
+    for item in generator:
+        if len(chunk) >= chunk_size:
+            yield chunk
+            chunk = [item]
+        else:
+            chunk.append(item)
+
+    if chunk:
+        yield chunk
