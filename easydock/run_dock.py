@@ -10,7 +10,7 @@ from multiprocessing import Pool
 
 from rdkit import Chem
 from rdkit.Chem.rdMolDescriptors import CalcNumRotatableBonds
-from easydock.database import create_db, restore_setup_from_db, init_db, check_init_status_db, update_db, save_sdf, select_mols_to_dock, \
+from easydock.database import create_db, restore_setup_from_db, init_db, check_db_status, update_db, save_sdf, select_mols_to_dock, \
     add_protonation, populate_setup_db
 from easydock.preparation_for_docking import cpu_type, filepath_type
 
@@ -209,9 +209,9 @@ def main():
                 del args_dict[arg]
             args.__dict__.update(args_dict)
 
-        has_finished_init_protonation = check_init_status_db(args.output, ['smi_protonated', 'source_mol_block_protonated']) and args.protonation
-        has_finished_init_docking = check_init_status_db(args.output, ['dock_time'])
-        if  has_finished_init_protonation or has_finished_init_docking:
+        has_finished_protonation = check_db_status(args.output, ['smi_protonated', 'source_mol_block_protonated']) and args.protonation
+        has_finished_docking = check_db_status(args.output, ['dock_time'])
+        if  has_finished_protonation or has_finished_docking:
             print(f'initializing is skipped')
         else:
             start_init = time.time()
