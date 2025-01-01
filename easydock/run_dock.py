@@ -209,9 +209,9 @@ def main():
                 del args_dict[arg]
             args.__dict__.update(args_dict)
 
-        has_finished_protonation = check_db_status(args.output, ['smi_protonated', 'source_mol_block_protonated']) and args.protonation
-        has_finished_docking = check_db_status(args.output, ['dock_time'])
-        if  has_finished_protonation or has_finished_docking:
+        has_started_protonation = check_db_status(args.output, ['smi_protonated', 'source_mol_block_protonated']) and args.protonation
+        has_started_docking = check_db_status(args.output, ['dock_time'])
+        if  has_started_protonation or has_started_docking:
             print(f'initializing is skipped')
         else:
             start_init = time.time()
