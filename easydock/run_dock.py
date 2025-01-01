@@ -211,9 +211,9 @@ def main():
 
         has_started_protonation = check_db_status(args.output, ['smi_protonated', 'source_mol_block_protonated']) and args.protonation
         has_started_docking = check_db_status(args.output, ['dock_time'])
-        if  has_started_protonation or has_started_docking:
+        if has_started_protonation or has_started_docking:
             print(f'initializing is skipped')
-        else:
+        elif not has_started_docking:
             start_init = time.time()
             init_db(args.output, args.input, args.ncpu, args.max_stereoisomers, args.prefix)
             end_init = time.time()
