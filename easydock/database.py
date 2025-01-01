@@ -12,7 +12,7 @@ from typing import Optional, Union
 import yaml
 from easydock import read_input
 from easydock.preparation_for_docking import mol_is_3d
-from easydock.auxiliary import take, mol_name_split, empty_func, empty_generator, timeout
+from easydock.auxiliary import take, mol_name_split, empty_func, empty_generator, timeout, split_generator_to_chunks
 from easydock.protonation import protonate_chemaxon, read_protonate_chemaxon, protonate_dimorphite, read_smiles, protonate_pkasolver
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -86,6 +86,7 @@ def create_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', '
         
     conn.commit()
     conn.close()
+
 
 def populate_setup_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', 'protein_setup')):
     conn = sqlite3.connect(db_fname)
@@ -184,6 +185,7 @@ def restore_setup_from_db(db_fname, tmpdir=None):
 
     return d, tmpfiles
 
+
 @timeout(seconds=300, default=None)
 def get_isomers(mol, max_stereoisomers=1):
     opts = StereoEnumerationOptions(tryEmbedding=True, maxIsomers=max_stereoisomers, rand=0xf00d)
@@ -238,19 +240,6 @@ def generate_init_data(mol_input: tuple[Chem.Mol, str], max_stereoisomers: int, 
             isomer_list.append(['smi', (mol_name, 0, smi_input, None)])
         return isomer_list
 
-def split_generator_to_chunks(generator, chunk_size):
-    """Yield successive chunks from a generator"""
-    chunk = []
-
-    for item in generator:
-        if len(chunk) >= chunk_size:
-            yield chunk
-            chunk = [item]
-        else:
-            chunk.append(item)
-
-    if chunk:
-        yield chunk
 
 def init_db(db_fname: str, input_fname: str, ncpu: int, max_stereoisomers=1, prefix: str=None):
     Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
@@ -283,6 +272,7 @@ def init_db(db_fname: str, input_fname: str, ncpu: int, max_stereoisomers=1, pre
         cur.executemany(f'INSERT INTO mols (id, stereo_id, smi, source_mol_block_input, source_mol_block) VALUES(?, ?, ?, ?, ?)', data_mol)
         conn.commit()
 
+
 def check_db_status(db_fname: str, db_col_list: str):
     conn = sqlite3.connect(db_fname)
     cur = conn.cursor()
@@ -290,6 +280,7 @@ def check_db_status(db_fname: str, db_col_list: str):
         return True
     else:
         return False
+    
     
 def get_protonation_arg_value(db_conn):
     """
