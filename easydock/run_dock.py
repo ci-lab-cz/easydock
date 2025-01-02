@@ -221,7 +221,7 @@ def main():
 
         dask_client = create_dask_client(args.hostfile)
 
-        if args.protonation:
+        if args.protonation and not has_started_docking:
             start_protonation = time.time()
             add_protonation(args.output, program=args.protonation, tautomerize=not args.no_tautomerization, ncpu=args.ncpu)
             end_protonation = time.time()
