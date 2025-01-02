@@ -145,6 +145,16 @@ def main():
                              'other information (input structures, protein pdbqt file and grid box config). '
                              'If output DB exists all other inputs will be ignored and calculations will be continued.')
 
+    init_group.add_argument('-s', '--max_stereoisomers', metavar='INTEGER', type=int, required=False, default=1,
+                        help='maximum number of isomers to enumerate. The default is set to 1.')
+    init_group.add_argument('--protonation', default=None, required=False, choices=['chemaxon', 'pkasolver'],
+                        help='choose a protonation program supported by EasyDock.')
+    init_group.add_argument('--no_tautomerization', action='store_true', default=False,
+                        help='disable tautomerization of molecules during protonation (applicable to chemaxon only).')
+    init_group.add_argument('--prefix', metavar='STRING', required=False, type=str, default=None,
+                        help='prefix which will be added to all molecule names. This might be useful if multiple '
+                             'repeated runs are made which will be analyzed together.')
+
     docking_group.add_argument('--program', metavar='STRING', required=False, choices=['vina', 'gnina'],
                         help='name of a docking program. Choices: vina, gnina')
     docking_group.add_argument('--config', metavar='FILENAME', required=False, type=filepath_type,
@@ -156,13 +166,6 @@ def main():
                              'n_poses: 10\n'
                              'seed: -1\n'
                              'gnina.yml\n')
-
-    init_group.add_argument('-s', '--max_stereoisomers', metavar='INTEGER', type=int, required=False, default=1,
-                        help='maximum number of isomers to enumerate. The default is set to 1.')
-    init_group.add_argument('--protonation', default=None, required=False, choices=['chemaxon', 'pkasolver'],
-                        help='choose a protonation program supported by EasyDock.')
-    init_group.add_argument('--no_tautomerization', action='store_true', default=False,
-                        help='disable tautomerization of molecules during protonation (applicable to chemaxon only).')
     docking_group.add_argument('--sdf', action='store_true', default=False,
                         help='save best docked poses to SDF file with the same name as output DB.')
     docking_group.add_argument('--hostfile', metavar='FILENAME', required=False, type=filepath_type, default=None,
@@ -175,10 +178,7 @@ def main():
     docking_group.add_argument('--tmpdir', metavar='DIRNAME', required=False, type=filepath_type, default=None,
                         help='path to a dir where to store temporary setup files accessible to a program. '
                              'Normally should be used if calculations with dask have to be continued,')
-    init_group.add_argument('--prefix', metavar='STRING', required=False, type=str, default=None,
-                        help='prefix which will be added to all molecule names. This might be useful if multiple '
-                             'repeated runs are made which will be analyzed together.')
-    
+
     common_argument_group.add_argument('-c', '--ncpu', default=1, type=cpu_type,
                         help='number of cpus. This affects only docking on a single server.')
     common_argument_group.add_argument('-v', '--verbose', action='store_true', default=False,

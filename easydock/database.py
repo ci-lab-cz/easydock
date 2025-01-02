@@ -257,7 +257,6 @@ def init_db(db_fname: str, input_fname: str, ncpu: int, max_stereoisomers=1, pre
     data_smi = []  # non 3D structures
     data_mol = []  # 3D structures
     load_data_params = partial(generate_init_data, max_stereoisomers=max_stereoisomers, prefix=prefix)
-    # data_list = pool.imap_unordered(load_data_params, chunk, chunksize=1)
     for i, item in enumerate(pool.imap(load_data_params, mol_input, chunksize=1), 1):
         if item is not None:
             for input_format, data in item:
