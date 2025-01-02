@@ -121,6 +121,8 @@ def __read_smiles(fname, sanitize=True):
                     mol_title = __get_smi_as_molname(mol)
                 mol.SetProp('_Name', mol_title)
                 yield mol, mol_title
+            else:
+                sys.stderr.write(f'ERROR: the line cannot be parsed {line.strip()}\n')
 
 
 def __read_stdin_smiles(sanitize=True):
