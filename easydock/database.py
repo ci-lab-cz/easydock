@@ -205,6 +205,15 @@ def get_isomers(mol, max_stereoisomers=1):
 MolBlock = str
 Smi = str
 def generate_init_data(mol_input: tuple[Chem.Mol, str], max_stereoisomers: int, prefix: str) -> list[list[str, tuple[str, int, Union[Smi, MolBlock], Smi, Optional[MolBlock]]]]:
+    """
+
+    :param mol_input:
+    :param max_stereoisomers:
+    :param prefix:
+    :return: list of tuples, where each tuple has two items. The first one is a type of data (smi or mol).
+             The second one is data (a tuple)
+    """
+
     salt_remover = SaltRemover()
     mol, mol_name = mol_input
 
@@ -233,9 +242,12 @@ def generate_init_data(mol_input: tuple[Chem.Mol, str], max_stereoisomers: int, 
         isomer_list = []
         try:
             isomers = get_isomers(mol, max_stereoisomers)
-            for stereo_id, stereo_mol in enumerate(isomers):
-                smi = Chem.MolToSmiles(stereo_mol, isomericSmiles=True)
-                isomer_list.append(['smi', (mol_name, stereo_id, smi_input, smi)])
+            if isomers:
+                for stereo_id, stereo_mol in enumerate(isomers):
+                    smi = Chem.MolToSmiles(stereo_mol, isomericSmiles=True)
+                    isomer_list.append(['smi', (mol_name, stereo_id, smi_input, smi)])
+            else:
+                isomer_list.append(['smi', (mol_name, 0, smi_input, None)])
         except TimeoutError:
             isomer_list.append(['smi', (mol_name, 0, smi_input, None)])
         return isomer_list
@@ -258,12 +270,12 @@ def init_db(db_fname: str, input_fname: str, ncpu: int, max_stereoisomers=1, pre
     data_mol = []  # 3D structures
     load_data_params = partial(generate_init_data, max_stereoisomers=max_stereoisomers, prefix=prefix)
     for i, item in enumerate(pool.imap(load_data_params, mol_input, chunksize=1), 1):
-        if item is not None:
-            for input_format, data in item:
-                if input_format == 'smi':
-                    data_smi.append(data)
-                elif input_format == 'mol':
-                    data_mol.append(data)
+        for input_format, data in item:
+            if input_format == 'smi':
+                data_smi.append(data)
+            elif input_format == 'mol':
+                data_mol.append(data)
+
         if i % 100 == 0:
             cur.executemany(f'INSERT INTO mols (id, stereo_id, smi_input, smi) VALUES(?, ?, ?, ?)', data_smi)
             cur.executemany(f'INSERT INTO mols (id, stereo_id, smi, source_mol_block_input, source_mol_block) VALUES(?, ?, ?, ?, ?)', data_mol)
