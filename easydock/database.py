@@ -423,14 +423,14 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
         # SMiLES only
         sql = f"""SELECT smi, id || '_' || stereo_id 
                   FROM {table_name} 
-                  WHERE docking_score is NULL AND smi_protonated is NULL AND source_mol_block is NULL """
+                  WHERE smi IS NOT NULL AND docking_score is NULL AND smi_protonated is NULL AND source_mol_block is NULL """
         sql += add_sql
         data_list_smi = list(cur.execute(sql))
 
         # mol_block only
         sql = f"""SELECT smi, id || '_' || stereo_id 
                   FROM {table_name} 
-                  WHERE docking_score is NULL AND smi_protonated is NULL AND source_mol_block is NOT NULL """
+                  WHERE smi IS NOT NULL AND docking_score is NULL AND smi_protonated is NULL AND source_mol_block is NOT NULL """
         sql += add_sql
         data_list_mol = list(cur.execute(sql))
 
