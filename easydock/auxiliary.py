@@ -1,4 +1,5 @@
 from itertools import islice
+from math import ceil
 import signal
 import functools
 
@@ -57,3 +58,12 @@ def split_generator_to_chunks(generator, chunk_size):
 
     if chunk:
         yield chunk
+
+
+def chunk_into_n(smi_l: list[str], n: int):
+    smi_size = ceil(len(smi_l) / n)
+    return list(map(lambda x: smi_l[x * smi_size:x * smi_size + smi_size], list(range(n))))
+
+
+def chunk_into_size_n(smi_l: list[str], n: int):
+    return [smi_l[i:i+n] for i in range(0,len(smi_l),n)]
