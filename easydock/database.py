@@ -445,7 +445,7 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
         output_data_mol = []
 
         with tempfile.NamedTemporaryFile(suffix='.smi', mode='w', encoding='utf-8') as tmp:
-            for protonate_batch in chunk_into_size_n(data_list_smi + data_list_mol):
+            for protonate_batch in chunk_into_size_n(data_list_smi + data_list_mol, 100):
                 for smi, mol_name in protonate_batch:
                     tmp.write(f'{smi}\t{mol_name}\n')
                 tmp.flush()
