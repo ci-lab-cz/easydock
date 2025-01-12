@@ -252,7 +252,7 @@ def generate_init_data(mol_input: tuple[Chem.Mol, str], max_stereoisomers: int, 
             isomer_list.append(['smi', (mol_name, 0, smi_input, None)])
         return isomer_list
 
-from time import sleep
+
 def init_db(db_fname: str, input_fname: str, ncpu: int, max_stereoisomers=1, prefix: str=None):
     Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
 
@@ -275,14 +275,14 @@ def init_db(db_fname: str, input_fname: str, ncpu: int, max_stereoisomers=1, pre
                 data_smi.append(data)
             elif input_format == 'mol':
                 data_mol.append(data)
-        
-        if i % 2 == 0:
+
+        if i % 100 == 0:
             cur.executemany(f'INSERT INTO mols (id, stereo_id, smi_input, smi) VALUES(?, ?, ?, ?)', data_smi)
             cur.executemany(f'INSERT INTO mols (id, stereo_id, smi, source_mol_block_input, source_mol_block) VALUES(?, ?, ?, ?, ?)', data_mol)
             conn.commit()
             data_smi = []  # non 3D structures
             data_mol = []  # 3D structures
-            sleep(4)
+
     cur.executemany(f'INSERT INTO mols (id, stereo_id, smi_input, smi) VALUES(?, ?, ?, ?)', data_smi)
     cur.executemany(f'INSERT INTO mols (id, stereo_id, smi, source_mol_block_input, source_mol_block) VALUES(?, ?, ?, ?, ?)', data_mol)
     conn.commit()
