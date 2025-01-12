@@ -4,10 +4,10 @@ import subprocess
 import tempfile
 
 from functools import partial
-from math import ceil
 from multiprocessing import Pool
 
 from rdkit import Chem
+from easydock.auxiliary import chunk_into_n
 from easydock.read_input import read_input
 
 """
@@ -34,11 +34,6 @@ def read_protonate_chemaxon(fname):
             smi = mol.GetPropsAsDict().get('MAJORMS', None)
             if smi is not None:
                 yield smi, mol_name
-
-
-def chunk_into_n(smi_l: list[str], n: int):
-    smi_size = ceil(len(smi_l) / n)
-    return list(map(lambda x: smi_l[x * smi_size:x * smi_size + smi_size], list(range(n))))
 
 
 def __protonate_dimorphite_mp(input_output_fname: tuple[str, str]):
