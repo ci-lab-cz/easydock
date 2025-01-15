@@ -121,7 +121,7 @@ def __protonate_pkasolver(args, model):
             output_mol = states[-1].deprotonated_mol
         # fix protonated amides and analogs (about 2% such structures in 23K molecules)
         output_mol = Chem.RemoveHs(output_mol)
-        ids = output_mol.GetSubstructMatches(Chem.MolFromSmarts('[$([NH+]-[*]=O)]'))
+        ids = output_mol.GetSubstructMatches(Chem.MolFromSmarts('[$([NH+,NH2+,NH3+]-[*]=O)]'))
         if ids:
             for i in ids:
                 output_mol.GetAtomWithIdx(i[0]).SetFormalCharge(0)
