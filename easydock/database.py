@@ -519,9 +519,6 @@ def process_protonation(conn, output, smi_names, mol_names):
     output_data_smi = []
     output_data_mol = []
     for smi, mol_name in output:
-        print('hi')
-        print(smi, mol_name)
-        print('\n')
         try:
             cansmi = Chem.CanonSmiles(smi)
         except:
