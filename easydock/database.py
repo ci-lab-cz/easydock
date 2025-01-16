@@ -464,14 +464,14 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
                         read_func = read_protonate_chemaxon
                         protonate_func(tmp.name, output)
                         mols = read_func(output)
-                        process_protonation(db_fname, 'mols', mols, smi_names, mol_names)
+                        update_db_protonated_smiles(db_fname, 'mols', mols, smi_names, mol_names)
                     finally:
                         os.remove(output)
                         os.close(fd)
         elif program in ['pkasolver']:
             protonate_func = partial(protonate_pkasolver, ncpu=ncpu, smi_size=len(data_list_smi + data_list_mol))
             for smi in protonate_func(cur):  # cursor is a generator like object, it can be used as input instead of read_input(input_fname)
-                process_protonation(db_fname, 'mols', smi, smi_names, mol_names)
+                update_db_protonated_smiles(db_fname, 'mols', smi, smi_names, mol_names)
         elif program == 'dimorphite':
             protonate_func = partial(protonate_dimorphite, ncpu=ncpu)
             read_func = read_smiles
@@ -482,7 +482,7 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
     finally:
         conn.close()
 
-def process_protonation(db_fname, table_name, output, smi_names, mol_names):
+def update_db_protonated_smiles(db_fname, table_name, output, smi_names, mol_names):
     output_data_smi = []
     output_data_mol = []
 
