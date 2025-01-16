@@ -79,24 +79,22 @@ def read_smiles(fname):
             yield tuple(line.strip().split()[:2])
 
 
-def protonate_pkasolver(input_fname: str, output_fname: str, ncpu: int = 1):
+def protonate_pkasolver(input_smi: str, ncpu: int = 1, smi_size=1):
     import torch
     from pkasolver.query import QueryModel
 
-    estimated_smi = os.path.getsize(input_fname)//70
-    chunksize = min(max(1, estimated_smi / ncpu), 500)
+    chunksize = min(max(1, smi_size // ncpu), 500)
     model = QueryModel()
     with contextlib.redirect_stdout(None):
         if torch.cuda.is_available() or ncpu == 1:
-            with open(output_fname, 'wt') as f:
-                for mol, mol_name in read_input(input_fname):
-                    smi, name = __protonate_pkasolver((mol, mol_name), model=model)
-                    f.write(f'{smi}\t{name}\n')
+            for mol, mol_name in input_smi:
+                smi, name = __protonate_pkasolver((mol, mol_name), model=model)
+                yield smi, name
+
         else:
             pool = Pool(ncpu)
-            with open(output_fname, 'wt') as f:
-                for smi, name in pool.imap_unordered(partial(__protonate_pkasolver, model=model), read_input(input_fname), chunksize=chunksize):
-                    f.write(f'{smi}\t{name}\n')
+            for smi, name in pool.imap_unordered(partial(__protonate_pkasolver, model=model), input_smi, chunksize=chunksize):
+                yield smi, name
 
 
 def __protonate_pkasolver(args, model):
