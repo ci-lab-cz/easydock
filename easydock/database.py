@@ -421,18 +421,18 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
         cur = conn.cursor()
 
         # SMiLES only
-        smi_sql = f"""SELECT smi, id || '_' || stereo_id 
+        sql = f"""SELECT smi, id || '_' || stereo_id 
                   FROM {table_name} 
                   WHERE smi IS NOT NULL AND docking_score is NULL AND smi_protonated is NULL AND source_mol_block is NULL """
-        smi_sql += add_sql
-        data_list_smi = list(cur.execute(smi_sql))
+        sql += add_sql
+        data_list_smi = list(cur.execute(sql))
 
         # mol_block only
-        mol_sql = f"""SELECT smi, id || '_' || stereo_id 
+        sql = f"""SELECT smi, id || '_' || stereo_id 
                   FROM {table_name} 
                   WHERE smi IS NOT NULL AND docking_score is NULL AND smi_protonated is NULL AND source_mol_block is NOT NULL """
-        mol_sql += add_sql
-        data_list_mol = list(cur.execute(mol_sql))
+        sql += add_sql
+        data_list_mol = list(cur.execute(sql))
 
         if not data_list_smi and not data_list_mol:
             sys.stderr.write(f'no molecules to protonate\n')
