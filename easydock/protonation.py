@@ -87,9 +87,8 @@ def protonate_pkasolver(input_smi: str, ncpu: int = 1, smi_size=1):
     model = QueryModel()
     with contextlib.redirect_stdout(None):
         if torch.cuda.is_available() or ncpu == 1:
-            for mol, mol_name in input_smi:
-                smi, name = __protonate_pkasolver((mol, mol_name), model=model)
-                yield smi, name
+            for smi, mol_name in input_smi.fetchall():
+                yield __protonate_pkasolver((smi, mol_name), model=model)
 
         else:
             pool = Pool(ncpu)
@@ -99,7 +98,8 @@ def protonate_pkasolver(input_smi: str, ncpu: int = 1, smi_size=1):
 
 def __protonate_pkasolver(args, model):
     from pkasolver.query import calculate_microstate_pka_values
-    mol, mol_name = args
+    smi, mol_name = args
+    mol = Chem.MolFromSmiles(smi, sanitize=True)
     ph = 7.4
     states = calculate_microstate_pka_values(mol, only_dimorphite=False, query_model=model)
     if not states:
@@ -119,4 +119,5 @@ def __protonate_pkasolver(args, model):
         if ids:
             for i in ids:
                 output_mol.GetAtomWithIdx(i[0]).SetFormalCharge(0)
+
     return Chem.MolToSmiles(output_mol), mol_name
