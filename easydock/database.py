@@ -451,7 +451,7 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
             smi_remaining = True
             while smi_remaining:
                 with tempfile.NamedTemporaryFile(suffix='.smi', mode='w', encoding='utf-8') as tmp:
-                    for smi, mol_name in cur2.fetchmany(nmols):
+                    for smi, mol_name in cur.fetchmany(nmols):
                         if not smi:
                             smi_remaining = False
                         else:
@@ -468,15 +468,10 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
                     finally:
                         os.remove(output)
                         os.close(fd)
-
-
-
         elif program in ['pkasolver']:
             protonate_func = partial(protonate_pkasolver, ncpu=ncpu, smi_size=len(data_list_smi + data_list_mol))
             for smi in protonate_func(cur):  # cursor is a generator like object, it can be used as input instead of read_input(input_fname)
                 process_protonation(db_fname, 'mols', [smi], smi_names, mol_names)
-
-
         elif program == 'dimorphite':
             protonate_func = partial(protonate_dimorphite, ncpu=ncpu)
             read_func = read_smiles
