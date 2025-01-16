@@ -89,11 +89,9 @@ def protonate_pkasolver(input_smi: str, ncpu: int = 1, smi_size=1):
         if torch.cuda.is_available() or ncpu == 1:
             for smi, mol_name in input_smi.fetchall():
                 yield __protonate_pkasolver((smi, mol_name), model=model)
-
         else:
             pool = Pool(ncpu)
-            for smi, name in pool.imap_unordered(partial(__protonate_pkasolver, model=model), input_smi, chunksize=chunksize):
-                yield smi, name
+            yield pool.imap_unordered(partial(__protonate_pkasolver, model=model), input_smi, chunksize=chunksize)
 
 
 def __protonate_pkasolver(args, model):
