@@ -91,7 +91,8 @@ def protonate_pkasolver(input_smi: str, ncpu: int = 1, smi_size=1):
                 yield __protonate_pkasolver((smi, mol_name), model=model)
         else:
             pool = Pool(ncpu)
-            yield pool.imap_unordered(partial(__protonate_pkasolver, model=model), input_smi, chunksize=chunksize)
+            for smi, mol_name in pool.imap_unordered(partial(__protonate_pkasolver, model=model), input_smi, chunksize=chunksize):
+                yield smi, mol_name
 
 
 def __protonate_pkasolver(args, model):

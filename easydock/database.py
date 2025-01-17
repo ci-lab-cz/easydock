@@ -415,7 +415,7 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
                     e.g. "AND id IN ('MOL1', 'MOL2')" or "AND iteration=(SELECT MAX(iteration) FROM mols)".
     :return:
     '''
-    conn = sqlite3.connect(db_fname, check_same_thread=False)
+    conn = sqlite3.connect(db_fname, check_same_thread=False)   # danger
 
     try:
         cur = conn.cursor()
@@ -446,50 +446,74 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
         else:
             cur.execute(smi_sql)
 
-        if program in ['chemaxon']:  # first protocol
-            nmols = ncpu * 10  # to have batches of a reasonable size; the N value can be increased if necessary
-            smi_remaining = True
-            while smi_remaining:
+        if program in ['chemaxon']:  # file-based protocol, files are created by chunks
+            if program == 'chemaxon':
+                protonate_func = partial(protonate_chemaxon, tautomerize=tautomerize)
+                read_func = read_protonate_chemaxon
+            else:
+                raise ValueError(f'There is no implemeneted functions to protonate molecules by {program}')
+
+            nmols = ncpu * 500  # batch size
+            while True:
                 with tempfile.NamedTemporaryFile(suffix='.smi', mode='w', encoding='utf-8') as tmp:
-                    for smi, mol_name in cur.fetchmany(nmols):
-                        if not smi:
-                            smi_remaining = False
-                        else:
+                    res = cur.fetchmany(nmols)
+                    if not res:
+                        break
+                    else:
+                        for smi, mol_name in res:
                             tmp.write(f'{smi}\t{mol_name}\n')
                     tmp.flush()
 
                     fd, output = tempfile.mkstemp()
                     try:
-                        protonate_func = partial(protonate_chemaxon, tautomerize=tautomerize)
-                        read_func = read_protonate_chemaxon
                         protonate_func(tmp.name, output)
-                        mols = read_func(output)
-                        update_db_protonated_smiles(db_fname, 'mols', mols, smi_names, mol_names)
+                        items = read_func(output)  #  generator of tuples (smi, mol_name)
+                        update_db_protonated_smiles(conn, items, smi_names, mol_names, table_name)
                     finally:
                         os.remove(output)
                         os.close(fd)
-        elif program in ['pkasolver']:
-            protonate_func = partial(protonate_pkasolver, ncpu=ncpu, smi_size=len(data_list_smi + data_list_mol))
-            for smi in protonate_func(cur):  # cursor is a generator like object, it can be used as input instead of read_input(input_fname)
-                update_db_protonated_smiles(db_fname, 'mols', smi, smi_names, mol_names)
+
+        elif program in ['pkasolver']:  # native python protocol
+            if program == 'pkasolver':
+                protonate_func = partial(protonate_pkasolver, ncpu=ncpu, smi_size=len(data_list_smi + data_list_mol))
+            else:
+                raise ValueError(f'There is no implemeneted functions to protonate molecules by {program}')
+
+            items = []
+            for i, item in enumerate(protonate_func(cur), 1):  # cursor is a generator like object, it can be used as input instead of read_input(input_fname)
+                items.append(item)
+                if i % 100 == 0:
+                    update_db_protonated_smiles(conn, items, smi_names, mol_names, table_name)
+                    items = []
+            update_db_protonated_smiles(conn, items, smi_names, mol_names, table_name)
+
         elif program == 'dimorphite':
             protonate_func = partial(protonate_dimorphite, ncpu=ncpu)
             read_func = read_smiles
+
         else:
-            protonate_func = empty_func
-            read_func = empty_generator
+            raise ValueError(f'There is no implemeneted support to protonate molecules by {program}')
 
     finally:
         conn.close()
 
-def update_db_protonated_smiles(db_fname, table_name, output, smi_names, mol_names):
+
+def update_db_protonated_smiles(conn, items, smi_names, mol_names, table_name='mols'):
+    """
+
+    :param conn:
+    :param items: list of tuples (smi, mol_name)
+    :param smi_names:
+    :param mol_names:
+    :param table_name:
+    :return:
+    """
     output_data_smi = []
     output_data_mol = []
 
-    conn2 = sqlite3.connect(db_fname)
-    cur2 = conn2.cursor()
+    cur = conn.cursor()
 
-    for smi, mol_name in output:
+    for smi, mol_name in items:
         try:
             cansmi = Chem.CanonSmiles(smi)
         except:
@@ -522,22 +546,22 @@ def update_db_protonated_smiles(db_fname, table_name, output, smi_names, mol_nam
                                 f'protonation. The molecule was skipped.\n')
                 continue
 
-        cur2.executemany(f"""UPDATE {table_name}
-                    SET 
-                        smi_protonated = ?
-                    WHERE
-                        id = ? AND
-                        stereo_id = ?
-                    """, output_data_smi)
-        cur2.executemany(f"""UPDATE {table_name}
-                    SET 
-                        smi_protonated = ?, 
-                        source_mol_block_protonated = ?
-                    WHERE
-                        id = ? AND
-                        stereo_id = ?
-                    """, output_data_mol)
-        conn2.commit()
+        cur.executemany(f"""UPDATE {table_name}
+                            SET 
+                                smi_protonated = ?
+                            WHERE
+                                id = ? AND
+                                stereo_id = ?
+                        """, output_data_smi)
+        cur.executemany(f"""UPDATE {table_name}
+                            SET 
+                                smi_protonated = ?, 
+                                source_mol_block_protonated = ?
+                            WHERE
+                                id = ? AND
+                                stereo_id = ?
+                        """, output_data_mol)
+        conn.commit()
 
 
 def add_protonation_copy(db_fname, program='chemaxon', tautomerize=True, table_name='mols', add_sql='', ncpu=1):
