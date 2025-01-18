@@ -13,12 +13,24 @@ from easydock.auxiliary import chunk_into_n
 from easydock.read_input import read_input
 
 """
-Each protonation program should have two implemented functions:
+There two types of protonation programs:
+
+1. File-based approaches. They require an input file and return an output file. The integration should include two 
+implemented functions: 
 1) protonate_xxx with two necessary arguments input_fname and output_fname (input and output filenames). 
-Input file will be SMILES with names separated by tab. Output file format may be any (output file does not have 
-an extension).
-2) read_protonate_xxx, which takes a file name with protonated molecules in the format corresponding to 
+Input file will be SMILES with names separated by tab. Output file format may be any (output is a temporary file which 
+does not have an extension).
+2) read_protonate_xxx takes a file name with protonated molecules in the format corresponding to 
 the protonate_xxx function and returns a generator of tuples (SMILES, mol_name).
+
+2. Python-based approaches. They utilize pure Python workflow and should use multiprocessing.pool to make enumeration 
+efficient. The implementation consists of a single function:
+1) protonate_xxx which is a generator. It should take items argument which is a generator over tuples of (smi, mol_name) 
+and yield a tuple of (SMILES, mol_name).
+
+These functions should be intergated in database.add_protonation function, there is a special section of initialization 
+of protonation functions. All functions may take additional arguments, which should be passed with 
+partial(protonate_xxx, arg1=value1, ...) at the intialization step.   
 """
 
 
