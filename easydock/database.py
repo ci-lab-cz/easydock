@@ -546,22 +546,22 @@ def update_db_protonated_smiles(conn, items, smi_names, mol_names, table_name='m
                                 f'protonation. The molecule was skipped.\n')
                 continue
 
-        cur.executemany(f"""UPDATE {table_name}
-                            SET 
-                                smi_protonated = ?
-                            WHERE
-                                id = ? AND
-                                stereo_id = ?
-                        """, output_data_smi)
-        cur.executemany(f"""UPDATE {table_name}
-                            SET 
-                                smi_protonated = ?, 
-                                source_mol_block_protonated = ?
-                            WHERE
-                                id = ? AND
-                                stereo_id = ?
-                        """, output_data_mol)
-        conn.commit()
+    cur.executemany(f"""UPDATE {table_name}
+                        SET 
+                            smi_protonated = ?
+                        WHERE
+                            id = ? AND
+                            stereo_id = ?
+                    """, output_data_smi)
+    cur.executemany(f"""UPDATE {table_name}
+                        SET 
+                            smi_protonated = ?, 
+                            source_mol_block_protonated = ?
+                        WHERE
+                            id = ? AND
+                            stereo_id = ?
+                    """, output_data_mol)
+    conn.commit()
 
 
 def add_protonation_copy(db_fname, program='chemaxon', tautomerize=True, table_name='mols', add_sql='', ncpu=1):
