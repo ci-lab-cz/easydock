@@ -420,32 +420,19 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
     try:
         cur = conn.cursor()
 
-        # SMiLES only
-        smi_sql = f"""SELECT smi, id || '_' || stereo_id 
+        # process SMILES and mol_block together
+        sql = f"""SELECT smi, id || '_' || stereo_id 
                   FROM {table_name} 
-                  WHERE smi IS NOT NULL AND docking_score is NULL AND smi_protonated is NULL AND source_mol_block is NULL """
-        smi_sql += add_sql
-        data_list_smi = list(cur.execute(smi_sql))
+                  WHERE smi IS NOT NULL AND docking_score is NULL AND smi_protonated is NULL"""
+        sql += add_sql
+        data_list = list(cur.execute(sql))
 
-        # mol_block only
-        mol_sql = f"""SELECT smi, id || '_' || stereo_id 
-                  FROM {table_name} 
-                  WHERE smi IS NOT NULL AND docking_score is NULL AND smi_protonated is NULL AND source_mol_block is NOT NULL """
-        mol_sql += add_sql
-        data_list_mol = list(cur.execute(mol_sql))
-
-        if not data_list_smi and not data_list_mol:
+        if not data_list:
             sys.stderr.write(f'no molecules to protonate\n')
             return
 
-        smi_names = set(mol_name for smi, mol_name in data_list_smi)
-        mol_names = set(mol_name for smi, mol_name in data_list_mol)
 
-        if mol_names:
-            cur.execute(mol_sql)
-        else:
-            cur.execute(smi_sql)
-
+        cur.execute(sql)
         if program in ['chemaxon']:  # file-based protocol, files are created by chunks
             if program == 'chemaxon':
                 protonate_func = partial(protonate_chemaxon, tautomerize=tautomerize)
@@ -468,14 +455,14 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
                     try:
                         protonate_func(tmp.name, output)
                         items = read_func(output)  #  generator of tuples (smi, mol_name)
-                        update_db_protonated_smiles(conn, items, smi_names, mol_names, table_name)
+                        update_db_protonated_smiles(conn, items, data_list, table_name)
                     finally:
                         os.remove(output)
                         os.close(fd)
 
         elif program in ['pkasolver']:  # native python protocol
             if program == 'pkasolver':
-                protonate_func = partial(protonate_pkasolver, ncpu=ncpu, smi_size=len(data_list_smi + data_list_mol))
+                protonate_func = partial(protonate_pkasolver, ncpu=ncpu, smi_size=len(data_list))
             else:
                 raise ValueError(f'There is no implemeneted functions to protonate molecules by {program}')
 
@@ -483,9 +470,9 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
             for i, item in enumerate(protonate_func(cur), 1):  # cursor is a generator like object, it can be used as input instead of read_input(input_fname)
                 items.append(item)
                 if i % 100 == 0:
-                    update_db_protonated_smiles(conn, items, smi_names, mol_names, table_name)
+                    update_db_protonated_smiles(conn, items, data_list, table_name)
                     items = []
-            update_db_protonated_smiles(conn, items, smi_names, mol_names, table_name)
+            update_db_protonated_smiles(conn, items, data_list, table_name)
 
         elif program == 'dimorphite':
             protonate_func = partial(protonate_dimorphite, ncpu=ncpu)
@@ -498,7 +485,7 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
         conn.close()
 
 
-def update_db_protonated_smiles(conn, items, smi_names, mol_names, table_name='mols'):
+def update_db_protonated_smiles(conn, items, data_list, table_name='mols'):
     """
 
     :param conn:
@@ -508,10 +495,23 @@ def update_db_protonated_smiles(conn, items, smi_names, mol_names, table_name='m
     :param table_name:
     :return:
     """
+
+
     output_data_smi = []
     output_data_mol = []
 
     cur = conn.cursor()
+
+    data_names = set(mol_name for smi, mol_name in data_list)
+    data_pairset = tuple([tuple(mol_name_split(names)) for names in data_names])
+
+    smi_sql = f"""SELECT id || '_' || stereo_id FROM {table_name}
+                WHERE (id, stereo_id) in {data_pairset} AND source_mol_block is NULL"""
+    mol_sql = f"""SELECT id || '_' || stereo_id FROM {table_name}
+                WHERE (id, stereo_id) in {data_pairset} AND source_mol_block is NOT NULL"""
+
+    smi_names = set(mol_name[0] for mol_name in list(cur.execute(smi_sql)))
+    mol_names = set(mol_name[0] for mol_name in list(cur.execute(mol_sql)))
 
     for smi, mol_name in items:
         try:
@@ -532,7 +532,7 @@ def update_db_protonated_smiles(conn, items, smi_names, mol_names, table_name='m
                 # to assign proper 3D coordinates we load 3D mol from DB, make all bonds single,
                 # remove Hs and assign bond orders from SMILES
                 # this should work even if a generated tautomer differs from the input molecule
-                mol3d = get_mol(conn2, mol_id, stereo_id, field_name='source_mol_block')
+                mol3d = get_mol(conn, mol_id, stereo_id, field_name='source_mol_block')
                 mol3d = Chem.RemoveHs(Chem.RWMol(mol3d))
                 for b in mol3d.GetBonds():
                     b.SetBondType(Chem.BondType.SINGLE)
