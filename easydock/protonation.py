@@ -6,6 +6,7 @@ import tempfile
 from functools import partial
 from math import ceil
 from multiprocessing import Pool
+from typing import Iterator
 
 from rdkit import Chem
 from easydock.auxiliary import chunk_into_n
@@ -43,7 +44,7 @@ def __protonate_dimorphite_mp(input_output_fname: tuple[str, str]):
     dimorphite_run(smiles_file=input_fname, output_file=output_fname, max_variants=1, silent=True, min_ph=7.4, max_ph=7.4)
 
 
-def protonate_dimorphite(input_fname: str, output_fname: str, ncpu: int = 1):
+def protonate_dimorphite(input_fname: Iterator[tuple[str, str]], output_fname: str, ncpu: int = 1):
 
     with open(input_fname,'r') as input_file:
         smi_l = input_file.readlines()
@@ -79,7 +80,7 @@ def read_smiles(fname):
             yield tuple(line.strip().split()[:2])
 
 
-def protonate_pkasolver(input_smi: str, ncpu: int = 1, smi_size=1):
+def protonate_pkasolver(items: str, ncpu: int = 1, smi_size=1):
     import torch
     from pkasolver.query import QueryModel
 
@@ -87,11 +88,11 @@ def protonate_pkasolver(input_smi: str, ncpu: int = 1, smi_size=1):
     model = QueryModel()
     with contextlib.redirect_stdout(None):
         if torch.cuda.is_available() or ncpu == 1:
-            for smi, mol_name in input_smi.fetchall():
+            for smi, mol_name in items:
                 yield __protonate_pkasolver((smi, mol_name), model=model)
         else:
             pool = Pool(ncpu)
-            for smi, mol_name in pool.imap_unordered(partial(__protonate_pkasolver, model=model), input_smi, chunksize=chunksize):
+            for smi, mol_name in pool.imap_unordered(partial(__protonate_pkasolver, model=model), items, chunksize=chunksize):
                 yield smi, mol_name
 
 

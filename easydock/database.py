@@ -467,7 +467,8 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
                 raise ValueError(f'There is no implemeneted functions to protonate molecules by {program}')
 
             items = []
-            for i, item in enumerate(protonate_func(cur), 1):  # cursor is a generator like object, it can be used as input instead of read_input(input_fname)
+            data = ((smi, mol_name) for smi, mol_name in cur)
+            for i, item in enumerate(protonate_func(data), 1): 
                 items.append(item)
                 if i % 100 == 0:
                     update_db_protonated_smiles(conn, items, data_list, table_name)
