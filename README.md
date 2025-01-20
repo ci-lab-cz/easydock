@@ -45,30 +45,50 @@ Features:
 - the major script `run_dock` supports docking with `vina` and `gnina` (`gnina` also supports `smina` and its custom scoring functions)
 - can be used as a command line utility or imported as a python module
 - input molecules are checked for salts and attempted to fix by SaltRemover 
-- stereoisomers can be enumerated for unspecified chiral centers and double bonds
+- stereoisomers can be enumerated for unspecified chiral centers and double bonds (since some compounds may require very long runtimes, the maximum runtime for individual molecules was set to 300 sec)
 - several protonation options: chemaxon and pkasolver (check notes below)
 - supports distributed computing using `dask` library
 - supports docking of boron-containing compounds using `vina` and `smina` (boron is replaced with carbon before docking and returned back)
 - all outputs are stored in an SQLite database
 - interrupted calculations can be continued by invoking the same command or by supplying just a single argument - the existing output database
 - `get_sdf_from_dock_db` is used to extract data from output DB
+- all command line arguments and input files are stored in the setup table and the majority of those parameters cannot be changed later. This will prevent losing input settings. If some changes should be made after DB was created adirect editing the DB can be a solution   
 
-Pipeline:
+The pipeline consists of two major parts which can be run separately or simultaneously:
+1. Initialization of database, which includes:
 - input SMILES are converted in 3D by RDKit, if input is 3D structures in SDF their conformations wil be taken as starting without changes.
-- compounds having salts were stripped, if this fails the whole compound will be omitted for docking reporting to STDERR 
+- compounds having salts are stripped, if this fails the whole compound will be omitted for docking reporting to STDERR 
 - up to a specified number of stereoisomers are enumerated for molecules with undefined chiral centers or double bond configurations (by default 1 random but reproducible stereoisomer is generated)
 - ligands are protonated by Chemaxon/pKasolver at pH 7.4 and the most stable tautomers are generated (optional, requires a Chemaxon license)
+2. Docking step includes:
 - molecules are converted in PDBQT format using Meeko
 - docking with `vina`/`gnina`
-- output poses are converted in MOL format and stored into output DB along with docking scores
+- top docked poses are converted in MOL format and stored into output DB along with docking scores
+
+These two parts of the pipeline allows to create a DB and reuse it for dockign with different proteins/settings/etc.  
+
+There is also a scipt `make_clean_copy` which creates a copy of an existing DB removing all docking data to use it for docking with different proteins/settings/etc      
 
 ### Example
 
-##### Docking from command line
+#### Initialization of a database
 
-Docking using `vina` takes input SMILES and a config file. Ligands will not be protonated with Chemaxon, so their supplied charged states will be used. 4 CPU cores will be used (4 molecules will be docked in parallel). When docking will finish an SDF file will be created with top docking poses for each ligand. 
+This will create a DB with checked molecules using 4 cores. If `--protonation` argument was not used molecules will keep their input protonations states
 ```
-run_dock -i input.smi -o output.db --program vina --config config.yml --no_protonation -c 4 --sdf
+run_dock -i input.smi -o output.db -c 4
+```
+
+#### Docking from command line
+
+To run a both steps of the full pipeline: initialization and docking.  
+Docking using `vina` takes input SMILES and a config file. Ligands will not be protonated. 4 CPU cores will be used (4 molecules will be docked in parallel). When docking will finish an SDF file will be created with top docking poses for each ligand. 
+```
+run_dock -i input.smi -o output.db --program vina --config config.yml -c 4 --sdf
+``` 
+
+The same command for a previously initialized DB. Supplying arguments relevant for the initialization stage will have no effect after DB was created
+```
+run_dock -o output.db --program vina --config config.yml -c 4 --sdf
 ``` 
 
 Example of config.yml for `vina` docking  
@@ -85,7 +105,7 @@ NOTE: ncpu argument in `run_dock` and `config.yml` has different meaning. In `ru
 
 The same but using `gnina`
 ```
-run_dock -i input.smi -o output.db --program gnina --config config.yml --no_protonation -c 4 --sdf
+run_dock -i input.smi -o output.db --program gnina --config config.yml -c 4 --sdf
 ``` 
 
 Example of config.yml for `gnina` docking  
@@ -118,16 +138,17 @@ ncpu: 1
 seed: 0
 ```
 
-##### Docking using multiple servers
+#### Docking using multiple servers
 
-To distribute docking over multiple servers one have to start dask cluster and call the script
+To distribute docking over multiple servers one have to start dask cluster and call the script as follows. 
 
 ```bash
 dask ssh --hostfile $PBS_NODEFILE --nworkers 15 --nthreads 1 &
 sleep 10
-run_dock -i input.smi -o output.db --program vina --config config.yml --no_protonation --sdf --hostfile $PBS_NODEFILE --dask_report
+run_dock -i input.smi -o output.db --program vina --config config.yml --sdf --hostfile $PBS_NODEFILE --dask_report
 ```
-`$PBS_NODEFILE` is a file containing list of IP addresses of servers. The first one from the list will be used by a dask scheduler, but it will also participate in computations.
+`$PBS_NODEFILE` is a file containing list of IP addresses of servers. The first one from the list will be used by a dask scheduler, but it will also participate in computations.  
+To create this file with SLURM one may use the following command `srun hostname | sort | uniq > NODEFILE` 
 
 `--nworkers` is the number of workers per host. This is the number of molecules which are docked in parallel on a single host.
 
@@ -135,9 +156,11 @@ run_dock -i input.smi -o output.db --program vina --config config.yml --no_proto
   
 `--dask_report` argument will create at the end of calculations a html-file with performance report (may be useful to tweak docking parameters).  
   
-**Important setup issue** - the limit of open files on every server should be increased to the level at least twice the total number of requested workers (file streams are used for internode communication by dask).
+**Important setup issues**:
+- the limit of open files on every server should be increased to the level at least twice the total number of requested workers (file streams are used for internode communication by dask).
+- all nodes should be accessible by SSH with default settings 
 
-##### Data retrieval from the output database
+#### Data retrieval from the output database
 
 To extract data from the database one may use the script `get_sdf_from_dock_db`.
 
@@ -156,7 +179,7 @@ Retrieve top poses for compounds with docking score less than -10:
 get_sdf_from_dock_db -i output.db -o output.sdf --fields docking_score --add_sql 'docking_score < -10' 
 ```
 
-##### Docking from Python
+#### Docking from Python
 
 Dock a list of molecules on a local computer. Import `mol_dock` function from a corresponding submodule.
 ```python
@@ -176,96 +199,32 @@ for mol_id, res in docking(mols, dock_func=mol_dock, dock_config='config.yml', n
     print(mol_id, res)
 ```
 
-##### Retrieval output poses
+#### Retrieval output poses
 
 1. Using `--sdf` option of the main script `run_dock` will return top poses with docking scores. If there were several enumerated stereoisomers, it will return the pose and the score of the best scoring stereoisomer only.
 2. Using `get_sdf_from_dock_db` script. it has a rich set of settings and can return SDF as well as SMILES files. The only restriction it cannot currently return the best pose among enumerated stereoisomers. In this case it is advised to use the previous option and invoke `run_dock -o database.db --sdf` on the database with docked molecules.
 
-##### Customization
+#### Customization
 
 To implement support of a custom docking program one should implement a function like `mol_dock` which will take as input an RDKit mol object (named molecule) and a yml-file with all docking parameters. The function should run a command line script/utility and return back a tuple of a molecule name and a dictionary of parameters and their values which should be stored in DB (parameter names should be exactly the same as corresponding field names in DB). For examples, please look at `mol_dock` functions in `vina_dock` or `gnina_dock`.
 
+Details on implementation of support of other protonation tool are given in the `protonation.py` module. 
+
 ### Notes
 
-##### Protonation notes
+#### Protonation notes
 
-pkasolver enumerated protonation states and the closest to pH 7.4 is chosen. In some cases it may return invalid SMILES, e.g. `O=C(N1CCN(CC1)C(=O)C=2C=CC=C(C#CC3CC3)C2)C=4NN=C5CCCC45 -> O=C(c1cccc(C#CC2CC2)c1)N1CC[NH](C(=O)c2[nH]nc3c2CCC3)CC1`, which will be skipped and a corresponding warning message will appear.
+pkasolver enumerates protonation states and the form closest to pH 7.4 is selected as a relevant one. In some cases it may return invalid SMILES, e.g. `O=C(N1CCN(CC1)C(=O)C=2C=CC=C(C#CC3CC3)C2)C=4NN=C5CCCC45 -> O=C(c1cccc(C#CC2CC2)c1)N1CC[NH](C(=O)c2[nH]nc3c2CCC3)CC1`, which will be skipped and a corresponding warning message will appear.
 
-Please note, that protonation states generated with `pkasolver` were not validated. So, check protonation states.
+Please note, that protonation states generated with `pkasolver` were not validated. So, checking protonation states may be reasonable.
 
-##### Multiple CPUs
+#### Multiple CPUs
 
 Please pay attention for `--ncpu` argument if you use `--protonation pkasolver`. For `ncpu` > 1 it may result in some errors. Please report this issue. 
 
 ### Changelog
 
-**0.3.2**
-- catch and report all exceptions when reconstruct 3D geometry of protonated molecules
-- support of temporary directories [#26](https://github.com/ci-lab-cz/easydock/issues/26) [#36](https://github.com/ci-lab-cz/easydock/pull/36)
-- speed up pkasolver [#39](https://github.com/ci-lab-cz/easydock/pull/39) [#35](https://github.com/ci-lab-cz/easydock/issues/35)
-- stereo_id column default value set to 0
-- fix reading setup table if some fields are empty
-
-**0.3.1**
-- add pkasolver as a protonation tool ([@Feriolet](https://github.com/Feriolet)) [#17](https://github.com/ci-lab-cz/easydock/issues/17)
-- add preparation step which tries to strip salts [#30](https://github.com/ci-lab-cz/easydock/issues/30)
-- database structure was modified to store input molecules before pre-preprocessing [#31](https://github.com/ci-lab-cz/easydock/pull/31)
-- speed of database initialization was improved [#29](https://github.com/ci-lab-cz/easydock/pull/29)
-
-**0.3.0**
-- add optional enumeration of stereoisomers. This partially breaks compatibility - docking of molecules in databases which were created by the previous version cannot be continued with this version. Everything else including API is compatible [#21](https://github.com/ci-lab-cz/easydock/pull/21)
-- fix minor errors in retrieving non-top poses by `get_sdf_from_dock_db`
-
-**0.2.9**
-- fix extraction of docking scores for gnina outputs (critial fix) [#23](https://github.com/ci-lab-cz/easydock/pull/23)
-- fix database update freezing upon errors occurred with docking individual docking programs [#22](https://github.com/ci-lab-cz/easydock/issues/22)
-- implement to keep the order of output molecules in get_sdf_from_dock_db script if an argument -d is used
-
-**0.2.8**
-- conversion of PDBQT to Mol by means of Meeko (improvement) [#19](https://github.com/ci-lab-cz/easydock/pull/19)
-- clarify installation instructions
-
-**0.2.7**
-- add an optional UNIQUE constraint on SMILES field in the main table on database creation (currently duplicates are not removed)
-
-**0.2.6**
-- fix compatibility issue with meeko version 0.5.0
-
-**0.2.5**
-- fix input argument type
-- update examples and citation
-
-**0.2.4**
-- close pool explicitly to solve issue with multiprocessing
-- replace subprocess calls with run
-- explicitly set types of command line arguments which a file paths (solve issue with relative paths)
-
-**0.2.3**
-- improve descriptions of examples on README
-- catch all exceptions in conversion of PDBQT to Mol
-- move DB related functions to a new database.py module
-- use SMILES temporary file to protonate molecules with cxcalc
-- add functions to get molecules from DB in Python (get_mols, select_from_db)
-
-**0.2.2**
-- fix bug with continuation of calculations after db was transferred to other machine
-- restrict precedence of command line arguments over arguments restored from DB only to specific ones (output, hostfile, dask_report, ncpu, verbose)
-
-**0.2.1**
-- fix treatment of molecule ids in get_sdf_from_dock_db
-- change installation instructions, vina must be installed from sources
-- add argument no_tautomerization to disable tautomerization during protonation
-- (critical) fix conversion of PDBQT to Mol which could not assign bond orders and returned molecules with only single bonds 
-
-**0.2.0**
-- the stable version with multiple fixes and updates
-- dask library was fully integrated and tested
-- API was redesigned
-- docking of boron-containing compounds was implemented (Vina, smina)
-- a function to predict docking runtime was introduced   
-
-**0.1.2**
-- (bugfix) docking of macrocycles is rigid (in future may be changed)
+[changelog.md](changelog.md)
 
 ### Licence
 BSD-3
