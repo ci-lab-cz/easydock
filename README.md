@@ -1,6 +1,27 @@
 # EasyDock - Python module to automate molecular docking
 
-### Installation
+## Table of content
+- [Installation](#installation)
+  - [Dependencies](#dependencies)
+- [Description](#description)
+  - [Features](#features)
+  - [Pipeline](#pipeline)
+- [Examples](#examples)
+  - [Initialization of a database](#initialization-of-a-database)
+  - [Docking from command line](#docking-from-command-line)
+  - [Docking using multiple servers](#docking-using-multiple-servers)
+  - [Docking from Python](#docking-from-python)
+  - [Data retrieval from the output database](#data-retrieval-from-the-output-database)
+    - [Examples](#examples-1)
+- [Customization](#customization)
+- [Notes](#notes)
+  - [Protonation notes](#protonation-notes)
+  - [Multiple CPUs](#multiple-cpus)
+- [Changelog](#changelog)
+- [License](#licence)
+- [Citation](#citation)
+
+## Installation
 
 ```
 pip install easydock
@@ -37,11 +58,12 @@ pip install git+https://github.com/Feriolet/dimorphite_dl.git
 pip install git+https://github.com/DrrDom/pkasolver.git
 ```
 
-### Description
+## Description
 
 The fully automatic pipeline for molecular docking.  
 
-Features:
+### Features
+
 - the major script `run_dock` supports docking with `vina` and `gnina` (`gnina` also supports `smina` and its custom scoring functions)
 - can be used as a command line utility or imported as a python module
 - input molecules are checked for salts and attempted to fix by SaltRemover 
@@ -53,6 +75,8 @@ Features:
 - interrupted calculations can be continued by invoking the same command or by supplying just a single argument - the existing output database
 - `get_sdf_from_dock_db` is used to extract data from output DB
 - all command line arguments and input files are stored in the setup table and the majority of those parameters cannot be changed later. This will prevent losing input settings. If some changes should be made after DB was created adirect editing the DB can be a solution   
+
+### Pipeline
 
 The pipeline consists of two major parts which can be run separately or simultaneously:
 1. Initialization of database, which includes:
@@ -69,16 +93,16 @@ These two parts of the pipeline allows to create a DB and reuse it for dockign w
 
 There is also a scipt `make_clean_copy` which creates a copy of an existing DB removing all docking data to use it for docking with different proteins/settings/etc      
 
-### Example
+## Examples
 
-#### Initialization of a database
+### Initialization of a database
 
 This will create a DB with checked molecules using 4 cores. If `--protonation` argument was not used molecules will keep their input protonations states
 ```
 run_dock -i input.smi -o output.db -c 4
 ```
 
-#### Docking from command line
+### Docking from command line
 
 To run a both steps of the full pipeline: initialization and docking.  
 Docking using `vina` takes input SMILES and a config file. Ligands will not be protonated. 4 CPU cores will be used (4 molecules will be docked in parallel). When docking will finish an SDF file will be created with top docking poses for each ligand. 
@@ -138,7 +162,7 @@ ncpu: 1
 seed: 0
 ```
 
-#### Docking using multiple servers
+### Docking using multiple servers
 
 To distribute docking over multiple servers one have to start dask cluster and call the script as follows. 
 
@@ -160,26 +184,7 @@ To create this file with SLURM one may use the following command `srun hostname 
 - the limit of open files on every server should be increased to the level at least twice the total number of requested workers (file streams are used for internode communication by dask).
 - all nodes should be accessible by SSH with default settings 
 
-#### Data retrieval from the output database
-
-To extract data from the database one may use the script `get_sdf_from_dock_db`.
-
-Extract top poses with their scores (additional information in DB fields can be extracted only for the top poses):
-```
-get_sdf_from_dock_db -i output.db -o output.sdf --fields docking_score
-```
-Retrieve second poses for compounds `mol_1` and `mol_4` in SDF format:
-```
-get_sdf_from_dock_db -i output.db -o output.sdf -d mol_1 mol_4 --poses 2 
-```
-Instead of a list of ids a text file can be supplied as an argument `-d`.
-
-Retrieve top poses for compounds with docking score less than -10:
-```
-get_sdf_from_dock_db -i output.db -o output.sdf --fields docking_score --add_sql 'docking_score < -10' 
-```
-
-#### Docking from Python
+### Docking from Python
 
 Dock a list of molecules on a local computer. Import `mol_dock` function from a corresponding submodule.
 ```python
@@ -199,37 +204,55 @@ for mol_id, res in docking(mols, dock_func=mol_dock, dock_config='config.yml', n
     print(mol_id, res)
 ```
 
-#### Retrieval output poses
+### Data retrieval from the output database
 
-1. Using `--sdf` option of the main script `run_dock` will return top poses with docking scores. If there were several enumerated stereoisomers, it will return the pose and the score of the best scoring stereoisomer only.
+1. Using `--sdf` argument of the main script `run_dock` will return top poses with docking scores. If there were several enumerated stereoisomers, it will return the pose and the score of the best scoring stereoisomer only.  
+
 2. Using `get_sdf_from_dock_db` script. it has a rich set of settings and can return SDF as well as SMILES files. The only restriction it cannot currently return the best pose among enumerated stereoisomers. In this case it is advised to use the previous option and invoke `run_dock -o database.db --sdf` on the database with docked molecules.
 
-#### Customization
+#### Examples
+
+Extract top poses with their scores (additional information in DB fields can be extracted only for the top poses):
+```
+get_sdf_from_dock_db -i output.db -o output.sdf --fields docking_score
+```
+Retrieve second poses for compounds `mol_1` and `mol_4` in SDF format:
+```
+get_sdf_from_dock_db -i output.db -o output.sdf -d mol_1 mol_4 --poses 2 
+```
+Instead of a list of ids a text file can be supplied as an argument `-d`.
+
+Retrieve top poses for compounds with docking score less than -10:
+```
+get_sdf_from_dock_db -i output.db -o output.sdf --fields docking_score --add_sql 'docking_score < -10' 
+```
+
+## Customization
 
 To implement support of a custom docking program one should implement a function like `mol_dock` which will take as input an RDKit mol object (named molecule) and a yml-file with all docking parameters. The function should run a command line script/utility and return back a tuple of a molecule name and a dictionary of parameters and their values which should be stored in DB (parameter names should be exactly the same as corresponding field names in DB). For examples, please look at `mol_dock` functions in `vina_dock` or `gnina_dock`.
 
 Details on implementation of support of other protonation tool are given in the `protonation.py` module. 
 
-### Notes
+## Notes
 
-#### Protonation notes
+### Protonation notes
 
 pkasolver enumerates protonation states and the form closest to pH 7.4 is selected as a relevant one. In some cases it may return invalid SMILES, e.g. `O=C(N1CCN(CC1)C(=O)C=2C=CC=C(C#CC3CC3)C2)C=4NN=C5CCCC45 -> O=C(c1cccc(C#CC2CC2)c1)N1CC[NH](C(=O)c2[nH]nc3c2CCC3)CC1`, which will be skipped and a corresponding warning message will appear.
 
 Please note, that protonation states generated with `pkasolver` were not validated. So, checking protonation states may be reasonable.
 
-#### Multiple CPUs
+### Multiple CPUs
 
 Please pay attention for `--ncpu` argument if you use `--protonation pkasolver`. For `ncpu` > 1 it may result in some errors. Please report this issue. 
 
-### Changelog
+## Changelog
 
 [changelog.md](changelog.md)
 
-### Licence
+## Licence
 BSD-3
 
-### Citation
+## Citation
 Minibaeva, G.; Ivanova, A.; Polishchuk, P.,  
 EasyDock: customizable and scalable docking tool.  
 *Journal of Cheminformatics* **2023**, 15 (1), 102.  
