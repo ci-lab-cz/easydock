@@ -64,7 +64,7 @@ The fully automatic pipeline for molecular docking.
 
 ### Features
 
-- the major script `run_dock` supports docking with `vina` and `gnina` (`gnina` also supports `smina` and its custom scoring functions)
+- the major script `easydock` supports docking with `vina` and `gnina` (`gnina` also supports `smina` and its custom scoring functions)
 - can be used as a command line utility or imported as a python module
 - input molecules are checked for salts and attempted to fix by SaltRemover 
 - stereoisomers can be enumerated for unspecified chiral centers and double bonds (since some compounds may require very long runtimes, the maximum runtime for individual molecules was set to 300 sec)
@@ -99,7 +99,7 @@ There is also a scipt `make_clean_copy` which creates a copy of an existing DB r
 
 This will create a DB with checked molecules using 4 cores. If `--protonation` argument was not used molecules will keep their input protonations states
 ```
-run_dock -i input.smi -o output.db -c 4
+easydock -i input.smi -o output.db -c 4
 ```
 
 ### Docking from command line
@@ -107,12 +107,12 @@ run_dock -i input.smi -o output.db -c 4
 To run a both steps of the full pipeline: initialization and docking.  
 Docking using `vina` takes input SMILES and a config file. Ligands will not be protonated. 4 CPU cores will be used (4 molecules will be docked in parallel). When docking will finish an SDF file will be created with top docking poses for each ligand. 
 ```
-run_dock -i input.smi -o output.db --program vina --config config.yml -c 4 --sdf
+easydock -i input.smi -o output.db --program vina --config config.yml -c 4 --sdf
 ``` 
 
 The same command for a previously initialized DB. Supplying arguments relevant for the initialization stage will have no effect after DB was created
 ```
-run_dock -o output.db --program vina --config config.yml -c 4 --sdf
+easydock -o output.db --program vina --config config.yml -c 4 --sdf
 ``` 
 
 Example of config.yml for `vina` docking  
@@ -125,11 +125,11 @@ n_poses: 5
 ncpu: 5
 ```
 
-NOTE: ncpu argument in `run_dock` and `config.yml` has different meaning. In `run_dock` it means the number of molecules docked in parallel. In `config.yml` it means the number of CPUs used for docking of a single molecule. The product of these two values should be equal or a little bit more than the number of CPUs on a computer.
+NOTE: ncpu argument in `easydock` and `config.yml` has different meaning. In `easydock` it means the number of molecules docked in parallel. In `config.yml` it means the number of CPUs used for docking of a single molecule. The product of these two values should be equal or a little bit more than the number of CPUs on a computer.
 
 The same but using `gnina`
 ```
-run_dock -i input.smi -o output.db --program gnina --config config.yml -c 4 --sdf
+easydock -i input.smi -o output.db --program gnina --config config.yml -c 4 --sdf
 ``` 
 
 Example of config.yml for `gnina` docking  
@@ -169,7 +169,7 @@ To distribute docking over multiple servers one have to start dask cluster and c
 ```bash
 dask ssh --hostfile $PBS_NODEFILE --nworkers 15 --nthreads 1 &
 sleep 10
-run_dock -i input.smi -o output.db --program vina --config config.yml --sdf --hostfile $PBS_NODEFILE --dask_report
+easydock -i input.smi -o output.db --program vina --config config.yml --sdf --hostfile $PBS_NODEFILE --dask_report
 ```
 `$PBS_NODEFILE` is a file containing list of IP addresses of servers. The first one from the list will be used by a dask scheduler, but it will also participate in computations.  
 To create this file with SLURM one may use the following command `srun hostname | sort | uniq > NODEFILE` 
@@ -206,9 +206,9 @@ for mol_id, res in docking(mols, dock_func=mol_dock, dock_config='config.yml', n
 
 ### Data retrieval from the output database
 
-1. Using `--sdf` argument of the main script `run_dock` will return top poses with docking scores. If there were several enumerated stereoisomers, it will return the pose and the score of the best scoring stereoisomer only.  
+1. Using `--sdf` argument of the main script `easydock` will return top poses with docking scores. If there were several enumerated stereoisomers, it will return the pose and the score of the best scoring stereoisomer only.  
 
-2. Using `get_sdf_from_dock_db` script. it has a rich set of settings and can return SDF as well as SMILES files. The only restriction it cannot currently return the best pose among enumerated stereoisomers. In this case it is advised to use the previous option and invoke `run_dock -o database.db --sdf` on the database with docked molecules.
+2. Using `get_sdf_from_dock_db` script. it has a rich set of settings and can return SDF as well as SMILES files. The only restriction it cannot currently return the best pose among enumerated stereoisomers. In this case it is advised to use the previous option and invoke `easydock -o database.db --sdf` on the database with docked molecules.
 
 #### Examples
 
