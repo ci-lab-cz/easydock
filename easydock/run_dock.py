@@ -147,7 +147,7 @@ def main():
 
     init_group.add_argument('-s', '--max_stereoisomers', metavar='INTEGER', type=int, required=False, default=1,
                         help='maximum number of isomers to enumerate. The default is set to 1.')
-    init_group.add_argument('--protonation', default=None, required=False, choices=['chemaxon', 'pkasolver'],
+    init_group.add_argument('--protonation', default=None, required=False, choices=['chemaxon', 'pkasolver', 'molgpka'],
                         help='choose a protonation program supported by EasyDock.')
     init_group.add_argument('--no_tautomerization', action='store_true', default=False,
                         help='disable tautomerization of molecules during protonation (applicable to chemaxon only).')
