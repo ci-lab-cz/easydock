@@ -13,7 +13,7 @@ import yaml
 from easydock import read_input
 from easydock.preparation_for_docking import mol_is_3d
 from easydock.auxiliary import take, mol_name_split, empty_func, empty_generator, timeout, split_generator_to_chunks
-from easydock.protonation import protonate_chemaxon, read_protonate_chemaxon, protonate_dimorphite, read_smiles, protonate_pkasolver
+from easydock.protonation import protonate_chemaxon, read_protonate_chemaxon, protonate_dimorphite, read_smiles, protonate_pkasolver, protonate_molgpka
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem.EnumerateStereoisomers import EnumerateStereoisomers, StereoEnumerationOptions
@@ -460,9 +460,11 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
                         os.remove(output)
                         os.close(fd)
 
-        elif program in ['pkasolver']:  # native python protocol
+        elif program in ['pkasolver', 'molgpka']:  # native python protocol
             if program == 'pkasolver':
                 protonate_func = partial(protonate_pkasolver, ncpu=ncpu, smi_size=len(data_list))
+            elif program == 'molgpka':
+                protonate_func = partial(protonate_molgpka, ncpu=ncpu, smi_size=len(data_list))
             else:
                 raise ValueError(f'There is no implemeneted functions to protonate molecules by {program}')
 
