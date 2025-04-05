@@ -133,3 +133,72 @@ def __protonate_pkasolver(args, model):
                 output_mol.GetAtomWithIdx(i[0]).SetFormalCharge(0)
 
     return Chem.MolToSmiles(output_mol), mol_name
+
+
+def protonate_molgpka(items: str, ncpu: int = 1, smi_size=1):
+    from molgpka.predict_pka_mp import load_models
+
+    models = load_models()
+    chunksize = min(max(1, smi_size // ncpu), 500)
+
+    pool = Pool(ncpu)
+    for smi, mol_name in pool.imap_unordered(partial(__protonate_molgpka, models=models), items, chunksize=chunksize):
+        yield smi, mol_name
+
+    return
+
+
+def add_hydrogen_to_atom(editable_mol, atom_idx):
+    hydrogen = Chem.Atom(1)
+    hydrogen_idx = editable_mol.AddAtom(hydrogen)
+    editable_mol.AddBond(atom_idx, hydrogen_idx, Chem.BondType.SINGLE)
+
+
+def __protonate_molgpka(args, models):
+    from molgpka.predict_pka_mp import predict
+    from copy import deepcopy
+
+    smi, mol_name = args
+    mol = Chem.MolFromSmiles(smi, sanitize=True)
+    ph = 7.4
+    try:
+        base_dict, acid_dict, mol = predict(mol, models)
+        mol_ = deepcopy(mol)
+        editable_mol = Chem.RWMol(mol_)
+        for idx, pKa in sorted(acid_dict.items(), reverse=True):
+            atom = editable_mol.GetAtomWithIdx(idx)
+            if atom.GetAtomicNum() == 1:
+                atom_idx = [neighbor.GetIdx() for neighbor in atom.GetNeighbors()][0]
+                atom_not_H = editable_mol.GetAtomWithIdx(atom_idx)
+                charge = atom_not_H.GetFormalCharge()
+                Hs = atom_not_H.GetTotalNumHs(includeNeighbors=True)
+                if pKa < ph:
+                    if Hs > 0 and charge >= 0:
+                        editable_mol.RemoveAtom(idx)
+                        atom_not_H.SetFormalCharge(charge - 1)
+                        atom_not_H.UpdatePropertyCache()
+                    else:
+                        print('mol with problem to deprotonate', mol_name)
+
+        for idx, pKa in base_dict.items():
+            atom = editable_mol.GetAtomWithIdx(idx)
+            charge = atom.GetFormalCharge()
+            if pKa > ph:
+                if charge <= 0:
+                    add_hydrogen_to_atom(editable_mol, idx)
+                    atom.SetFormalCharge(charge + 1)
+                else:
+                    print('mol with problem to protonate', mol_name)
+                atom.UpdatePropertyCache()
+
+        changed_smi = Chem.MolToSmiles(Chem.RemoveHs(editable_mol))
+        # print(f'{datetime.datetime.now()}; PID: {os.getpid()}; {item[1]} end')
+        # sys.stdout.flush()
+    except Exception as e:
+        print(e)
+        print(mol_name)
+        return None
+    return changed_smi, mol_name
+
+
+
