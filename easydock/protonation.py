@@ -136,16 +136,14 @@ def __protonate_pkasolver(args, model):
 
 
 def protonate_molgpka(items: str, ncpu: int = 1, smi_size=1):
-    from molgpka.predict_pka_mp import load_models
+    from molgpka.predict_pka_mp import load_state_dicts
 
-    models = load_models()
+    models = load_state_dicts()
     chunksize = min(max(1, smi_size // ncpu), 500)
 
     pool = Pool(ncpu)
     for smi, mol_name in pool.imap_unordered(partial(__protonate_molgpka, models=models), items, chunksize=chunksize):
         yield smi, mol_name
-
-    return
 
 
 def add_hydrogen_to_atom(editable_mol, atom_idx):
@@ -156,14 +154,17 @@ def add_hydrogen_to_atom(editable_mol, atom_idx):
 
 def __protonate_molgpka(args, models):
     from molgpka.predict_pka_mp import predict
+    from rdkit.Chem import AllChem
     from copy import deepcopy
 
     smi, mol_name = args
+    #print(smi, mol_name)
     mol = Chem.MolFromSmiles(smi, sanitize=True)
     ph = 7.4
     try:
-        base_dict, acid_dict, mol = predict(mol, models)
-        mol_ = deepcopy(mol)
+        #editable_mol = Chem.RWMol(mol)
+        #print(Chem.MolToSmiles(editable_mol), mol_name)
+        base_dict, acid_dict, mol_ = predict(mol, models, uncharged=True)
         editable_mol = Chem.RWMol(mol_)
         for idx, pKa in sorted(acid_dict.items(), reverse=True):
             atom = editable_mol.GetAtomWithIdx(idx)
