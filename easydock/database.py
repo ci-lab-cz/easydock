@@ -499,7 +499,6 @@ def update_db_protonated_smiles(conn, items, data_list, table_name='mols'):
     :return:
     """
 
-
     output_data_smi = []
     output_data_mol = []
 
@@ -508,13 +507,14 @@ def update_db_protonated_smiles(conn, items, data_list, table_name='mols'):
     data_names = set(mol_name for smi, mol_name in data_list)
     data_pairset = tuple([tuple(mol_name_split(names)) for names in data_names])
 
+    placeholder = ','.join(['(?,?)'] * len(data_pairset))
     smi_sql = f"""SELECT id || '_' || stereo_id FROM {table_name}
-                WHERE (id, stereo_id) in {data_pairset} AND source_mol_block is NULL"""
+                  WHERE (id, stereo_id) in ({placeholder}) AND source_mol_block is NULL"""
     mol_sql = f"""SELECT id || '_' || stereo_id FROM {table_name}
-                WHERE (id, stereo_id) in {data_pairset} AND source_mol_block is NOT NULL"""
+                  WHERE (id, stereo_id) in ({placeholder}) AND source_mol_block is NOT NULL"""
 
-    smi_names = set(mol_name[0] for mol_name in list(cur.execute(smi_sql)))
-    mol_names = set(mol_name[0] for mol_name in list(cur.execute(mol_sql)))
+    smi_names = set(mol_name[0] for mol_name in list(cur.executemany(smi_sql, data_pairset)))
+    mol_names = set(mol_name[0] for mol_name in list(cur.executemany(mol_sql, data_pairset)))
 
     for smi, mol_name in items:
         try:
