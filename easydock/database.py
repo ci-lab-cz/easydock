@@ -513,8 +513,10 @@ def update_db_protonated_smiles(conn, items, data_list, table_name='mols'):
     mol_sql = f"""SELECT id || '_' || stereo_id FROM {table_name}
                   WHERE (id, stereo_id) in ({placeholder}) AND source_mol_block is NOT NULL"""
 
-    smi_names = set(mol_name[0] for mol_name in list(cur.executemany(smi_sql, data_pairset)))
-    mol_names = set(mol_name[0] for mol_name in list(cur.executemany(mol_sql, data_pairset)))
+    cur.execute(smi_sql, data_pairset)
+    smi_names = set(mol_name[0] for mol_name in cur.fetchall())
+    cur.execute(mol_sql, data_pairset)
+    mol_names = set(mol_name[0] for mol_name in cur.fetchall())
 
     for smi, mol_name in items:
         try:
