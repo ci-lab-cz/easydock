@@ -508,6 +508,7 @@ def update_db_protonated_smiles(conn, items, data_list, table_name='mols'):
     data_pairset = tuple([tuple(mol_name_split(names)) for names in data_names])
 
     placeholder = ','.join(['(?,?)'] * len(data_pairset))
+    data_pairset = [item for tup in data_pairset for item in tup]  # flatten list of tuples
     smi_sql = f"""SELECT id || '_' || stereo_id FROM {table_name}
                   WHERE (id, stereo_id) in ({placeholder}) AND source_mol_block is NULL"""
     mol_sql = f"""SELECT id || '_' || stereo_id FROM {table_name}
