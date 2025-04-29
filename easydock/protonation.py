@@ -198,8 +198,5 @@ def __protonate_molgpka(args, models):
     except Exception as e:
         print(e)
         print(mol_name)
-        return None
+        return None, mol_name
     return changed_smi, mol_name
-
-
-
