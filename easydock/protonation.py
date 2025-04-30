@@ -1,7 +1,9 @@
 import contextlib
 import os
 import subprocess
+import sys
 import tempfile
+import traceback
 
 from functools import partial
 from math import ceil
@@ -32,6 +34,34 @@ These functions should be intergated in database.add_protonation function, there
 of protonation functions. All functions may take additional arguments, which should be passed with 
 partial(protonate_xxx, arg1=value1, ...) at the intialization step.   
 """
+
+# MolGpKa fix patterns
+# patterns + ids of atoms in a pattern to be fixed + type of a pattern
+molgpka_patterns1 = [('[#7+]~*~[#7+]', (0, 2), 'pos'),    # 21
+                     ('[#7+]**[#7+]', (0, 3), 'pos'),   # 3
+                     ('[#7+]***[#7+]', (0, 4), 'pos'),  # 4
+                     ('c[n-][n-]c', (1, 2), 'neg'),     # 9
+                     ('[O-]aa[O-]', (0, 3), 'neg'),     # 13
+                     ('[O-]aaa[O-]', (0, 4), 'neg'),    # 14
+                     ('[O-]aaaa[O-]', (0, 5), 'neg')]   # 15
+molgpka_patterns1 = [(Chem.MolFromSmarts(p), ids, p_type) for p, ids, p_type in molgpka_patterns1]
+
+molgpka_patterns2 = [('[$([NH+,NH2+,NH3+]-[*]=[O,S])]', 'pos'), # 1
+                     ('[$([N-](C(=O))[N-]S(=O)=O)]', 'neg'),  # 2
+                     ('[$([N-]1C(=O)N(C)C(=O)C1)]', 'neg'),  # 5
+                     ('[$([NH-](C(=O))C1=NC=CS1)]', 'neg'),  # 6
+                     ('[$([NH2+]C(=[NH+])[NH2])]', 'pos'),  # 7
+                     ('[$([N-]C(=[NH+])[NH2])]', 'neg'),  # 8
+                     ('[$([nH+]1[nH]ccc1)]', 'pos'),  # 10
+                     ('[$([n-]1c(=O)[n-]c(=O)cn1)]', 'neg'),  # 11
+                     ('[$([n-]1ncnc1[N-]S(=O)=O)]', 'neg'),  # 12
+                     ('[$([O-]aaC(=O)[O-])]', 'neg'),  # 16
+                     ('[$([#8-][#6][#7-])]', 'neg'),  # 17
+                     ('[$([O-][CX4][CX3][O-])]', 'neg'),  # 18
+                     ('[$([N+]=C[N-]S(=O)=O)]', 'pos'),  # 19
+                     ('[$([n-]1cnc(=O)c2cccn12)]', 'neg'),  # 20
+                     ('[$([N-](a)C([NH2])=[NH2+])]', 'neg')]  #22
+molgpka_patterns2 = [(Chem.MolFromSmarts(p), p_type) for p, p_type in molgpka_patterns2]
 
 
 def protonate_chemaxon(input_fname, output_fname, tautomerize=True):
@@ -146,10 +176,19 @@ def protonate_molgpka(items: str, ncpu: int = 1, smi_size=1):
         yield smi, mol_name
 
 
-def add_hydrogen_to_atom(editable_mol, atom_idx):
+def __add_hydrogen_to_atom(editable_mol, atom_idx):
     hydrogen = Chem.Atom(1)
     hydrogen_idx = editable_mol.AddAtom(hydrogen)
     editable_mol.AddBond(atom_idx, hydrogen_idx, Chem.BondType.SINGLE)
+
+
+def __assign_pka_pkb_to_heavy_atoms(mol, acid_dict, base_dict):
+    for idx, value in acid_dict.items():
+        atom_idx = [neighbor.GetIdx() for neighbor in mol.GetAtomWithIdx(idx).GetNeighbors()][0]
+        mol.GetAtomWithIdx(atom_idx).SetDoubleProp('pka', float(value))
+    for idx, value in base_dict.items():
+        mol.GetAtomWithIdx(idx).SetDoubleProp('pkb', float(value))
+    return mol
 
 
 def __protonate_molgpka(args, models):
@@ -162,41 +201,91 @@ def __protonate_molgpka(args, models):
     mol = Chem.MolFromSmiles(smi, sanitize=True)
     ph = 7.4
     try:
-        #editable_mol = Chem.RWMol(mol)
-        #print(Chem.MolToSmiles(editable_mol), mol_name)
-        base_dict, acid_dict, mol_ = predict(mol, models, uncharged=True)
-        editable_mol = Chem.RWMol(mol_)
-        for idx, pKa in sorted(acid_dict.items(), reverse=True):
-            atom = editable_mol.GetAtomWithIdx(idx)
-            if atom.GetAtomicNum() == 1:
-                atom_idx = [neighbor.GetIdx() for neighbor in atom.GetNeighbors()][0]
-                atom_not_H = editable_mol.GetAtomWithIdx(atom_idx)
-                charge = atom_not_H.GetFormalCharge()
-                Hs = atom_not_H.GetTotalNumHs(includeNeighbors=True)
-                if pKa < ph:
-                    if Hs > 0 and charge >= 0:
-                        editable_mol.RemoveAtom(idx)
-                        atom_not_H.SetFormalCharge(charge - 1)
-                        atom_not_H.UpdatePropertyCache()
-                    else:
-                        print('mol with problem to deprotonate', mol_name)
 
-        for idx, pKa in base_dict.items():
-            atom = editable_mol.GetAtomWithIdx(idx)
-            charge = atom.GetFormalCharge()
-            if pKa > ph:
+        # mol_ will have al H explicit (acidic pKa is assigned to H)
+        base_dict, acid_dict, mol_ = predict(mol, models, uncharged=True)
+        mol_ = __assign_pka_pkb_to_heavy_atoms(mol_, acid_dict, base_dict)
+        editable_mol = Chem.RWMol(Chem.RemoveHs(mol_))
+
+        # assign protonation states
+        for atom in editable_mol.GetAtoms():
+            if atom.HasProp('pka') and atom.GetDoubleProp('pka') < ph:
+                Hs = atom.GetTotalNumHs()
+                charge = atom.GetFormalCharge()
+                if Hs > 0 and charge >= 0:
+                    atom.SetFormalCharge(charge - 1)
+                    # after RemoveHs such hydrogens remain explicit, thus we have to reduce their number explicitly
+                    # however, if there is no explicit Hs, implicit Hs should be recalculated with UpdatePropertyCache
+                    if atom.GetNumExplicitHs() > 0:
+                        atom.SetNumExplicitHs(atom.GetNumExplicitHs() - 1)
+                    atom.UpdatePropertyCache()
+                else:
+                    print('mol with problem to deprotonate', mol_name)
+            elif atom.HasProp('pkb') and atom.GetDoubleProp('pkb') > ph:
+                charge = atom.GetFormalCharge()
                 if charge <= 0:
-                    add_hydrogen_to_atom(editable_mol, idx)
                     atom.SetFormalCharge(charge + 1)
+                    atom.UpdatePropertyCache()
                 else:
                     print('mol with problem to protonate', mol_name)
-                atom.UpdatePropertyCache()
+        editable_mol.UpdatePropertyCache()
+
+        # fix and revert some protonation states
+        for pattern, ids, pattern_type in molgpka_patterns1:
+            matches = editable_mol.GetSubstructMatches(pattern, uniquify=True)
+            if pattern_type == 'pos':
+                prop_name = 'pkb'
+            else:
+                prop_name = 'pka'
+            while matches:
+                worst_value = float('inf') if pattern_type == 'pos' else float('-inf')
+                worst_atom_idx = None
+                for match in matches:
+                    v1 = editable_mol.GetAtomWithIdx(match[ids[0]]).GetDoubleProp(prop_name)
+                    v2 = editable_mol.GetAtomWithIdx(match[ids[1]]).GetDoubleProp(prop_name)
+                    if pattern_type == 'neg' and max(v1, v2) > worst_value:
+                        worst_value = max(v1, v2)
+                        if v1 > v2:
+                            worst_atom_idx = match[ids[0]]
+                        else:
+                            worst_atom_idx = match[ids[1]]
+                    elif pattern_type == 'pos' and min(v1, v2) < worst_value:
+                        worst_value = min(v1, v2)
+                        if v1 < v2:
+                            worst_atom_idx = match[ids[0]]
+                        else:
+                            worst_atom_idx = match[ids[1]]
+
+                charge = editable_mol.GetAtomWithIdx(worst_atom_idx).GetFormalCharge()
+                if pattern_type == 'pos':
+                    editable_mol.GetAtomWithIdx(worst_atom_idx).SetFormalCharge(charge - 1)
+                elif pattern_type == 'neg':
+                    atom = editable_mol.GetAtomWithIdx(worst_atom_idx)
+                    atom.SetFormalCharge(charge + 1)
+                    atom.SetNumExplicitHs(atom.GetNumExplicitHs() + 1)
+
+                matches = editable_mol.GetSubstructMatches(pattern, uniquify=True)
+
+        editable_mol.UpdatePropertyCache()
+
+        # single atom fixes
+        for pattern, pattern_type in molgpka_patterns2:
+            matches = editable_mol.GetSubstructMatches(pattern, uniquify=True)
+            for match in matches:
+                atom = editable_mol.GetAtomWithIdx(match[0])
+                if pattern_type == 'pos':
+                    atom.SetFormalCharge(atom.GetFormalCharge() - 1)
+                    atom.UpdatePropertyCache()
+                if pattern_type == 'neg':
+                    atom.SetFormalCharge(atom.GetFormalCharge() + 1)
+                    atom.SetNumExplicitHs(atom.GetNumExplicitHs() + 1)
+                    atom.UpdatePropertyCache()
+        editable_mol.UpdatePropertyCache()
 
         changed_smi = Chem.MolToSmiles(Chem.RemoveHs(editable_mol))
-        # print(f'{datetime.datetime.now()}; PID: {os.getpid()}; {item[1]} end')
-        # sys.stdout.flush()
+
     except Exception as e:
-        print(e)
-        print(mol_name)
+        traceback.print_exc()
+        sys.stderr.write(f'Molecule {mol_name} caused an error during protonation\n')
         return None, mol_name
     return changed_smi, mol_name
