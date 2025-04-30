@@ -35,18 +35,29 @@ pip install git+https://github.com/ci-lab-cz/easydock.git
 
 - from conda
 ```
-conda install -c conda-forge python=3.9 numpy=1.20 rdkit scipy dask distributed
+conda install -c conda-forge python=3.11 rdkit numpy==1.26
+conda install -c conda-forge scipy dask distributed
 ```
 
 - from pypi
 
 ```
-pip install paramiko meeko vina
+pip install paramiko vina
+# has fixes with rdkit.six import
+pip install git+https://github.com/forlilab/Meeko.git
 ```
 
 - (optional) installation of `gnina/smina` is described at https://github.com/gnina/gnina
 
-- (optional) installation of a `pkasolver` fork to enable protonation with this tool. We recommend to install and use CPU-based version, however, one may try a GPU supported one (look at the dependencies in `pkasolver` package).
+- (recommended) installation of MolGpKa for molecule protonation
+```
+# pip package
+pip install git+https://github.com/ci-lab-cz/MolGpKa.git
+pip install torch_geometric
+pip install torch==2.2 torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.2.0+cpu.html
+```
+- (not recommended) installation of a `pkasolver` fork to enable protonation with this tool. We recommend to install and use CPU-based version, however, one may try a GPU supported one (look at the dependencies in `pkasolver` package).
 ```
 pip install torch==1.13.1+cpu  --extra-index-url https://download.pytorch.org/whl/cpu
 pip install torch-geometric==2.0.1
@@ -100,6 +111,10 @@ There is also a scipt `make_clean_copy` which creates a copy of an existing DB r
 This will create a DB with checked molecules using 4 cores. If `--protonation` argument was not used molecules will keep their input protonations states
 ```
 easydock -i input.smi -o output.db -c 4
+```
+Initialize DB and protonate molecules with MolGpKa
+```
+easydock -i input.smi -o output.db -c 4 --protonation molgpka
 ```
 
 ### Docking from command line
@@ -237,9 +252,10 @@ Details on implementation of support of other protonation tool are given in the 
 
 ### Protonation notes
 
-pkasolver enumerates protonation states and the form closest to pH 7.4 is selected as a relevant one. In some cases it may return invalid SMILES, e.g. `O=C(N1CCN(CC1)C(=O)C=2C=CC=C(C#CC3CC3)C2)C=4NN=C5CCCC45 -> O=C(c1cccc(C#CC2CC2)c1)N1CC[NH](C(=O)c2[nH]nc3c2CCC3)CC1`, which will be skipped and a corresponding warning message will appear.
-
-Please note, that protonation states generated with `pkasolver` were not validated. So, checking protonation states may be reasonable.
+There are two integrated open-source approaches (molgpka and pkasolver) and one commercial (chemaxon).
+1. Chemaxon is pretty reliable, however it requires a paid license.
+2. MolGpKa is a model trained on predictions of Chemaxon and thus aligns well with it. Protonation states of each atom are chosen based on the predicted pKa and pKb values. However, there are certain issues. Some issues were fixed by post-processing SMARTS patterns (avoid protonation of amide groups, etc). However, some issues are difficult to fix (e.g. missing protonation of aliphatic amines, piperizines, etc).  
+3. pkasolver enumerates protonation states and the form closest to pH 7.4 is selected as a relevant one. In some cases it may return invalid SMILES, e.g. `O=C(N1CCN(CC1)C(=O)C=2C=CC=C(C#CC3CC3)C2)C=4NN=C5CCCC45 -> O=C(c1cccc(C#CC2CC2)c1)N1CC[NH](C(=O)c2[nH]nc3c2CCC3)CC1`, which will be skipped and a corresponding warning message will appear. It has many issues with protonated forms (very frequent protonation of amide groups, etc). Therefore, we do not recommend its usage.
 
 ### Multiple CPUs
 
