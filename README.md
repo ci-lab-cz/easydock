@@ -36,7 +36,7 @@ pip install git+https://github.com/ci-lab-cz/easydock.git
 - from conda
 ```
 conda install -c conda-forge python=3.11 rdkit numpy==1.26
-conda install -c conda-forge scipy dask distributed
+conda install -c conda-forge scipy dask distributed scikit-learn
 ```
 
 - from pypi
