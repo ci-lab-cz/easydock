@@ -73,6 +73,8 @@ pip install git+https://github.com/DrrDom/pkasolver.git
 
 The fully automatic pipeline for molecular docking.  
 
+An important feature, once the database is initialized it will store all command line arguments and input files as a part of the setup table. This will allow to easy rerun interrupted calculations and keep all data in one place for consistency, but this also makes impossible to change some settings afterwards by providing other values in command line arguments. The existing database will never be overwritten. Therefore, if the database was initialized wrongly, it should be deleted before rerun the command line script. Alternatively, incorrect values of arguments can be edited directly in the database.  
+
 ### Features
 
 - the major script `easydock` supports docking with `vina` and `gnina` (`gnina` also supports `smina` and its custom scoring functions)
@@ -83,9 +85,9 @@ The fully automatic pipeline for molecular docking.
 - supports distributed computing using `dask` library
 - supports docking of boron-containing compounds using `vina` and `smina` (boron is replaced with carbon before docking and returned back)
 - all outputs are stored in an SQLite database
-- interrupted calculations can be continued by invoking the same command or by supplying just a single argument - the existing output database
+- interrupted calculations can be continued by invoking the same command or by supplying just a single argument (`--output`) - the existing output database
 - `get_sdf_from_dock_db` is used to extract data from output DB
-- all command line arguments and input files are stored in the setup table and the majority of those parameters cannot be changed later. This will prevent losing input settings. If some changes should be made after DB was created adirect editing the DB can be a solution   
+- all command line arguments and input files are stored in the setup table and the majority of those parameters cannot be changed later. This will prevent losing input settings. If some changes should be made after DB was created a direct editing the DB can be a solution   
 
 ### Pipeline
 
@@ -94,7 +96,7 @@ The pipeline consists of two major parts which can be run separately or simultan
 - input SMILES are converted in 3D by RDKit, if input is 3D structures in SDF their conformations wil be taken as starting without changes.
 - compounds having salts are stripped, if this fails the whole compound will be omitted for docking reporting to STDERR 
 - up to a specified number of stereoisomers are enumerated for molecules with undefined chiral centers or double bond configurations (by default 1 random but reproducible stereoisomer is generated)
-- ligands are protonated by Chemaxon/pKasolver at pH 7.4 and the most stable tautomers are generated (optional, requires a Chemaxon license)
+- ligands are protonated by MolGpKa/Chemaxon/pKasolver at pH 7.4 and the most stable tautomers are generated (optional, requires a Chemaxon license)
 2. Docking step includes:
 - molecules are converted in PDBQT format using Meeko
 - docking with `vina`/`gnina`
