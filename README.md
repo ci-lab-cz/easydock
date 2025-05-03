@@ -81,7 +81,8 @@ An important feature, once the database is initialized it will store all command
 - can be used as a command line utility or imported as a python module
 - input molecules are checked for salts and attempted to fix by SaltRemover 
 - stereoisomers can be enumerated for unspecified chiral centers and double bonds (since some compounds may require very long runtimes, the maximum runtime for individual molecules was set to 300 sec)
-- several protonation options: chemaxon and pkasolver (check notes below)
+- several protonation options: molgpka, chemaxon and pkasolver (check notes below)
+- docking of compounds with saturated rings can be enhanced by additional sampling of starting ring conformers and only the best one is stored to the database
 - supports distributed computing using `dask` library
 - supports docking of boron-containing compounds using `vina` and `smina` (boron is replaced with carbon before docking and returned back)
 - all outputs are stored in an SQLite database
@@ -177,6 +178,13 @@ n_poses: 10
 addH: False
 ncpu: 1
 seed: 0
+```
+
+### Sampling of saturated rings
+
+Since rings are considered rigid, to improve docking of compounds containing saturated rings a set of starting conformers can be sampled and used for docking (enabled by `--ring_sample` argument). Only the conformer resulted int he best docking score will be stored in the database. This will increase computational complexity proportionally and may result in much longer simulation times especially for compounds containing multiple saturated rings.  
+```
+easydock -i input.smi -o output.db --program vina --config config.yml -c 4 --ring_sample 
 ```
 
 ### Docking using multiple servers

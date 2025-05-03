@@ -3,6 +3,7 @@
 - create a script to clear docking data from a database to reuse it for other docking (different protein, settings, etc)
 - speed up initialization of a database
 - integration of MolGpKa for molecule protonation and implement post-processing SMARTS patterns to fix errors 
+- implement optional sampling of saturated ring systems to improve docking results 
 - fix some errors in pkasolver by applying post-processing SMARTS patterns
 - make clear command argument description and grouping
 
