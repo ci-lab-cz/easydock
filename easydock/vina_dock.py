@@ -71,12 +71,8 @@ def mol_dock(mol, config):
     :param config: yml-file with docking settings
     :return:
     """
-    output = None
-
     config = __parse_config(config)
 
-
-    
     mol_id = mol.GetProp('_Name')
     ligand_pdbqt_list = ligand_preparation(mol, boron_replacement=True)
 
@@ -106,11 +102,11 @@ def mol_dock(mol, config):
                 if res:
                     res = json.loads(res)
                     mol_block = pdbqt2molblock(res['poses'].split('MODEL')[1], mol, mol_id)
-                    output = {'docking_score': res['docking_score'],
-                            'pdb_block': res['poses'],
-                            'mol_block': mol_block}
+                    dock_output = {'docking_score': res['docking_score'],
+                                   'pdb_block': res['poses'],
+                                   'mol_block': mol_block}
                     
-                    dock_output_conformer_list.append(output)
+                    dock_output_conformer_list.append(dock_output)
             
         except subprocess.CalledProcessError as e:
             sys.stderr.write(f'Error caused by docking of {mol_id}\n')
@@ -126,15 +122,14 @@ def mol_dock(mol, config):
             os.unlink(output_fname)
 
     dock_time = round(timeit.default_timer() - start_time, 1)
-    print(f'[For Testing Only Sanity check]: There are {len(dock_output_conformer_list)} {mol_id} conformers that has been docked')
-    print(f'\n')
-    docking_score_list = [float(conformer_output['docking_score']) for conformer_output in dock_output_conformer_list]
 
-    if not docking_score_list:
-        return mol_id, None
-    
-    output = dock_output_conformer_list[docking_score_list.index(min(docking_score_list))]
-    output['dock_time'] = dock_time
+    print(f'{mol_id}, nconf {len(dock_output_conformer_list)}')
+
+    output = min(dock_output_conformer_list, key=lambda x: x['docking_score'])
+    if output:
+        output['dock_time'] = dock_time
+    else:
+        output = None
 
     return mol_id, output
 

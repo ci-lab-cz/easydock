@@ -36,54 +36,63 @@ def mol_dock(mol, config):
     :param config: yml-file with docking settings
     :return:
     """
-
-    output = None
-
     config = __parse_config(config)
 
     mol_id = mol.GetProp('_Name')
     boron_replacement = config["cnn_scoring"] in [None, "none"]
-    ligand_pdbqt = ligand_preparation(mol, boron_replacement=boron_replacement)
-    if ligand_pdbqt is None:
+    ligand_pdbqt_list = ligand_preparation(mol, boron_replacement=boron_replacement)
+
+    if ligand_pdbqt_list is None:
         return mol_id, None
 
-    output_fd, output_fname = tempfile.mkstemp(suffix='_output.pdbqt', text=True)
-    ligand_fd, ligand_fname = tempfile.mkstemp(suffix='_ligand.pdbqt', text=True)
+    dock_output_conformer_list = []
+    start_time = timeit.default_timer()
+    for ligand_pdbqt in ligand_pdbqt_list:
+        output_fd, output_fname = tempfile.mkstemp(suffix='_output.pdbqt', text=True)
+        ligand_fd, ligand_fname = tempfile.mkstemp(suffix='_ligand.pdbqt', text=True)
 
-    try:
-        with open(ligand_fname, 'wt') as f:
-            f.write(ligand_pdbqt)
+        try:
+            with open(ligand_fname, 'wt') as f:
+                f.write(ligand_pdbqt)
 
-        cmd = f'{config["script_file"]} --receptor {config["protein"]} --ligand {ligand_fname} --out {output_fname} ' \
-              f'--config {config["protein_setup"]} --exhaustiveness {config["exhaustiveness"]} ' \
-              f'--seed {config["seed"]} --scoring {config["scoring"]} ' \
-              f'--cpu {config["ncpu"]} --addH {config["addH"]} --cnn_scoring {config["cnn_scoring"]} ' \
-              f'--cnn {config["cnn"]} --num_modes {config["n_poses"]}'
-        start_time = timeit.default_timer()
-        subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)  # this will trigger CalledProcessError and skip next lines
-        dock_time = round(timeit.default_timer() - start_time, 1)
+            cmd = f'{config["script_file"]} --receptor {config["protein"]} --ligand {ligand_fname} --out {output_fname} ' \
+                  f'--config {config["protein_setup"]} --exhaustiveness {config["exhaustiveness"]} ' \
+                  f'--seed {config["seed"]} --scoring {config["scoring"]} ' \
+                  f'--cpu {config["ncpu"]} --addH {config["addH"]} --cnn_scoring {config["cnn_scoring"]} ' \
+                  f'--cnn {config["cnn"]} --num_modes {config["n_poses"]}'
+            subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)  # this will trigger CalledProcessError and skip next lines
 
-        score, pdbqt_out = __get_pdbqt_and_score(output_fname)
-        mol_block = pdbqt2molblock(pdbqt_out.split('MODEL')[1], mol, mol_id)
+            score, pdbqt_out = __get_pdbqt_and_score(output_fname)
+            mol_block = pdbqt2molblock(pdbqt_out.split('MODEL')[1], mol, mol_id)
 
-        output = {'docking_score': score,
-                  'pdb_block': pdbqt_out,
-                  'mol_block': mol_block,
-                  'dock_time': dock_time}
+            dock_output = {'docking_score': score,
+                           'pdb_block': pdbqt_out,
+                           'mol_block': mol_block}
 
-    except subprocess.CalledProcessError as e:
-        sys.stderr.write(f'Error caused by docking of {mol_id}\n')
-        sys.stderr.write(str(e) + '\n')
-        sys.stderr.write('STDERR output:\n')
-        sys.stderr.write(e.stderr + '\n')
-        sys.stderr.flush()
+            dock_output_conformer_list.append(dock_output)
+
+        except subprocess.CalledProcessError as e:
+            sys.stderr.write(f'Error caused by docking of {mol_id}\n')
+            sys.stderr.write(str(e) + '\n')
+            sys.stderr.write('STDERR output:\n')
+            sys.stderr.write(e.stderr + '\n')
+            sys.stderr.flush()
+
+        finally:
+            os.close(output_fd)
+            os.close(ligand_fd)
+            os.unlink(ligand_fname)
+            os.unlink(output_fname)
+
+    dock_time = round(timeit.default_timer() - start_time, 1)
+
+    print(f'{mol_id}, nconf {len(dock_output_conformer_list)}')
+
+    output = min(dock_output_conformer_list, key=lambda x: x['docking_score'])
+    if output:
+        output['dock_time'] = dock_time
+    else:
         output = None
-
-    finally:
-        os.close(output_fd)
-        os.close(ligand_fd)
-        os.unlink(ligand_fname)
-        os.unlink(output_fname)
 
     return mol_id, output
 
