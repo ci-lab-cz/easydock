@@ -35,7 +35,8 @@ def get_supplied_args(parser):
     return tuple(supplied_args)
 
 
-def docking(mols, dock_func, dock_config, priority_func=CalcNumRotatableBonds, ncpu=1, dask_client=None, dask_report_fname=None):
+def docking(mols, dock_func, dock_config, priority_func=CalcNumRotatableBonds, ncpu=1, dask_client=None,
+            dask_report_fname=None, ring_sample=False):
     """
 
     :param mols: iterator of molecules, each molecule must have a title
@@ -45,6 +46,7 @@ def docking(mols, dock_func, dock_config, priority_func=CalcNumRotatableBonds, n
     :param ncpu: number of cores to be used in a single server docking
     :param dask_client: reference to a dask client (if omitted single server docking will be performed)
     :param dask_report_fname: name of dask html-report file (optional)
+    :param ring_sample: whether to use sampling of saturated rings and dock multiple starting conformers
     :return: iterator with molecule title and a dict of values returned by dock_func
     """
     Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
@@ -57,7 +59,7 @@ def docking(mols, dock_func, dock_config, priority_func=CalcNumRotatableBonds, n
             nworkers = len(dask_client.scheduler_info()['workers'])
             futures = []
             for i, mol in enumerate(mols, 1):
-                futures.append(dask_client.submit(dock_func, mol, priority=priority_func(mol), config=dock_config))
+                futures.append(dask_client.submit(dock_func, mol, priority=priority_func(mol), config=dock_config, ring_sample=ring_sample))
                 if i == nworkers * 10:
                     break
             seq = as_completed(futures, with_results=True)
@@ -66,14 +68,14 @@ def docking(mols, dock_func, dock_config, priority_func=CalcNumRotatableBonds, n
                 del future
                 try:
                     mol = next(mols)
-                    new_future = dask_client.submit(dock_func, mol, priority=priority_func(mol), config=dock_config)
+                    new_future = dask_client.submit(dock_func, mol, priority=priority_func(mol), config=dock_config, ring_sample=ring_sample)
                     seq.add(new_future)
                 except StopIteration:
                     continue
     else:
         pool = Pool(ncpu)
         try:
-            for mol_id, res in pool.imap_unordered(partial(dock_func, config=dock_config), tuple(mols), chunksize=1):
+            for mol_id, res in pool.imap_unordered(partial(dock_func, config=dock_config, ring_sample=ring_sample), tuple(mols), chunksize=1):
                 yield mol_id, res
         finally:
             pool.close()
@@ -166,6 +168,9 @@ def main():
                              'n_poses: 10\n'
                              'seed: -1\n'
                              'gnina.yml\n')
+    docking_group.add_argument('--ring_sample', action='store_true', default=False,
+                        help='sample conformations of saturated rings. Multiple starting conformers will be docked and '
+                             'the best one will be stored. Otherwise a single random ring conformer will be used.')
     docking_group.add_argument('--sdf', action='store_true', default=False,
                         help='save best docked poses to SDF file with the same name as output DB.')
     docking_group.add_argument('--hostfile', metavar='FILENAME', required=False, type=filepath_type, default=None,
@@ -248,12 +253,13 @@ def main():
                 mols = select_mols_to_dock(conn)
                 i = 0
                 for i, (mol_id, res) in enumerate(docking(mols,
-                                                        dock_func=mol_dock,
-                                                        dock_config=args.config,
-                                                        priority_func=pred_dock_time,
-                                                        ncpu=args.ncpu,
-                                                        dask_client=dask_client,
-                                                        dask_report_fname=dask_report_fname),
+                                                          dock_func=mol_dock,
+                                                          dock_config=args.config,
+                                                          priority_func=pred_dock_time,
+                                                          ncpu=args.ncpu,
+                                                          dask_client=dask_client,
+                                                          dask_report_fname=dask_report_fname,
+                                                          ring_sample=args.ring_sample),
                                                 1):
                     if res:
                         update_db(conn, mol_id, res)

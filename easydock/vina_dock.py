@@ -64,17 +64,18 @@ def mol_dock2(mol, protein, center, box_size, seed, exhaustiveness, n_poses, ncp
                     'mol_block': mol_block}
 
 
-def mol_dock(mol, config):
+def mol_dock(mol, config, ring_sample=False):
     """
 
     :param mol: RDKit Mol of a ligand with title
     :param config: yml-file with docking settings
+    :param ring_sample: whether to sample saturated rings and dock multiple starting conformers
     :return:
     """
     config = __parse_config(config)
 
     mol_id = mol.GetProp('_Name')
-    ligand_pdbqt_list = ligand_preparation(mol, boron_replacement=True)
+    ligand_pdbqt_list = ligand_preparation(mol, boron_replacement=True, ring_sample=ring_sample)
 
     if ligand_pdbqt_list is None:
         return mol_id, None

@@ -29,18 +29,19 @@ def __get_pdbqt_and_score(ligand_out_fname):
     return score, pdbqt_out
 
 
-def mol_dock(mol, config):
+def mol_dock(mol, config, ring_sample=False):
     """
 
     :param mol: RDKit Mol of a ligand with title
     :param config: yml-file with docking settings
+    :param ring_sample: whether to sample saturated rings and dock multiple starting conformers
     :return:
     """
     config = __parse_config(config)
 
     mol_id = mol.GetProp('_Name')
     boron_replacement = config["cnn_scoring"] in [None, "none"]
-    ligand_pdbqt_list = ligand_preparation(mol, boron_replacement=boron_replacement)
+    ligand_pdbqt_list = ligand_preparation(mol, boron_replacement=boron_replacement, ring_sample=ring_sample)
 
     if ligand_pdbqt_list is None:
         return mol_id, None
