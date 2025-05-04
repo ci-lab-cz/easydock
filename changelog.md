@@ -1,11 +1,11 @@
 **1.0.0**
-- separate initialization of a database (ligand preparation) and docking steps
+- separate initialization of a database (ligand preparation) and docking steps [#43](https://github.com/ci-lab-cz/easydock/pull/43)
 - create a script to clear docking data from a database to reuse it for other docking (different protein, settings, etc)
 - speed up initialization of a database
-- integration of MolGpKa for molecule protonation and implement post-processing SMARTS patterns to fix errors 
-- implement optional sampling of saturated ring systems to improve docking results 
+- integration of MolGpKa for molecule protonation and implement post-processing SMARTS patterns to fix errors [#49](https://github.com/ci-lab-cz/easydock/pull/49) 
+- implement optional sampling of saturated ring systems to improve docking results [#34](https://github.com/ci-lab-cz/easydock/pull/34) 
 - fix some errors in pkasolver by applying post-processing SMARTS patterns
-- make clear command argument description and grouping
+- improved command argument descriptions and grouping
 
 **0.3.2**
 - catch and report all exceptions when reconstruct 3D geometry of protonated molecules
