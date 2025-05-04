@@ -9,6 +9,7 @@
 - [Examples](#examples)
   - [Initialization of a database](#initialization-of-a-database)
   - [Docking from command line](#docking-from-command-line)
+  - [Sampling of saturated rings](#sampling-of-saturated-rings)
   - [Docking using multiple servers](#docking-using-multiple-servers)
   - [Docking from Python](#docking-from-python)
   - [Data retrieval from the output database](#data-retrieval-from-the-output-database)
