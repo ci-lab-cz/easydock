@@ -261,7 +261,7 @@ def init_db(db_fname: str, input_fname: str, ncpu: int, max_stereoisomers=1, pre
     cur = conn.cursor()
     mol_input = read_input.read_input(input_fname)
 
-    last_index = cur.execute('SELECT COUNT(smi_input) FROM mols WHERE (stereo_id = 0)').fetchone()[0]
+    last_index = cur.execute('SELECT COUNT(*) FROM mols WHERE (stereo_id = 0)').fetchone()[0]
     if last_index:        
         from itertools import islice
         mol_input = islice(mol_input, last_index, None)
