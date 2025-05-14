@@ -193,13 +193,14 @@ def __assign_pka_pkb_to_heavy_atoms(mol, acid_dict, base_dict):
 
 def __protonate_molgpka(args, models):
     from molgpka.predict_pka_mp import predict
-    from rdkit.Chem import AllChem
-    from copy import deepcopy
+    import warnings
 
     smi, mol_name = args
-    #print(smi, mol_name)
     mol = Chem.MolFromSmiles(smi, sanitize=True)
     ph = 7.4
+
+    warnings.filterwarnings('ignore', category=UserWarning)
+
     try:
 
         # mol_ will have al H explicit (acidic pKa is assigned to H)
@@ -288,4 +289,8 @@ def __protonate_molgpka(args, models):
         traceback.print_exc()
         sys.stderr.write(f'Molecule {mol_name} caused an error during protonation\n')
         return None, mol_name
+
+    finally:
+        warnings.filterwarnings('ignore', category=UserWarning)
+
     return changed_smi, mol_name
