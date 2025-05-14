@@ -38,6 +38,8 @@ pip install git+https://github.com/ci-lab-cz/easydock.git
 ```
 conda install -c conda-forge python=3.11 rdkit numpy==1.26
 conda install -c conda-forge scipy dask distributed scikit-learn
+# for MacOS only (additional installations)
+conda install -c conda-forge boost swig
 ```
 
 - from pypi
@@ -56,7 +58,10 @@ pip install git+https://github.com/forlilab/Meeko.git
 pip install git+https://github.com/ci-lab-cz/MolGpKa.git
 pip install torch_geometric
 pip install torch==2.2 torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+# for Linux
 pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.2.0+cpu.html
+# for MacOS (may also works for Linux)
+pip install torch-scatter torch-sparse torch-cluster torch-spline-conv -f https://data.pyg.org/whl/torch-2.2.0+cpu.html 
 ```
 - (not recommended) installation of a `pkasolver` fork to enable protonation with this tool. We recommend to install and use CPU-based version, however, one may try a GPU supported one (look at the dependencies in `pkasolver` package).
 ```
