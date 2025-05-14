@@ -166,14 +166,11 @@ def __protonate_pkasolver(args, model):
 
 
 def protonate_molgpka(items: str, ncpu: int = 1, smi_size=1):
-    from molgpka.predict_pka_mp import load_state_dicts
-
+    from molgpka.predict_pka_mp import load_state_dicts, load_models
     models = load_state_dicts()
-    chunksize = min(max(1, smi_size // ncpu), 500)
-
-    pool = Pool(ncpu)
-    for smi, mol_name in pool.imap_unordered(partial(__protonate_molgpka, models=models), items, chunksize=chunksize):
-        yield smi, mol_name
+    models = load_models(models)
+    for q in items:
+        yield __protonate_molgpka(q, models)
 
 
 def __add_hydrogen_to_atom(editable_mol, atom_idx):
@@ -192,7 +189,7 @@ def __assign_pka_pkb_to_heavy_atoms(mol, acid_dict, base_dict):
 
 
 def __protonate_molgpka(args, models):
-    from molgpka.predict_pka_mp import predict
+    from molgpka.predict_pka_mp import predict2
     import warnings
 
     smi, mol_name = args
@@ -204,7 +201,7 @@ def __protonate_molgpka(args, models):
     try:
 
         # mol_ will have al H explicit (acidic pKa is assigned to H)
-        base_dict, acid_dict, mol_ = predict(mol, models, uncharged=True)
+        base_dict, acid_dict, mol_ = predict2(mol, models, uncharged=True)
         mol_ = __assign_pka_pkb_to_heavy_atoms(mol_, acid_dict, base_dict)
         editable_mol = Chem.RWMol(Chem.RemoveHs(mol_))
 
