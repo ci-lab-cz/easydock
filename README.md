@@ -85,9 +85,10 @@ An important feature, once the database is initialized it will store all command
 
 - the major script `easydock` supports docking with `vina` and `gnina` (`gnina` also supports `smina` and its custom scoring functions)
 - can be used as a command line utility or imported as a python module
+- if input molecules are 3D, these conformations will be used as starting ones for docking (enable usage of external conformer generators)
 - input molecules are checked for salts and attempted to fix by SaltRemover 
 - stereoisomers can be enumerated for unspecified chiral centers and double bonds (since some compounds may require very long runtimes, the maximum runtime for individual molecules was set to 300 sec)
-- several protonation options: molgpka, chemaxon and pkasolver (check notes below)
+- several protonation options: molgpka, chemaxon and pkasolver (check notes below). If omitted input protonation state will be used (enables usage of external protonation tools)
 - docking of compounds with saturated rings can be enhanced by additional sampling of starting ring conformers and only the best one is stored to the database
 - supports distributed computing using `dask` library
 - supports docking of boron-containing compounds using `vina` and `smina` (boron is replaced with carbon before docking and returned back)
@@ -109,15 +110,17 @@ The pipeline consists of two major parts which can be run separately or simultan
 - docking with `vina`/`gnina`
 - top docked poses are converted in MOL format and stored into output DB along with docking scores
 
-These two parts of the pipeline allows to create a DB and reuse it for dockign with different proteins/settings/etc.  
+### Notes
 
-There is also a scipt `make_clean_copy` which creates a copy of an existing DB removing all docking data to use it for docking with different proteins/settings/etc      
+- These two parts of the pipeline allows to create a DB and reuse it for docking with different proteins/settings/etc.  
+- There is also a script `make_clean_copy` which creates a copy of an existing DB removing all docking data to use it for docking with different proteins/settings/etc        
+- Protonation with MolGpKa will run on a single cpu  
 
 ## Examples
 
 ### Initialization of a database
 
-This will create a DB with checked molecules using 4 cores. If `--protonation` argument was not used molecules will keep their input protonations states
+This will create a DB with checked molecules using 4 cores. If `--protonation` argument was not used molecules will keep their input protonations states (this enables docking of molecules protonated by an external tool)
 ```
 easydock -i input.smi -o output.db -c 4
 ```

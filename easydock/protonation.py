@@ -165,7 +165,7 @@ def __protonate_pkasolver(args, model):
     return Chem.MolToSmiles(output_mol), mol_name
 
 
-def protonate_molgpka(items: str, ncpu: int = 1, smi_size=1):
+def protonate_molgpka(items: str, ncpu: int = 1):
     from molgpka.predict_pka_mp import load_state_dicts, load_models
     models = load_state_dicts()
     models = load_models(models)
