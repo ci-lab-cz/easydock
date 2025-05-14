@@ -464,7 +464,7 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
             if program == 'pkasolver':
                 protonate_func = partial(protonate_pkasolver, ncpu=ncpu, smi_size=len(data_list))
             elif program == 'molgpka':
-                protonate_func = partial(protonate_molgpka, ncpu=ncpu, smi_size=len(data_list))
+                protonate_func = partial(protonate_molgpka, ncpu=1, smi_size=len(data_list))
             else:
                 raise ValueError(f'There is no implemeneted functions to protonate molecules by {program}')
 
