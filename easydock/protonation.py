@@ -166,6 +166,7 @@ def __protonate_pkasolver(args, model):
 
 
 def protonate_molgpka(items: str, ncpu: int = 1):
+    # parallel execution of protonation was disabled because runs much slower than a single process protonation
     from molgpka.predict_pka_mp import load_state_dicts, load_models
     models = load_state_dicts()
     models = load_models(models)
