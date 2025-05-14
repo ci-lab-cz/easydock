@@ -269,7 +269,7 @@ def init_db(db_fname: str, input_fname: str, ncpu: int, max_stereoisomers=1, pre
     data_smi = []  # non 3D structures
     data_mol = []  # 3D structures
     load_data_params = partial(generate_init_data, max_stereoisomers=max_stereoisomers, prefix=prefix)
-    for i, item in enumerate(pool.imap(load_data_params, mol_input, chunksize=1), 1):
+    for i, item in enumerate(pool.imap(load_data_params, mol_input, chunksize=10), 1):
         for input_format, data in item:
             if input_format == 'smi':
                 data_smi.append(data)
