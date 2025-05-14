@@ -169,7 +169,7 @@ def protonate_molgpka(items: str, ncpu: int = 1, smi_size=1):
     from molgpka.predict_pka_mp import load_state_dicts
 
     models = load_state_dicts()
-    chunksize = min(max(1, smi_size // ncpu), 500)
+    chunksize = min(max(1, smi_size // ncpu), 10)
 
     pool = Pool(ncpu)
     for smi, mol_name in pool.imap_unordered(partial(__protonate_molgpka, models=models), items, chunksize=chunksize):
