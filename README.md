@@ -113,8 +113,8 @@ The pipeline consists of two major parts which can be run separately or simultan
 ### Notes
 
 - These two parts of the pipeline allows to create a DB and reuse it for docking with different proteins/settings/etc.  
-- There is also a script `make_clean_copy` which creates a copy of an existing DB removing all docking data to use it for docking with different proteins/settings/etc        
-- Protonation with MolGpKa will run on a single cpu, that can be slow for large databases. This may be solved with more intelligent model loading depending on available device (cpu or gpu) and possible parallel execution   
+- There is also a script `make_clean_copy` which creates a copy of an existing DB removing all docking data to use it for docking with different proteins/settings/etc.        
+- Protonation with MolGpKa will run in a single cpu mode, but it will use 25-50% of available cores.   
 
 ## Examples
 
