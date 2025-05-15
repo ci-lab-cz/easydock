@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import logging
 import os
 import sqlite3
 import sys
@@ -184,6 +185,12 @@ def main():
                         help='path to a dir where to store temporary setup files accessible to a program. '
                              'Normally should be used if calculations with dask have to be continued,')
 
+    common_argument_group.add_argument('--log', required=False, default=None, type=filepath_type,
+                        help='log file path. If omitted logging information wil be printed to STDOUT.')
+    common_argument_group.add_argument('--log_level', metavar='STRING', required=False, type=int,
+                        default=2, choices=list(range(6)),
+                        help='the level of logging: 0 - NOTSET, 1 - DEBUG, 2 - INFO, 3 - WARNING, 4 - ERROR, '
+                             '5 - CRITICAL.')
     common_argument_group.add_argument('-c', '--ncpu', default=1, type=cpu_type,
                         help='number of cpus. This affects only docking on a single server.')
     common_argument_group.add_argument('-v', '--verbose', action='store_true', default=False,
@@ -197,8 +204,15 @@ def main():
     allowed_args = ['output', 'hostfile', 'dask_report', 'ncpu', 'verbose', 'config', 'program']
     supplied_args = tuple(arg for arg in supplied_args if arg in allowed_args)
 
+    if args.log:
+        logging.basicConfig(filename=args.log, encoding='utf-8', level=args.log_level * 10, datefmt='%Y-%m-%d %H:%M:%S',
+                            format='[%(asctime)s] %(levelname)s: (PID:%(process)d) %(message)s')
+    else:
+        logging.basicConfig(stream=sys.stdout, encoding='utf-8', level=args.log_level * 10, datefmt='%Y-%m-%d %H:%M:%S',
+                            format='[%(asctime)s] %(levelname)s: (PID:%(process)d) %(message)s')
+
     if args.tmpdir is None and args.hostfile is not None and os.path.isfile(args.output):
-        sys.stderr.write('To continue calculations with Dask support please specify temporary directory\n')
+        logging.warning('To continue calculations with Dask support it is better to specify temporary directory explicitly.')
 
     tmpfiles = []  # store text files which were saved to the setup table
 
@@ -217,12 +231,12 @@ def main():
         has_started_protonation = check_db_status(args.output, ['smi_protonated', 'source_mol_block_protonated']) and args.protonation
         has_started_docking = check_db_status(args.output, ['dock_time'])
         if has_started_protonation or has_started_docking:
-            print(f'initializing is skipped')
+            logging.info('initializing is skipped')
         elif not has_started_docking:
             start_init = time.time()
             init_db(args.output, args.input, args.ncpu, args.max_stereoisomers, args.prefix)
             end_init = time.time()
-            print(f'initializing database done in {(end_init - start_init):.2f}s', flush=True)
+            logging.info('initialization took %.2f seconds' % (end_init - start_init))
 
         dask_client = create_dask_client(args.hostfile)
 
@@ -230,9 +244,9 @@ def main():
             start_protonation = time.time()
             add_protonation(args.output, program=args.protonation, tautomerize=not args.no_tautomerization, ncpu=args.ncpu)
             end_protonation = time.time()
-            print(f'protonation done in {(end_protonation - start_protonation):.2f}s', flush=True)
+            logging.info('protonation took %.2f seconds' % (end_protonation - start_protonation))
         else:
-            print('protonation skipped')    
+            logging.info('protonation skipped')
 
         if args.config:
             populate_setup_db(args.output, args)

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
 import argparse
+import logging
 import os
 import re
-import sys
 import tempfile
 import timeit
 import subprocess
@@ -73,11 +73,10 @@ def mol_dock(mol, config, ring_sample=False):
             dock_output_conformer_list.append(dock_output)
 
         except subprocess.CalledProcessError as e:
-            sys.stderr.write(f'Error caused by docking of {mol_id}\n')
-            sys.stderr.write(str(e) + '\n')
-            sys.stderr.write('STDERR output:\n')
-            sys.stderr.write(e.stderr + '\n')
-            sys.stderr.flush()
+            logging.warning(f'(gnina) Error caused by docking of {mol_id}\n'
+                            f'{str(e)}\n'
+                            f'STDERR output:\n'
+                            f'{e.stderr}\n')
 
         finally:
             os.close(output_fd)
@@ -87,7 +86,7 @@ def mol_dock(mol, config, ring_sample=False):
 
     dock_time = round(timeit.default_timer() - start_time, 1)
 
-    print(f'{mol_id}, nconf {len(dock_output_conformer_list)}')
+    logging.debug(f'(gnina) {mol_id}, docked nconf {len(dock_output_conformer_list)}')
 
     output = min(dock_output_conformer_list, key=lambda x: x['docking_score'])
     if output:

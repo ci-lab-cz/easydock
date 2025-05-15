@@ -1,5 +1,6 @@
 __author__ = 'pavel'
 
+import logging
 import os
 import sys
 import gzip
@@ -38,14 +39,14 @@ def read_pdbqt(fname, smi, sanitize=True, removeHs=False):
             for j, block in enumerate(pdbqt_blocks[1:]):
                 m = read_pdbqt_block(block)
                 if m is None:
-                    sys.stderr.write(f'The pose #{j+1} cannot be read from {fname}\n')
+                    logging.warning(f'The pose #{j+1} cannot be read from {fname}')
                 else:
                     m = AllChem.AssignBondOrdersFromTemplate(refmol, m)
                     mols.append(m)
         else:
             m = read_pdbqt_block(s)
             if m is None:
-                sys.stderr.write(f'Structure from {fname} cannot be read\n')
+                logging.warning(f'Structure from {fname} cannot be read')
             else:
                 m = AllChem.AssignBondOrdersFromTemplate(refmol, m)
                 mols.append(m)
@@ -58,7 +59,7 @@ def __get_smi_as_molname(mol):
         name = Chem.MolToSmiles(mol, isomericSmiles=True)
     except Exception as e:
         name = ''.join(random.sample(string.ascii_uppercase, 10))
-        sys.stderr.write(f'Some molecule cannot be converted to SMILES - {name} was inserted as the molecule title\n')
+        logging.warning(f'Some molecule cannot be converted to SMILES - {name} was inserted as the molecule title')
     return name
 
 
@@ -122,7 +123,7 @@ def __read_smiles(fname, sanitize=True):
                 mol.SetProp('_Name', mol_title)
                 yield mol, mol_title
             else:
-                sys.stderr.write(f'ERROR: the line cannot be parsed {line.strip()}\n')
+                logging.warning(f'ERROR: the line cannot be parsed: {line.strip()}')
 
 
 def __read_stdin_smiles(sanitize=True):

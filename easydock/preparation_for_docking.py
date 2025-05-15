@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 import sys
@@ -48,17 +49,15 @@ def mk_prepare_ligand(mol, verbose=False):
             for setup in mol_setups:
                 pdbqt_string, is_ok, error_msg = PDBQTWriterLegacy.write_string(setup)
                 if not is_ok:
-                    print(f"{mol.GetProp('_Name')} has error in converting to pdbqt: {error_msg}")
+                    logging.warning(f"{mol.GetProp('_Name')} has an error in converting to pdbqt: {error_msg}")
                 else:
                     pdbqt_string_list.append(pdbqt_string)
 
                 if verbose:
                     print(f"{setup}")
-    except Exception:
-        sys.stderr.write(
-            "Warning. Incorrect mol object to convert to pdbqt. Continue. \n"
-        )
-        traceback.print_exc()
+    except Exception as e:
+        logging.warning(f'{mol.GetProp("_Name")} has an incorrect mol object to convert to pdbqt. The molecule will be skipped.\n'
+                        f'{traceback.format_exc()}')
         pdbqt_string_list = None
 
     return pdbqt_string_list
@@ -291,15 +290,14 @@ def mol_embedding_3d(mol: Chem.Mol, ring_sample: bool=False, seed: int=43) -> Ch
                 return None
         AllChem.UFFOptimizeMolecule(mol, maxIters=100)
 
-        # print(f"[For Testing Only] {mol.GetProp('_Name')} has {len(saturated_rings_with_substituents)} saturated ring")
-        # print(f"[For Testing Only] Before removing conformation: {mol.GetProp('_Name')} has {mol.GetNumConformers()} conf")
         if ring_sample:
             mol = remove_confs_rms(mol,
                                    saturated_rings_with_substituents,
                                    rms=1,
                                    keep_nconf=sum(calculate_ring_nconf(saturated_ring) for saturated_ring in saturated_ring_list))
             AlignMolConformers(mol)  # why we need this?
-        # print(f"[For Testing Only] After removing conformation: {mol.GetProp('_Name')} has {mol.GetNumConformers()} conf")
+
+            logging.debug(f'{mol.GetProp("_Name")} has {len(saturated_rings_with_substituents)} saturated rings')
 
     return mol
 
@@ -329,8 +327,9 @@ def ligand_preparation(mol, boron_replacement=False, seed=43, ring_sample=False)
             return mol_conf_pdbqt_list
         return None
     except Exception:
-        traceback.print_exc()
-        sys.stderr.write(f'Molecule {mol.GetProp("_Name")} caused this error\n')
+        logging.warning(f'{mol.GetProp("_Name")} caused an error during structure preparation for docking and will be '
+                        f'skipped\n'
+                        f'{traceback.format_exc()}')
         return None
 
 
@@ -368,7 +367,8 @@ def boron_reduction(mol_B, mol):
                 mol_.GetAtomWithIdx(id_).SetAtomicNum(5)
                 mol_.GetAtomWithIdx(id_).SetFormalCharge(charge)
         else:  # if not - several equivalent mappings exist
-            sys.stderr.write('different mappings was detected. The structure cannot be recostructed automatically.')
+            logging.warning(f'{mol.GetProp("_Name")}, different mappings was detected during boron reconversion. '
+                            f'The structure could not be recostructed automatically.')
             return None
 
     return mol_
@@ -390,8 +390,8 @@ def pdbqt2molblock(pdbqt_block, template_mol, mol_id):
         rdkitmol_list = RDKitMolCreate.from_pdbqt_mol(pdbqt_mol)
         rdkit_mol = rdkitmol_list[0]
     except Exception:
-        traceback.print_exc()
-        sys.stderr.write(f"Parsing PDB was failed: {mol_id}\n")
+        logging.warning(f"{mol_id}, conversion PDB to MOL was failed.\n"
+                        f"{traceback.format_exc()}")
         return None
 
     try:
@@ -403,7 +403,7 @@ def pdbqt2molblock(pdbqt_block, template_mol, mol_id):
         mol.SetProp("_Name", mol_id)
         mol_block = Chem.MolToMolBlock(mol)
     except Exception:
-        traceback.print_exc()
-        sys.stderr.write(f"Could not assign bond orders while parsing PDB: {mol_id}. Trying to fix.\n")
+        logging.warning(f"{mol_id}, could not assign bond orders while parsing PDB. Trying to fix.\n"
+                        f"{traceback.format_exc()}")
 
     return mol_block

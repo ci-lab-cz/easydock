@@ -1,3 +1,4 @@
+import logging
 import os
 import sqlite3
 import sys
@@ -144,7 +145,8 @@ def restore_setup_from_db(db_fname, tmpdir=None):
 
     tmpfiles = []
     backup_tempdir = tempfile.tempdir
-    tempfile.tempdir = tmpdir
+    if tmpdir:
+        tempfile.tempdir = tmpdir
 
     try:
 
@@ -226,14 +228,14 @@ def generate_init_data(mol_input: tuple[Chem.Mol, str], max_stereoisomers: int, 
     if len(Chem.GetMolFrags(mol, asMols=False, sanitizeFrags=False)) > 1:
         mol = salt_remover.StripMol(mol, dontRemoveEverything=True)
         if len(Chem.GetMolFrags(mol, asMols=False, sanitizeFrags=False)) > 1:
-            sys.stderr.write(f'EASYDOCK Warning: molecule {mol.GetProp("_Name")} will be skipped for docking, '
-                             f'because it has multiple components which could not be fixed by SaltRemover\n')
+            logging.warning(f'{mol.GetProp("_Name")} will be skipped for docking, because it has multiple components '
+                            f'which could not be fixed by SaltRemover')
             if mol_is_3d(mol):
                 return [['mol', (mol_name, 0, None, Chem.MolToMolBlock(mol_input), None)]]
             else:
                 return [['smi', (mol_name, 0, smi_input, None)]]
-        sys.stderr.write(f'EASYDOCK Warning: molecule {mol.GetProp("_Name")}, salts were stripped\n')
-        
+        logging.warning(f'{mol.GetProp("_Name")}, salts were stripped')
+
     if mol_is_3d(mol):
         smi = Chem.MolToSmiles(mol, isomericSmiles=True)
         return [['mol', (mol_name, 0, smi, Chem.MolToMolBlock(mol_input), Chem.MolToMolBlock(mol))]]
@@ -369,7 +371,7 @@ def save_sdf(db_fname):
             w.write(f'>  <ID>\n{mol_name}\n\n')
             w.write(f'>  <docking_score>\n{score}\n\n')
             w.write('$$$$\n')
-        sys.stderr.write(f'Best poses were saved to {sdf_fname}\n')
+        logging.info(f'Best poses were saved to {sdf_fname}')
 
 
 def select_mols_to_dock(db_conn, table_name='mols', add_sql=None):
@@ -428,7 +430,7 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
         data_list = list(cur.execute(sql))
 
         if not data_list:
-            sys.stderr.write(f'no molecules to protonate\n')
+            logging.info('no molecules to protonate')
             return
 
 
@@ -523,8 +525,8 @@ def update_db_protonated_smiles(conn, items, data_list, table_name='mols'):
         try:
             cansmi = Chem.CanonSmiles(smi)
         except:
-            sys.stderr.write(f'EASYDOCK ERROR: {mol_name}, smiles {smi} obtained after protonation '
-                            f'could not be read by RDKit. The molecule was skipped.\n')
+            logging.warning(f'{mol_name}, smiles {smi} obtained after protonation could not be read by RDKit. '
+                            f'The molecule was skipped.')
             continue
 
         mol_id, stereo_id = mol_name_split(mol_name)
@@ -547,9 +549,9 @@ def update_db_protonated_smiles(conn, items, data_list, table_name='mols'):
                 Chem.AssignStereochemistryFrom3D(mol)  # not sure whether it is necessary
                 output_data_mol.append((cansmi, Chem.MolToMolBlock(mol), mol_id, stereo_id))
             except:
-                traceback.print_exc()
-                sys.stderr.write(f'EASYDOCK ERROR: {mol_id}, 3D geomery could not be re-created after '
-                                f'protonation. The molecule was skipped.\n')
+                logging.warning(f'{mol_id}, 3D geometry could not be re-created after protonation. '
+                                f'The molecule was skipped.\n'
+                                f'{traceback.format_exc()}')
                 continue
 
     cur.executemany(f"""UPDATE {table_name}

@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
+import logging
 import os
 import sqlite3
 import sys
@@ -126,8 +127,8 @@ def main():
                         try:
                             pose_mol_block = pdbqt2molblock(pdb_block_list[i-1] + 'ENDMDL\n', mol, mol_id + f'_{i}')
                         except IndexError:
-                            sys.stderr.write(f'Pose number {i} is not in the PDB block of {mol_id}. '
-                                             f'It will be skipped.\n')
+                            logging.warning(f'Pose number {i} is not in the PDB block of {mol_id}. '
+                                             f'It will be skipped.')
                             continue
                         if pose_mol_block:
                             f.write(pose_mol_block)

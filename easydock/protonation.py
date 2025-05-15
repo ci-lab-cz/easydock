@@ -1,18 +1,17 @@
 import contextlib
+import logging
 import os
 import subprocess
-import sys
 import tempfile
 import traceback
+import warnings
 
 from functools import partial
-from math import ceil
 from multiprocessing import Pool
 from typing import Iterator
 
 from rdkit import Chem
 from easydock.auxiliary import chunk_into_n
-from easydock.read_input import read_input
 
 """
 There two types of protonation programs:
@@ -167,7 +166,10 @@ def __protonate_pkasolver(args, model):
 
 def protonate_molgpka(items: str, ncpu: int = 1):
     # parallel execution of protonation was disabled because runs much slower than a single process protonation
+    warnings.filterwarnings('ignore', category=UserWarning)
     from molgpka.predict_pka_mp import load_state_dicts, load_models
+    warnings.filterwarnings("default", category=UserWarning)
+
     models = load_state_dicts()
     models = load_models(models)
     for q in items:
@@ -191,7 +193,6 @@ def __assign_pka_pkb_to_heavy_atoms(mol, acid_dict, base_dict):
 
 def __protonate_molgpka(args, models):
     from molgpka.predict_pka_mp import predict2
-    import warnings
 
     smi, mol_name = args
     mol = Chem.MolFromSmiles(smi, sanitize=True)
@@ -219,14 +220,14 @@ def __protonate_molgpka(args, models):
                         atom.SetNumExplicitHs(atom.GetNumExplicitHs() - 1)
                     atom.UpdatePropertyCache()
                 else:
-                    print('mol with problem to deprotonate', mol_name)
+                    logging.warning(f'(molgpka) Molecule {mol_name} has issues with assignment of protonation states (deprotonation)')
             elif atom.HasProp('pkb') and atom.GetDoubleProp('pkb') > ph:
                 charge = atom.GetFormalCharge()
                 if charge <= 0:
                     atom.SetFormalCharge(charge + 1)
                     atom.UpdatePropertyCache()
                 else:
-                    print('mol with problem to protonate', mol_name)
+                    logging.warning(f'(molgpka) Molecule {mol_name} has issues with assignment of protonation states (protonation)')
         editable_mol.UpdatePropertyCache()
 
         # fix and revert some protonation states
@@ -284,11 +285,11 @@ def __protonate_molgpka(args, models):
         changed_smi = Chem.MolToSmiles(Chem.RemoveHs(editable_mol))
 
     except Exception as e:
-        traceback.print_exc()
-        sys.stderr.write(f'Molecule {mol_name} caused an error during protonation\n')
+        logging.warning(f'{mol_name} caused an error during protonation, it will be skipped\n'
+                        f'{traceback.format_exc()}')
         return None, mol_name
 
     finally:
-        warnings.filterwarnings('ignore', category=UserWarning)
+        warnings.filterwarnings("default", category=UserWarning)
 
     return changed_smi, mol_name
