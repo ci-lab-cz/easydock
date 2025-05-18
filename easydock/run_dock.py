@@ -206,10 +206,10 @@ def main():
 
     if args.log:
         logging.basicConfig(filename=args.log, encoding='utf-8', level=args.log_level * 10, datefmt='%Y-%m-%d %H:%M:%S',
-                            format='[%(asctime)s] %(levelname)s: (PID:%(process)d) %(message)s')
+                            format='[%(asctime)s] [EASYDOCK] %(levelname)s: (PID:%(process)d) %(message)s')
     else:
         logging.basicConfig(stream=sys.stdout, encoding='utf-8', level=args.log_level * 10, datefmt='%Y-%m-%d %H:%M:%S',
-                            format='[%(asctime)s] %(levelname)s: (PID:%(process)d) %(message)s')
+                            format='[%(asctime)s] [EASYDOCK] %(levelname)s: (PID:%(process)d) %(message)s')
 
     if args.tmpdir is None and args.hostfile is not None and os.path.isfile(args.output):
         logging.warning('To continue calculations with Dask support it is better to specify temporary directory explicitly.')
