@@ -313,13 +313,13 @@ def update_db(db_conn, mol_id, data, table_name='mols', commit=True):
     """
 
     :param db_conn:
-    :param mol_id: is of a molecule to update values
+    :param mol_id: id of a molecule to update values
     :param data: dict of column names and values to update
     :param table_name:
     :return:
     """
-    if data:    
-        mol_id, stereo_id = mol_id.rsplit('_',1)
+    if data:
+        mol_id, stereo_id = mol_name_split(mol_id)
         cols, values = zip(*data.items())
         db_conn.execute(f"""UPDATE {table_name}
                            SET {', '.join(['%s = ?'] * len(cols))},
