@@ -121,11 +121,11 @@ def read_smiles(fname):
             yield tuple(line.strip().split()[:2])
 
 
-def protonate_pkasolver(items: str, ncpu: int = 1, smi_size=1):
+def protonate_pkasolver(items: str, ncpu: int = 1, mol_count=1):
     import torch
     from pkasolver.query import QueryModel
 
-    chunksize = min(max(1, smi_size // ncpu), 500)
+    chunksize = min(max(1, mol_count // ncpu), 500)
     model = QueryModel()
     with contextlib.redirect_stdout(None):
         if torch.cuda.is_available() or ncpu == 1:

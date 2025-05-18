@@ -422,25 +422,31 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
     try:
         cur = conn.cursor()
 
+        # get count of molecules required protonation
+        sql = f"""SELECT COUNT(rowid) 
+                  FROM {table_name} 
+                  WHERE smi IS NOT NULL AND docking_score is NULL AND smi_protonated is NULL"""
+        sql += add_sql
+        cur.execute(sql)
+        mol_count = cur.fetchone()[0]
+
+        if mol_count == 0:
+            logging.info('no molecules to protonate')
+            return
+
         # process SMILES and mol_block together
         sql = f"""SELECT smi, id || '_' || stereo_id 
                   FROM {table_name} 
                   WHERE smi IS NOT NULL AND docking_score is NULL AND smi_protonated is NULL"""
         sql += add_sql
-        data_list = list(cur.execute(sql))
-
-        if not data_list:
-            logging.info('no molecules to protonate')
-            return
-
-
         cur.execute(sql)
+
         if program in ['chemaxon']:  # file-based protocol, files are created by chunks
             if program == 'chemaxon':
                 protonate_func = partial(protonate_chemaxon, tautomerize=tautomerize)
                 read_func = read_protonate_chemaxon
             else:
-                raise ValueError(f'There is no implemeneted functions to protonate molecules by {program}')
+                raise ValueError(f'There is no implemented functions to protonate molecules by {program}')
 
             nmols = ncpu * 500  # batch size
             while True:
@@ -457,14 +463,14 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
                     try:
                         protonate_func(tmp.name, output)
                         items = read_func(output)  #  generator of tuples (smi, mol_name)
-                        update_db_protonated_smiles(conn, items, data_list, table_name)
+                        update_db_protonated_smiles(conn, items, table_name)
                     finally:
                         os.remove(output)
                         os.close(fd)
 
         elif program in ['pkasolver', 'molgpka']:  # native python protocol
             if program == 'pkasolver':
-                protonate_func = partial(protonate_pkasolver, ncpu=ncpu, smi_size=len(data_list))
+                protonate_func = partial(protonate_pkasolver, ncpu=ncpu, mol_count=mol_count)
             elif program == 'molgpka':
                 protonate_func = partial(protonate_molgpka, ncpu=1)
             else:
@@ -475,28 +481,26 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
             for i, item in enumerate(protonate_func(data), 1): 
                 items.append(item)
                 if i % 100 == 0:
-                    update_db_protonated_smiles(conn, items, data_list, table_name)
+                    update_db_protonated_smiles(conn, items, table_name)
                     items = []
-            update_db_protonated_smiles(conn, items, data_list, table_name)
+            update_db_protonated_smiles(conn, items, table_name)
 
         elif program == 'dimorphite':
             protonate_func = partial(protonate_dimorphite, ncpu=ncpu)
             read_func = read_smiles
 
         else:
-            raise ValueError(f'There is no implemeneted support to protonate molecules by {program}')
+            raise ValueError(f'There is no implemented support to protonate molecules by {program}')
 
     finally:
         conn.close()
 
 
-def update_db_protonated_smiles(conn, items, data_list, table_name='mols'):
+def update_db_protonated_smiles(conn, items, table_name='mols'):
     """
 
     :param conn:
     :param items: list of tuples (smi, mol_name)
-    :param smi_names:
-    :param mol_names:
     :param table_name:
     :return:
     """
@@ -506,20 +510,26 @@ def update_db_protonated_smiles(conn, items, data_list, table_name='mols'):
 
     cur = conn.cursor()
 
-    data_names = set(mol_name for smi, mol_name in data_list)
-    data_pairset = tuple([tuple(mol_name_split(names)) for names in data_names])
+    data_pairset = tuple(mol_name_split(mol_name) for smi, mol_name in items)
 
-    placeholder = ','.join(['(?,?)'] * len(data_pairset))
-    data_pairset = [item for tup in data_pairset for item in tup]  # flatten list of tuples
-    smi_sql = f"""SELECT id || '_' || stereo_id FROM {table_name}
-                  WHERE (id, stereo_id) in ({placeholder}) AND source_mol_block is NULL"""
-    mol_sql = f"""SELECT id || '_' || stereo_id FROM {table_name}
-                  WHERE (id, stereo_id) in ({placeholder}) AND source_mol_block is NOT NULL"""
+    # get names of molecules which should be stored as SMILES only and as MOL blocks
+    smi_names = []
+    mol_names = []
+    chunk_size = 16000   # process by chunks, 32766 is a maximum number of variables (?) in SQLite query
+    for i in range(0, len(data_pairset), chunk_size):
+        tmp = data_pairset[i:i+chunk_size]
 
-    cur.execute(smi_sql, data_pairset)
-    smi_names = set(mol_name[0] for mol_name in cur.fetchall())
-    cur.execute(mol_sql, data_pairset)
-    mol_names = set(mol_name[0] for mol_name in cur.fetchall())
+        placeholder = ','.join(['(?,?)'] * len(tmp))
+        tmp = [item for tup in tmp for item in tup]  # flatten list of tuples
+        smi_sql = f"""SELECT id || '_' || stereo_id FROM {table_name}
+                      WHERE (id, stereo_id) in ({placeholder}) AND source_mol_block is NULL"""
+        mol_sql = f"""SELECT id || '_' || stereo_id FROM {table_name}
+                      WHERE (id, stereo_id) in ({placeholder}) AND source_mol_block is NOT NULL"""
+
+        cur.execute(smi_sql, tmp)
+        smi_names.extend(mol_name[0] for mol_name in cur.fetchall())
+        cur.execute(mol_sql, tmp)
+        mol_names.extend(mol_name[0] for mol_name in cur.fetchall())
 
     for smi, mol_name in items:
         try:

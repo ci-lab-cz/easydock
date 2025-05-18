@@ -8,7 +8,7 @@ def take(n, iterable):
 
 
 def mol_name_split(mol_name):
-    return mol_name.rsplit('_', 1)
+    return tuple(mol_name.rsplit('_', 1))
 
 
 def empty_func(*args, **kwargs):
