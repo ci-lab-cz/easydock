@@ -318,15 +318,16 @@ def update_db(db_conn, mol_id, data, table_name='mols', commit=True):
     :param table_name:
     :return:
     """
+    cur = db_conn.cursor()
     if data:
         mol_id, stereo_id = mol_name_split(mol_id)
         cols, values = zip(*data.items())
-        db_conn.execute(f"""UPDATE {table_name}
-                           SET {', '.join(['%s = ?'] * len(cols))},
-                               time = CURRENT_TIMESTAMP
-                           WHERE
-                               id = ? AND stereo_id = ?
-                        """ % cols, list(values) + [mol_id,stereo_id])
+        cur.execute(f"""UPDATE {table_name}
+                        SET {', '.join(['%s = ?'] * len(cols))},
+                            time = CURRENT_TIMESTAMP
+                        WHERE
+                            id = ? AND stereo_id = ?
+                     """ % cols, list(values) + [mol_id,stereo_id])
         if commit:
             db_conn.commit()
 
