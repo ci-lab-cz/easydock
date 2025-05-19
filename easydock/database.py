@@ -339,19 +339,25 @@ def insert_db(db_fname, data, cols=None, table_name='mols'):
     :param table_name:
     :return:
     """
-    conn = sqlite3.connect(db_fname)
+    inserted_row_count = 0
     if data:
-        # transform data to list of lists to perform executemany and be compatible with data if it is lists of lists
-        if not isinstance(data[0], (list, tuple)):
-            data = [data]
-        cur = conn.cursor()
-        ncols = len(data[0])
-        if cols is None:
-            cur.executemany(f"INSERT OR IGNORE INTO {table_name} VAlUES({','.join('?' * ncols)})", data)
-        else:
-            cols = ', '.join(cols)
-            cur.executemany(f"INSERT OR IGNORE INTO {table_name} ({cols}) VAlUES({','.join('?' * ncols)})", data)
-        conn.commit()
+        with sqlite3.connect(db_fname) as conn:
+            # transform data to list of lists to perform executemany and be compatible with data if it is lists of lists
+            if not isinstance(data[0], (list, tuple)):
+                data = [data]
+            cur = conn.cursor()
+            cur.execute(f"SELECT COUNT(rowid) FROM {table_name}")
+            row_count = cur.fetchone()[0]
+            ncols = len(data[0])
+            if cols is None:
+                cur.executemany(f"INSERT OR IGNORE INTO {table_name} VALUES({','.join('?' * ncols)})", data)
+            else:
+                cols = ', '.join(cols)
+                cur.executemany(f"INSERT OR IGNORE INTO {table_name} ({cols}) VALUES({','.join('?' * ncols)})", data)
+            conn.commit()
+            cur.execute(f"SELECT COUNT(rowid) FROM {table_name}")
+            inserted_row_count = cur.fetchone()[0] - row_count
+    return inserted_row_count
 
 
 def save_sdf(db_fname):
