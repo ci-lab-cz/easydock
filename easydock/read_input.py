@@ -1,6 +1,5 @@
 __author__ = 'pavel'
 
-import logging
 import os
 import sys
 import gzip
@@ -19,7 +18,7 @@ def read_pdbqt(fname, smi, sanitize=True, removeHs=False):
     recognized as a single structure (list with a single molecule will be returned)
 
     :param fname: pdbqt file
-    :param smi: SMILES of the molecule in pdbqt file to assing bond orders
+    :param smi: SMILES of the molecule in pdbqt file to assign bond orders
     :param sanitize:
     :param removeHs:
     :return: list of molecules
@@ -39,14 +38,14 @@ def read_pdbqt(fname, smi, sanitize=True, removeHs=False):
             for j, block in enumerate(pdbqt_blocks[1:]):
                 m = read_pdbqt_block(block)
                 if m is None:
-                    logging.warning(f'The pose #{j+1} cannot be read from {fname}')
+                    sys.stderr.write(f'The pose #{j+1} cannot be read from {fname}\n')
                 else:
                     m = AllChem.AssignBondOrdersFromTemplate(refmol, m)
                     mols.append(m)
         else:
             m = read_pdbqt_block(s)
             if m is None:
-                logging.warning(f'Structure from {fname} cannot be read')
+                sys.stderr.write(f'Structure from {fname} cannot be read\n')
             else:
                 m = AllChem.AssignBondOrdersFromTemplate(refmol, m)
                 mols.append(m)
@@ -54,12 +53,38 @@ def read_pdbqt(fname, smi, sanitize=True, removeHs=False):
     return mols
 
 
+def assign_mol_props_to_conf(mol, conf):
+    for k, v in mol.GetPropsAsDict().items():
+        if isinstance(v, int):
+            conf.SetIntProp(k, v)
+        elif isinstance(v, float):
+            conf.SetDoubleProp(k, v)
+        elif isinstance(v, bool):
+            conf.SetBoolProp(k, v)
+        else:
+            conf.SetProp(k, v)
+    return conf
+
+
+def assign_conf_props_to_mol(conf, mol):
+    for k, v in conf.GetPropsAsDict().items():
+        if isinstance(v, int):
+            mol.SetIntProp(k, v)
+        elif isinstance(v, float):
+            mol.SetDoubleProp(k, v)
+        elif isinstance(v, bool):
+            mol.SetBoolProp(k, v)
+        else:
+            mol.SetProp(k, v)
+    return mol
+
+
 def __get_smi_as_molname(mol):
     try:
         name = Chem.MolToSmiles(mol, isomericSmiles=True)
     except Exception as e:
         name = ''.join(random.sample(string.ascii_uppercase, 10))
-        logging.warning(f'Some molecule cannot be converted to SMILES - {name} was inserted as the molecule title')
+        sys.stderr.write(f'Some molecule cannot be converted to SMILES - {name} was inserted as the molecule title\n')
     return name
 
 
@@ -74,9 +99,9 @@ def __read_pkl(fname):
 
 def __read_sdf(fname, input_format, id_field_name=None, sanitize=True):
     if input_format == 'sdf':
-        suppl = Chem.SDMolSupplier(fname, sanitize=sanitize)
+        suppl = Chem.SDMolSupplier(fname, sanitize=sanitize, removeHs=False)
     elif input_format == 'sdf.gz':
-        suppl = Chem.ForwardSDMolSupplier(gzip.open(fname), sanitize=sanitize)
+        suppl = Chem.ForwardSDMolSupplier(gzip.open(fname), sanitize=sanitize, removeHs=False)
     else:
         return
     for mol in suppl:
@@ -97,12 +122,15 @@ def __read_sdf_confs(fname, input_format, id_field_name=None, sanitize=True, sdf
         if sdf_confs:
             if title is None:
                 m = mol
+                conf = assign_mol_props_to_conf(m, m.GetConformer(0))
                 title = mol_title
             elif title == mol_title:
-                m.AddConformer(mol.GetConformer(0), assignId=True)
+                conf = assign_mol_props_to_conf(mol, mol.GetConformer(0))
+                m.AddConformer(conf, assignId=True)
             else:
                 yield m, title
                 m = mol
+                conf = assign_mol_props_to_conf(m, m.GetConformer(0))
                 title = mol_title
         else:
             yield mol, mol_title
@@ -110,10 +138,10 @@ def __read_sdf_confs(fname, input_format, id_field_name=None, sanitize=True, sdf
         yield m, title
 
 
-def __read_smiles(fname, sanitize=True):
+def __read_smiles(fname, sanitize=True, sep='\t'):
     with open(fname) as f:
         for line in f:
-            tmp = line.strip().split()
+            tmp = line.strip().split(sep)
             mol = Chem.MolFromSmiles(tmp[0], sanitize=sanitize)
             if mol is not None:
                 if len(tmp) > 1:
@@ -122,14 +150,12 @@ def __read_smiles(fname, sanitize=True):
                     mol_title = __get_smi_as_molname(mol)
                 mol.SetProp('_Name', mol_title)
                 yield mol, mol_title
-            else:
-                logging.warning(f'ERROR: the line cannot be parsed: {line.strip()}')
 
 
-def __read_stdin_smiles(sanitize=True):
+def __read_stdin_smiles(sanitize=True, sep='\t'):
     line = sys.stdin.readline()
     while line:
-        tmp = line.strip().split()
+        tmp = line.strip().split(sep)
         if tmp:
             mol = Chem.MolFromSmiles(tmp[0], sanitize=sanitize)
             if mol is not None:
@@ -147,7 +173,7 @@ def __read_stdin_sdf(sanitize=True):
     while line:
         molblock += line
         if line == '$$$$\n':
-            mol = [x for x in Chem.ForwardSDMolSupplier(BytesIO(molblock.encode('utf-8')), sanitize=sanitize)][0]
+            mol = [x for x in Chem.ForwardSDMolSupplier(BytesIO(molblock.encode('utf-8')), sanitize=sanitize, removeHs=False)][0]
             mol_title = molblock.split('\n', 1)[0]
             if not mol_title:
                 mol_title = __get_smi_as_molname(mol)
@@ -176,12 +202,13 @@ def __read_stdin_sdf(sanitize=True):
 #         yield mol, mol_name
 
 
-def read_input(fname, input_format=None, id_field_name=None, sanitize=True, sdf_confs=False):
+def read_input(fname, input_format=None, id_field_name=None, sanitize=True, sdf_confs=False, sep='\t'):
     """
     fname - is a file name, None if STDIN
     input_format - is a format of input data, cannot be None for STDIN
     id_field_name - name of the field containing molecule name, if None molecule title will be taken
     sdf_confs - return consecutive molecules with the same name as a single Mol object with multiple conformers
+    sep - separator in SMILES format
     """
     if input_format is None:
         tmp = os.path.basename(fname).split('.')
@@ -194,13 +221,13 @@ def read_input(fname, input_format=None, id_field_name=None, sanitize=True, sdf_
         if input_format == 'sdf':
             suppl = __read_stdin_sdf(sanitize=sanitize)
         elif input_format == 'smi':
-            suppl = __read_stdin_smiles(sanitize=sanitize)
+            suppl = __read_stdin_smiles(sanitize=sanitize, sep=sep)
         else:
             raise Exception("Input STDIN format '%s' is not supported. It can be only sdf, smi." % input_format)
     elif input_format in ("sdf", "sdf.gz"):
         suppl = __read_sdf_confs(os.path.abspath(fname), input_format, id_field_name, sanitize, sdf_confs)
     elif input_format in ('smi'):
-        suppl = __read_smiles(os.path.abspath(fname), sanitize)
+        suppl = __read_smiles(os.path.abspath(fname), sanitize, sep=sep)
     elif input_format == 'pkl':
         suppl = __read_pkl(os.path.abspath(fname))
     else:

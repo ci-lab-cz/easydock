@@ -140,9 +140,9 @@ def main():
     common_argument_group = parser.add_argument_group('Common parameters for both docking and initialization)')
     
     input_output_group.add_argument('-i', '--input', metavar='FILENAME', required=False, type=filepath_type,
-                        help='input file with molecules (SMI, SDF, SDF.GZ, PKL). Maybe be omitted if output DB was '
-                             'previosuly created. In this case calculations will be continued from the interrupted '
-                             'point.')
+                        help='input file with molecules (SMI, SDF, SDF.GZ, PKL). SMILES file should be tab-delimited. '
+                             'The argument can be omitted if output DB was previously created, in this case '
+                             'calculations will be continued from the interrupted point.')
     input_output_group.add_argument('-o', '--output', metavar='FILENAME', required=True, type=filepath_type,
                         help='output SQLite DB with scores and poses in PDBQT and MOL formats. It also stores '
                              'other information (input structures, protein pdbqt file and grid box config). '
