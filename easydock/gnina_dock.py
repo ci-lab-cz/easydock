@@ -9,6 +9,7 @@ import timeit
 import subprocess
 import yaml
 
+from easydock.auxiliary import expand_path
 from easydock.preparation_for_docking import ligand_preparation, pdbqt2molblock
 
 
@@ -100,5 +101,7 @@ def mol_dock(mol, config, ring_sample=False):
 def __parse_config(config_fname):
     with open(config_fname) as f:
         config = yaml.safe_load(f)
+    for arg in ['protein', 'protein_setup', 'script_file']:
+        config[arg] = expand_path(config[arg])
 
     return config

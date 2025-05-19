@@ -12,6 +12,7 @@ import timeit
 
 from rdkit.Chem.rdMolDescriptors import CalcNumRotatableBonds
 from vina import Vina
+from easydock.auxiliary import expand_path
 from easydock.preparation_for_docking import ligand_preparation, pdbqt2molblock
 
 
@@ -151,6 +152,8 @@ def __parse_config(config_fname):
 
     with open(config_fname) as f:
         config = yaml.safe_load(f)
+    for arg in ['protein', 'protein_setup']:
+        config[arg] = expand_path(config[arg])
     center, box_size = get_param_from_config(config['protein_setup'])
     del config['protein_setup']
     config['center'] = center

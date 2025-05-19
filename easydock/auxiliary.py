@@ -1,3 +1,4 @@
+import os
 from itertools import islice
 from math import ceil
 import signal
@@ -67,3 +68,7 @@ def chunk_into_n(smi_l: list[str], n: int):
 
 def chunk_into_size_n(smi_l: list[str], n: int):
     return [smi_l[i:i+n] for i in range(0,len(smi_l),n)]
+
+
+def expand_path(path):
+    return os.path.expanduser(os.path.expandvars(path))

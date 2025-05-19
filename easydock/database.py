@@ -1,19 +1,17 @@
 import logging
 import os
 import sqlite3
-import sys
 import tempfile
 import traceback
 from copy import deepcopy
 from functools import partial
-from math import ceil
 from multiprocessing import Pool
 from typing import Optional, Union
 
 import yaml
 from easydock import read_input
 from easydock.preparation_for_docking import mol_is_3d
-from easydock.auxiliary import take, mol_name_split, empty_func, empty_generator, timeout, split_generator_to_chunks
+from easydock.auxiliary import take, mol_name_split, timeout, expand_path
 from easydock.protonation import protonate_chemaxon, read_protonate_chemaxon, protonate_dimorphite, read_smiles, protonate_pkasolver, protonate_molgpka
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -109,7 +107,7 @@ def populate_setup_db(db_fname, args, args_to_save=(), config_args_to_save=('pro
         for v in config_args_to_save:
             update_sql_line += f', {v} = ?'
             if config_dict[v] is not None:
-                values.append(open(config_dict[v]).read())
+                values.append(open(expand_path(config_dict[v])).read())
             else:
                 values.append(None)
 
@@ -327,7 +325,7 @@ def update_db(db_conn, mol_id, data, table_name='mols', commit=True):
                             time = CURRENT_TIMESTAMP
                         WHERE
                             id = ? AND stereo_id = ?
-                     """ % cols, list(values) + [mol_id,stereo_id])
+                     """ % cols, list(values) + [mol_id, stereo_id])
         if commit:
             db_conn.commit()
 
