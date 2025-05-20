@@ -33,89 +33,86 @@ def create_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', '
     :return:
     """
     os.makedirs(os.path.dirname(os.path.abspath(db_fname)), exist_ok=True)
-    conn = sqlite3.connect(db_fname)
-    cur = conn.cursor()
-    cur.execute(f"""CREATE TABLE IF NOT EXISTS mols
-                (
-                 id TEXT,
-                 stereo_id TEXT DEFAULT 0,
-                 smi_input TEXT,
-                 smi TEXT {'UNIQUE' if unique_smi else ''},
-                 smi_protonated TEXT,
-                 source_mol_block_input TEXT,
-                 source_mol_block TEXT,
-                 source_mol_block_protonated TEXT,
-                 docking_score REAL,
-                 pdb_block TEXT,
-                 mol_block TEXT,
-                 dock_time REAL,
-                 time TEXT,
-                 PRIMARY KEY (id, stereo_id)
-                )""")
+    with sqlite3.connect(db_fname, timeout=90) as conn:
+        cur = conn.cursor()
+        cur.execute(f"""CREATE TABLE IF NOT EXISTS mols
+                    (
+                     id TEXT,
+                     stereo_id TEXT DEFAULT 0,
+                     smi_input TEXT,
+                     smi TEXT {'UNIQUE' if unique_smi else ''},
+                     smi_protonated TEXT,
+                     source_mol_block_input TEXT,
+                     source_mol_block TEXT,
+                     source_mol_block_protonated TEXT,
+                     docking_score REAL,
+                     pdb_block TEXT,
+                     mol_block TEXT,
+                     dock_time REAL,
+                     time TEXT,
+                     PRIMARY KEY (id, stereo_id)
+                    )""")
 
-    # this will create a setup table with the first item in YAML format which contains all input args, and additional
-    # fields with names identical to selected arg names pointed out on text files (e.g config, protein.pdbqt,
-    # protein setup file, etc). These additional fields will store content of those files as TEXT
-    args_fields = ['yaml', 'config']
-    if isinstance(args_to_save, (list, tuple, set)):
-        args_fields += list(args_to_save)
-    if isinstance(config_args_to_save, (list, tuple, set)):
-        args_fields += list(config_args_to_save)
-    if len(set(args_fields)) < len(args_fields):
-        raise ValueError('Some arguments which will be stored to DB as separate fields with text files content are '
-                         'duplicated. Please fix this.\n')
+        # this will create a setup table with the first item in YAML format which contains all input args, and additional
+        # fields with names identical to selected arg names pointed out on text files (e.g config, protein.pdbqt,
+        # protein setup file, etc). These additional fields will store content of those files as TEXT
+        args_fields = ['yaml', 'config']
+        if isinstance(args_to_save, (list, tuple, set)):
+            args_fields += list(args_to_save)
+        if isinstance(config_args_to_save, (list, tuple, set)):
+            args_fields += list(config_args_to_save)
+        if len(set(args_fields)) < len(args_fields):
+            raise ValueError('Some arguments which will be stored to DB as separate fields with text files content are '
+                             'duplicated. Please fix this.\n')
 
-    sql = f"CREATE TABLE setup ({', '.join(v + ' TEXT' for v in args_fields)})"
+        sql = f"CREATE TABLE setup ({', '.join(v + ' TEXT' for v in args_fields)})"
 
-    cur.execute(sql)
-    conn.commit()
+        cur.execute(sql)
+        conn.commit()
 
-    d = deepcopy(args.__dict__)
-    values = [yaml.safe_dump(d)]
-    for v in args_to_save:
-        if d[v] is not None:
-            values.append(open(d[v]).read())
-        else:
-            values.append(None)
-
-    if args_to_save:
-        cur.execute(f"INSERT INTO setup (yaml, {','.join(args_to_save)}) VALUES (?, {','.join('?' * len(args_to_save))})", values)
-    else:
-        cur.execute(f"INSERT INTO setup (yaml) VALUES (?)", values)
-        
-    conn.commit()
-    conn.close()
-
-
-def populate_setup_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', 'protein_setup')):
-    conn = sqlite3.connect(db_fname)
-    cur = conn.cursor()
-    
-    if cur.execute('SELECT config FROM setup').fetchone()[0] is None:
         d = deepcopy(args.__dict__)
-        values = [open(d['config']).read()]
-        update_sql_line = 'UPDATE setup SET config = ?'
-
+        values = [yaml.safe_dump(d)]
         for v in args_to_save:
-            update_sql_line += f', {v} = ?'
             if d[v] is not None:
                 values.append(open(d[v]).read())
             else:
                 values.append(None)
 
-        config_dict = yaml.safe_load(open(args.config))
-        for v in config_args_to_save:
-            update_sql_line += f', {v} = ?'
-            if config_dict[v] is not None:
-                values.append(open(expand_path(config_dict[v])).read())
-            else:
-                values.append(None)
+        if args_to_save:
+            cur.execute(f"INSERT INTO setup (yaml, {','.join(args_to_save)}) VALUES (?, {','.join('?' * len(args_to_save))})", values)
+        else:
+            cur.execute(f"INSERT INTO setup (yaml) VALUES (?)", values)
 
-        update_sql_line = update_sql_line + ' WHERE config IS NULL'
-        cur.execute(update_sql_line, values)
         conn.commit()
 
-    conn.close()
+
+def populate_setup_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', 'protein_setup')):
+    with sqlite3.connect(db_fname, timeout=90) as conn:
+        cur = conn.cursor()
+
+        if cur.execute('SELECT config FROM setup').fetchone()[0] is None:
+            d = deepcopy(args.__dict__)
+            values = [open(d['config']).read()]
+            update_sql_line = 'UPDATE setup SET config = ?'
+
+            for v in args_to_save:
+                update_sql_line += f', {v} = ?'
+                if d[v] is not None:
+                    values.append(open(d[v]).read())
+                else:
+                    values.append(None)
+
+            config_dict = yaml.safe_load(open(args.config))
+            for v in config_args_to_save:
+                update_sql_line += f', {v} = ?'
+                if config_dict[v] is not None:
+                    values.append(open(expand_path(config_dict[v])).read())
+                else:
+                    values.append(None)
+
+            update_sql_line = update_sql_line + ' WHERE config IS NULL'
+            cur.execute(update_sql_line, values)
+            conn.commit()
 
 
 def restore_setup_from_db(db_fname, tmpdir=None):
@@ -125,13 +122,12 @@ def restore_setup_from_db(db_fname, tmpdir=None):
     :param db_fname: SQLite DB file name
     :return: dictionary of arguments and their values
     """
-    conn = sqlite3.connect(db_fname)
-    cur = conn.cursor()
-    res = cur.execute('SELECT * FROM setup')
-    colnames = [d[0] for d in res.description]
-    values = [v for v in res][0]
-    values = dict(zip(colnames, values))
-    conn.close()
+    with sqlite3.connect(db_fname, timeout=90) as conn:
+        cur = conn.cursor()
+        res = cur.execute('SELECT * FROM setup')
+        colnames = [d[0] for d in res.description]
+        values = [v for v in res][0]
+        values = dict(zip(colnames, values))
 
     d = yaml.safe_load(values['yaml'])
     try:
@@ -257,44 +253,44 @@ def init_db(db_fname: str, input_fname: str, ncpu: int, max_stereoisomers=1, pre
     Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
 
     pool = Pool(processes=ncpu)
-    conn = sqlite3.connect(db_fname)
-    cur = conn.cursor()
-    mol_input = read_input.read_input(input_fname)
+    with sqlite3.connect(db_fname, timeout=90) as conn:
+        cur = conn.cursor()
+        mol_input = read_input.read_input(input_fname)
 
-    last_index = cur.execute('SELECT COUNT(smi_input) FROM mols WHERE (stereo_id = 0)').fetchone()[0]
-    if last_index:        
-        from itertools import islice
-        mol_input = islice(mol_input, last_index, None)
+        last_index = cur.execute('SELECT COUNT(smi_input) FROM mols WHERE (stereo_id = 0)').fetchone()[0]
+        if last_index:
+            from itertools import islice
+            mol_input = islice(mol_input, last_index, None)
 
-    data_smi = []  # non 3D structures
-    data_mol = []  # 3D structures
-    load_data_params = partial(generate_init_data, max_stereoisomers=max_stereoisomers, prefix=prefix)
-    for i, item in enumerate(pool.imap(load_data_params, mol_input, chunksize=10), 1):
-        for input_format, data in item:
-            if input_format == 'smi':
-                data_smi.append(data)
-            elif input_format == 'mol':
-                data_mol.append(data)
+        data_smi = []  # non 3D structures
+        data_mol = []  # 3D structures
+        load_data_params = partial(generate_init_data, max_stereoisomers=max_stereoisomers, prefix=prefix)
+        for i, item in enumerate(pool.imap(load_data_params, mol_input, chunksize=10), 1):
+            for input_format, data in item:
+                if input_format == 'smi':
+                    data_smi.append(data)
+                elif input_format == 'mol':
+                    data_mol.append(data)
 
-        if i % 100 == 0:
-            cur.executemany(f'INSERT INTO mols (id, stereo_id, smi_input, smi) VALUES(?, ?, ?, ?)', data_smi)
-            cur.executemany(f'INSERT INTO mols (id, stereo_id, smi, source_mol_block_input, source_mol_block) VALUES(?, ?, ?, ?, ?)', data_mol)
-            conn.commit()
-            data_smi = []  # non 3D structures
-            data_mol = []  # 3D structures
+            if i % 100 == 0:
+                cur.executemany(f'INSERT INTO mols (id, stereo_id, smi_input, smi) VALUES(?, ?, ?, ?)', data_smi)
+                cur.executemany(f'INSERT INTO mols (id, stereo_id, smi, source_mol_block_input, source_mol_block) VALUES(?, ?, ?, ?, ?)', data_mol)
+                conn.commit()
+                data_smi = []  # non 3D structures
+                data_mol = []  # 3D structures
 
-    cur.executemany(f'INSERT INTO mols (id, stereo_id, smi_input, smi) VALUES(?, ?, ?, ?)', data_smi)
-    cur.executemany(f'INSERT INTO mols (id, stereo_id, smi, source_mol_block_input, source_mol_block) VALUES(?, ?, ?, ?, ?)', data_mol)
-    conn.commit()
+        cur.executemany(f'INSERT INTO mols (id, stereo_id, smi_input, smi) VALUES(?, ?, ?, ?)', data_smi)
+        cur.executemany(f'INSERT INTO mols (id, stereo_id, smi, source_mol_block_input, source_mol_block) VALUES(?, ?, ?, ?, ?)', data_mol)
+        conn.commit()
 
 
 def check_db_status(db_fname: str, db_col_list: str):
-    conn = sqlite3.connect(db_fname)
-    cur = conn.cursor()
-    if cur.execute('SELECT COUNT(ROWID) FROM mols WHERE ' + 'OR '.join(f'{item} IS NOT NULL ' for item in db_col_list)).fetchone()[0]:
-        return True
-    else:
-        return False
+    with sqlite3.connect(db_fname, timeout=90) as conn:
+        cur = conn.cursor()
+        if cur.execute('SELECT COUNT(ROWID) FROM mols WHERE ' + 'OR '.join(f'{item} IS NOT NULL ' for item in db_col_list)).fetchone()[0]:
+            return True
+        else:
+            return False
     
     
 def get_protonation_arg_value(db_conn):
@@ -341,7 +337,7 @@ def insert_db(db_fname, data, cols=None, table_name='mols'):
     """
     inserted_row_count = 0
     if data:
-        with sqlite3.connect(db_fname) as conn:
+        with sqlite3.connect(db_fname, timeout=90) as conn:
             # transform data to list of lists to perform executemany and be compatible with data if it is lists of lists
             if not isinstance(data[0], (list, tuple)):
                 data = [data]
@@ -363,20 +359,20 @@ def insert_db(db_fname, data, cols=None, table_name='mols'):
 def save_sdf(db_fname):
     sdf_fname = os.path.splitext(db_fname)[0] + '.sdf'
     with open(sdf_fname, 'wt') as w:
-        conn = sqlite3.connect(db_fname)
-        cur = conn.cursor()
-        for mol_block, mol_name, score in cur.execute('SELECT mol_block, id, MIN(docking_score) '
-                                                      'FROM mols '
-                                                      'WHERE docking_score IS NOT NULL '
-                                                      'AND mol_block IS NOT NULL GROUP BY id'):
-            # update mol name in mol block by removing stereo_id
-            mol_id, mol_block = mol_block.split('\n', 1)
-            mol_block = mol_id.rsplit('_', 1)[0] + '\n' + mol_block
-            w.write(mol_block + '\n')
-            w.write(f'>  <ID>\n{mol_name}\n\n')
-            w.write(f'>  <docking_score>\n{score}\n\n')
-            w.write('$$$$\n')
-        logging.info(f'Best poses were saved to {sdf_fname}')
+        with sqlite3.connect(db_fname, timeout=90) as conn:
+            cur = conn.cursor()
+            for mol_block, mol_name, score in cur.execute('SELECT mol_block, id, MIN(docking_score) '
+                                                          'FROM mols '
+                                                          'WHERE docking_score IS NOT NULL '
+                                                          'AND mol_block IS NOT NULL GROUP BY id'):
+                # update mol name in mol block by removing stereo_id
+                mol_id, mol_block = mol_block.split('\n', 1)
+                mol_block = mol_id.rsplit('_', 1)[0] + '\n' + mol_block
+                w.write(mol_block + '\n')
+                w.write(f'>  <ID>\n{mol_name}\n\n')
+                w.write(f'>  <docking_score>\n{score}\n\n')
+                w.write('$$$$\n')
+            logging.info(f'Best poses were saved to {sdf_fname}')
 
 
 def select_mols_to_dock(db_conn, table_name='mols', add_sql=None):
@@ -422,9 +418,8 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
                     e.g. "AND id IN ('MOL1', 'MOL2')" or "AND iteration=(SELECT MAX(iteration) FROM mols)".
     :return:
     '''
-    conn = sqlite3.connect(db_fname, check_same_thread=False)   # danger
+    with sqlite3.connect(db_fname, check_same_thread=False, timeout=90) as conn:   # danger
 
-    try:
         cur = conn.cursor()
 
         # get count of molecules required protonation
@@ -496,9 +491,6 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
 
         else:
             raise ValueError(f'There is no implemented support to protonate molecules by {program}')
-
-    finally:
-        conn.close()
 
 
 def update_db_protonated_smiles(conn, items, table_name='mols'):

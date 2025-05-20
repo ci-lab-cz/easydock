@@ -8,25 +8,24 @@ class RawTextArgumentDefaultsHelpFormatter(argparse.RawTextHelpFormatter, argpar
 
 def create_clean_db_copy(db_fname, new_db_fname):
     shutil.copyfile(db_fname, new_db_fname)
-    conn = sqlite3.connect(new_db_fname)
-    cur = conn.cursor()
-    cur.execute(f"""UPDATE mols SET docking_score = NULL,
-                                    pdb_block = NULL,
-                                    mol_block = NULL,
-                                    dock_time = NULL,
-                                    time = NULL   """)
-    conn.commit()
+    with sqlite3.connect(new_db_fname) as conn:
+        cur = conn.cursor()
+        cur.execute(f"""UPDATE mols SET docking_score = NULL,
+                                        pdb_block = NULL,
+                                        mol_block = NULL,
+                                        dock_time = NULL,
+                                        time = NULL   """)
+        conn.commit()
 
-    res = cur.execute('SELECT * FROM setup')
-    remove_colnames = [d[0] for d in res.description if d[0] != 'yaml']
-    sql = 'UPDATE setup SET ' +  ','.join(f'{item} = NULL' for item in remove_colnames)
+        res = cur.execute('SELECT * FROM setup')
+        remove_colnames = [d[0] for d in res.description if d[0] != 'yaml']
+        sql = 'UPDATE setup SET ' +  ','.join(f'{item} = NULL' for item in remove_colnames)
 
-    cur.execute(sql)
-    conn.commit()    
-    cur.execute(f'VACUUM')
-    conn.commit()
+        cur.execute(sql)
+        conn.commit()
+        cur.execute(f'VACUUM')
+        conn.commit()
 
-    conn.close()
 
 def main():
     parser = argparse.ArgumentParser(description='Create a clean copy of docked database file to be reused for another program or protein target'
