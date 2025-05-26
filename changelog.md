@@ -5,7 +5,8 @@
 - integration of MolGpKa for molecule protonation and implement post-processing SMARTS patterns to fix errors [#49](https://github.com/ci-lab-cz/easydock/pull/49) 
 - implement optional sampling of saturated ring systems to improve docking results [#34](https://github.com/ci-lab-cz/easydock/pull/34) 
 - fix some errors in pkasolver by applying post-processing SMARTS patterns
-- improved command argument descriptions and grouping
+- introduced logging, if a log-file is not specified the output will be redirected to stdout 
+- improved command argument descriptions and grouping arguments
 
 **0.3.2**
 - catch and report all exceptions when reconstruct 3D geometry of protonated molecules
