@@ -189,6 +189,21 @@ ncpu: 1
 seed: 0
 ```
 
+To use `gnina` (or other tools) from within a `docker/apptainer` container it is necessary to change the `script_file` argument. There is also a need to bind a local directory to a directory inside a container using the same path (in `docker` there is `-v` argument for that).
+```
+script_file: apptainer exec -B /path/to/dir:/path/to/dir container.sif gnina
+protein: /path/to/dir/protein.pdbqt
+protein_setup: /path/to/dir/grid.txt
+exhaustiveness: 8
+scoring: default
+cnn_scoring: rescore
+cnn: dense_ensemble
+n_poses: 10
+addH: False
+ncpu: 1
+seed: 0
+```
+
 ### Sampling of saturated rings
 
 Since rings are considered rigid, to improve docking of compounds containing saturated rings a set of starting conformers can be sampled and used for docking (enabled by `--ring_sample` argument). Only the conformer resulted int he best docking score will be stored in the database. This will increase computational complexity proportionally and may result in much longer simulation times especially for compounds containing multiple saturated rings.  
