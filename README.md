@@ -48,6 +48,8 @@ conda install -c conda-forge boost swig
 pip install paramiko vina
 # has fixes with rdkit.six import
 pip install git+https://github.com/forlilab/Meeko.git
+#bugfix: in the development version, only single bonds are rotatable (mostly)
+pip install git+https://github.com/forlilab/Meeko.git@develop
 ```
 
 - (optional) installation of `gnina/smina` is described at https://github.com/gnina/gnina
