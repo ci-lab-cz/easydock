@@ -47,6 +47,11 @@ conda install -c conda-forge boost swig
 ```
 pip install paramiko vina
 # has fixes with rdkit.six import
+
+#recommend to install the dev version, since it implements a fix making double bound non-rotatable, unlike the current release version
+pip install git+https://github.com/forlilab/Meeko.git@develop
+
+#the current release version
 pip install git+https://github.com/forlilab/Meeko.git
 ```
 
