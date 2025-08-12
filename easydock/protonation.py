@@ -36,9 +36,9 @@ partial(protonate_xxx, arg1=value1, ...) at the intialization step.
 
 # MolGpKa fix patterns
 # patterns + ids of atoms in a pattern to be fixed + type of a pattern
-molgpka_patterns1 = [('[#7+]~*~[#7+]', (0, 2), 'pos'),    # 21
-                     ('[#7+]**[#7+]', (0, 3), 'pos'),   # 3
-                     ('[#7+]***[#7+]', (0, 4), 'pos'),  # 4
+molgpka_patterns1 = [('[#7+;!$([N+](=O)[O-]);!$([#7+;X4])]~*~[#7+;!$([N+](=O)[O-]);!$([#7+;X4])]', (0, 2), 'pos'),    # 21
+                     ('[#7+;!$([N+](=O)[O-]);!$([#7+;X4])]**[#7+;!$([N+](=O)[O-]);!$([#7+;X4])]', (0, 3), 'pos'),   # 3
+                     ('[#7+;!$([N+](=O)[O-]);!$([#7+;X4])]***[#7+;!$([N+](=O)[O-]);!$([#7+;X4])]', (0, 4), 'pos'),  # 4
                      ('c[n-][n-]c', (1, 2), 'neg'),     # 9
                      ('[O-]aa[O-]', (0, 3), 'neg'),     # 13
                      ('[O-]aaa[O-]', (0, 4), 'neg'),    # 14
