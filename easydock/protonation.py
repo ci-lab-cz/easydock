@@ -225,6 +225,7 @@ def __protonate_molgpka(args, models):
                 charge = atom.GetFormalCharge()
                 if charge <= 0:
                     atom.SetFormalCharge(charge + 1)
+                    atom.SetNumExplicitHs(atom.GetNumExplicitHs() + 1)
                     atom.UpdatePropertyCache()
                 else:
                     logging.warning(f'(molgpka) Molecule {mol_name} has issues with assignment of protonation states (protonation)')
@@ -258,7 +259,9 @@ def __protonate_molgpka(args, models):
 
                 charge = editable_mol.GetAtomWithIdx(worst_atom_idx).GetFormalCharge()
                 if pattern_type == 'pos':
-                    editable_mol.GetAtomWithIdx(worst_atom_idx).SetFormalCharge(charge - 1)
+                    atom = editable_mol.GetAtomWithIdx(worst_atom_idx)
+                    atom.SetFormalCharge(charge - 1)
+                    atom.SetNumExplicitHs(atom.GetNumExplicitHs() - 1)
                 elif pattern_type == 'neg':
                     atom = editable_mol.GetAtomWithIdx(worst_atom_idx)
                     atom.SetFormalCharge(charge + 1)
@@ -275,6 +278,7 @@ def __protonate_molgpka(args, models):
                 atom = editable_mol.GetAtomWithIdx(match[0])
                 if pattern_type == 'pos':
                     atom.SetFormalCharge(atom.GetFormalCharge() - 1)
+                    atom.SetNumExplicitHs(atom.GetNumExplicitHs() - 1)
                     atom.UpdatePropertyCache()
                 if pattern_type == 'neg':
                     atom.SetFormalCharge(atom.GetFormalCharge() + 1)
