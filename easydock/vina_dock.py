@@ -127,8 +127,8 @@ def mol_dock(mol, config, ring_sample=False):
 
     logging.debug(f'(vina) {mol_id}, docked nconf {len(dock_output_conformer_list)}')
 
-    output = min(dock_output_conformer_list, key=lambda x: x['docking_score'])
-    if output:
+    if dock_output_conformer_list:
+        output = min(dock_output_conformer_list, key=lambda x: x['docking_score'])
         output['dock_time'] = dock_time
     else:
         output = None
