@@ -36,13 +36,13 @@ partial(protonate_xxx, arg1=value1, ...) at the intialization step.
 
 # MolGpKa fix patterns
 # patterns + ids of atoms in a pattern to be fixed + type of a pattern
-molgpka_patterns1 = [('[#7+;!$([N+](=O)[O-]);!$([#7+H0;X4])]~*~[#7+;!$([N+](=O)[O-]);!$([#7+H0;X4])]', (0, 2), 'pos'),    # 21
-                     ('[#7+;!$([N+](=O)[O-]);!$([#7+H0;X4])]**[#7+;!$([N+](=O)[O-]);!$([#7+H0;X4])]', (0, 3), 'pos'),   # 3
-                     ('[#7+;!$([N+](=O)[O-]);!$([#7+H0;X4])]***[#7+;!$([N+](=O)[O-]);!$([#7+H0;X4])]', (0, 4), 'pos'),  # 4
+molgpka_patterns1 = [('[#7+;!$([#7+][O-]);!$([#7+H0;X4,X3])]~*~[#7+;!$([#7+][O-]);!$([#7+H0;X4,X3])]', (0, 2), 'pos'),    # 21
+                     ('[#7+;!$([#7+][O-]);!$([#7+H0;X4,X3])]**[#7+;!$([#7+][O-]);!$([#7+H0;X4,X3])]', (0, 3), 'pos'),   # 3
+                     ('[#7+;!$([#7+][O-]);!$([#7+H0;X4,X3])]***[#7+;!$([#7+][O-]);!$([#7+H0;X4,X3])]', (0, 4), 'pos'),  # 4
                      ('c[n-][n-]c', (1, 2), 'neg'),     # 9
-                     ('[O-]aa[O-]', (0, 3), 'neg'),     # 13
-                     ('[O-]aaa[O-]', (0, 4), 'neg'),    # 14
-                     ('[O-]aaaa[O-]', (0, 5), 'neg')]   # 15
+                     ('[O-]cc[O-]', (0, 3), 'neg'),     # 13
+                     ('[O-]cac[O-]', (0, 4), 'neg'),    # 14
+                     ('[O-]caac[O-]', (0, 5), 'neg')]   # 15
 molgpka_patterns1 = [(Chem.MolFromSmarts(p), ids, p_type) for p, ids, p_type in molgpka_patterns1]
 
 molgpka_patterns2 = [('[$([NH+,NH2+,NH3+]-[*]=[O,S])]', 'pos'), # 1
