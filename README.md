@@ -56,6 +56,7 @@ pip install git+https://github.com/forlilab/Meeko.git
 ```
 
 - (optional) installation of `gnina/smina` is described at https://github.com/gnina/gnina
+- (optional) installation of Vina-GPU, QVina2-GPU or QVinaW-GPU is described at https://github.com/DeltaGroupNJUPT/Vina-GPU-2.1
 
 - (recommended) installation of MolGpKa for molecule protonation
 ```
@@ -88,7 +89,7 @@ An important feature, once the database is initialized it will store all command
 
 ### Features
 
-- the major script `easydock` supports docking with `vina` and `gnina` (`gnina` also supports `smina` and its custom scoring functions)
+- the major script `easydock` supports docking with `vina`, `gnina` (`gnina` also supports `smina` and its custom scoring functions), `vina-gpu` (`vina-gpu` is a collective term to use any of Vina-GPU, QVina2-GPU or QVinaW-GPU)
 - can be used as a command line utility or imported as a python module
 - if input molecules are 3D, these conformations will be used as starting ones for docking (enable usage of external conformer generators)
 - input molecules are checked for salts and attempted to fix by SaltRemover 
@@ -112,7 +113,7 @@ The pipeline consists of two major parts which can be run separately or simultan
 - ligands are protonated by MolGpKa/Chemaxon/pKasolver at pH 7.4 and the most stable tautomers are generated (optional, requires a Chemaxon license)
 2. Docking step includes:
 - molecules are converted in PDBQT format using Meeko
-- docking with `vina`/`gnina`
+- docking with `vina`/`gnina`/`vina-gpu`
 - top docked poses are converted in MOL format and stored into output DB along with docking scores
 
 ### Notes
@@ -208,6 +209,29 @@ addH: False
 ncpu: 1
 seed: 0
 ```
+
+To use any of Vina-GPU, QVina2-GPU or QVinaW-GPU use `--program vina-gpu`:
+
+```
+easydock -i input.smi -o output.db --program vina-gpu --config config.yml--sdf
+```
+
+Example of config.yml for `vina-gpu` docking (using a special container)  
+```
+script_file: /path/to/dir/AutoDock-Vina-GPU-2-1 --opencl_binary_path /path/to/dir/
+protein: /path/to/dir/protein.pdbqt
+protein_setup: /path/to/dir/grid.txt
+n_poses: 3
+```
+`--opencl_binary_path` is necessary to get access to OpenCL macros.
+`thread` argument is set to 8000 by default, this can be changed by explicitly passing its value in `config.yml`.
+
+Choosing other programs `QuickVina2-GPU-2-1` or `QuickVina-W-GPU-2-1` in `config.yml` will enable docking with them. All other arguments are the same.
+
+#### Config.yml
+
+Not all arguments of external programs can be set directly as individual argument sin `config.yml`. However, if a program is invoking as an external binary, you may specify any constant arguments in the `script_file` value. For example, if you want to customize `--energy_range` for `vina-gpu` use `script_file: /path/to/dir/AutoDock-Vina-GPU-2-1 --opencl_binary_path /path/to/dir/ --energy_range 5`.
+
 
 ### Sampling of saturated rings
 
