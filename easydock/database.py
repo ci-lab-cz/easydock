@@ -480,7 +480,7 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
 
             items = []
             data = ((smi, mol_name) for smi, mol_name in cur)
-            for i, item in enumerate(protonate_func(data), 1): 
+            for i, item in enumerate(protonate_func(data), 1):
                 items.append(item)
                 if i % 100 == 0:
                     update_db_protonated_smiles(conn, items, table_name)
