@@ -244,8 +244,10 @@ def generate_init_data(mol_input: tuple[Chem.Mol, str], max_stereoisomers: int, 
                     isomer_list.append(['smi', (mol_name, stereo_id, smi_input, smi)])
             else:
                 isomer_list.append(['smi', (mol_name, 0, smi_input, None)])
+                logging.warning(f'{mol.GetProp("_Name")} will be skipped, stereoisomers cannot be generated')
         except TimeoutError:
             isomer_list.append(['smi', (mol_name, 0, smi_input, None)])
+            logging.warning(f'{mol.GetProp("_Name")} will be skipped, stereoisomers cannot be generated due to timeout')
         return isomer_list
 
 
