@@ -9,6 +9,10 @@
 - [Examples](#examples)
   - [Initialization of a database](#initialization-of-a-database)
   - [Docking from command line](#docking-from-command-line)
+    - [Vina](#vina)
+    - [Gnina / Smina](#gnina--smina)
+    - [Vina-GPU / QVina-GPU / QVinaW-GPU](#vina-gpu--qvina-gpu--qvinaw-gpu)
+    - [QVina2 / Qvina-W](#qvina2--qvina-w)
   - [Sampling of saturated rings](#sampling-of-saturated-rings)
   - [Docking using multiple servers](#docking-using-multiple-servers)
   - [Docking from Python](#docking-from-python)
@@ -56,6 +60,7 @@ pip install git+https://github.com/forlilab/Meeko.git
 ```
 
 - (optional) installation of `gnina/smina` is described at https://github.com/gnina/gnina
+- (optional) installation of QVina2 and QVina-W is described at https://github.com/QVina/qvina
 - (optional) installation of Vina-GPU, QVina2-GPU or QVinaW-GPU is described at https://github.com/DeltaGroupNJUPT/Vina-GPU-2.1
 
 - (recommended) installation of MolGpKa for molecule protonation
@@ -89,7 +94,7 @@ An important feature, once the database is initialized it will store all command
 
 ### Features
 
-- the major script `easydock` supports docking with `vina`, `gnina` (`gnina` also supports `smina` and its custom scoring functions), `vina-gpu` (`vina-gpu` is a collective term to use any of Vina-GPU, QVina2-GPU or QVinaW-GPU)
+- the major script `easydock` supports docking with `vina`, `gnina` (`gnina` also supports `smina` and its custom scoring functions), `qvina` (`qvina` is a collective term to use either QVina2 or QVina-W), `vina-gpu` (`vina-gpu` is a collective term to use any of Vina-GPU, QVina2-GPU or QVinaW-GPU)
 - can be used as a command line utility or imported as a python module
 - if input molecules are 3D, these conformations will be used as starting ones for docking (enable usage of external conformer generators)
 - input molecules are checked for salts and attempted to fix by SaltRemover 
@@ -113,7 +118,7 @@ The pipeline consists of two major parts which can be run separately or simultan
 - ligands are protonated by MolGpKa/Chemaxon/pKasolver at pH 7.4 and the most stable tautomers are generated (optional, requires a Chemaxon license)
 2. Docking step includes:
 - molecules are converted in PDBQT format using Meeko
-- docking with `vina`/`gnina`/`vina-gpu`
+- docking with `vina`/`gnina`/`qvina`/`vina-gpu`
 - top docked poses are converted in MOL format and stored into output DB along with docking scores
 
 ### Notes
@@ -137,6 +142,8 @@ easydock -i input.smi -o output.db -c 4 --protonation molgpka
 
 ### Docking from command line
 
+#### Vina
+
 To run a both steps of the full pipeline: initialization and docking.  
 Docking using `vina` takes input SMILES and a config file. Ligands will not be protonated. 4 CPU cores will be used (4 molecules will be docked in parallel). When docking will finish an SDF file will be created with top docking poses for each ligand. 
 ```
@@ -159,6 +166,8 @@ ncpu: 5
 ```
 
 NOTE: ncpu argument in `easydock` and `config.yml` has different meaning. In `easydock` it means the number of molecules docked in parallel. In `config.yml` it means the number of CPUs used for docking of a single molecule. The product of these two values should be equal or a little bit more than the number of CPUs on a computer.
+
+#### Gnina / Smina
 
 The same but using `gnina`
 ```
@@ -210,15 +219,17 @@ ncpu: 1
 seed: 0
 ```
 
+#### Vina-GPU / QVina-GPU / QVinaW-GPU
+
 To use any of Vina-GPU, QVina2-GPU or QVinaW-GPU use `--program vina-gpu`:
 
 ```
 easydock -i input.smi -o output.db --program vina-gpu --config config.yml--sdf
 ```
 
-Example of config.yml for `vina-gpu` docking (using a special container)  
+Example of config.yml for `vina-gpu` docking:  
 ```
-script_file: /path/to/dir/AutoDock-Vina-GPU-2-1 --opencl_binary_path /path/to/dir/
+script_file: /path/to/bin/dir/AutoDock-Vina-GPU-2-1 --opencl_binary_path /path/to/bin/dir/
 protein: /path/to/dir/protein.pdbqt
 protein_setup: /path/to/dir/grid.txt
 n_poses: 3
@@ -228,10 +239,30 @@ n_poses: 3
 
 Choosing other programs `QuickVina2-GPU-2-1` or `QuickVina-W-GPU-2-1` in `config.yml` will enable docking with them. All other arguments are the same.
 
+#### QVina2 / QVina-W
+
+To use QVina2 or QVina-W use `--program qvina`
+
+```
+easydock -i input.smi -o output.db --program qvina --config config.yml--sdf
+```
+
+Example of config.yml for `qvina` docking:  
+```
+script_file: /path/to/bin/dir/qvina2
+protein: /path/to/dir/protein.pdbqt
+protein_setup: /path/to/dir/grid.txt
+exhaustiveness: 8
+n_poses: 3
+ncpu: 2
+seed: 0
+```
+
+Specify path to either QVina2 or QVina-W to use a particular program.
+
 #### Config.yml
 
-Not all arguments of external programs can be set directly as individual argument sin `config.yml`. However, if a program is invoking as an external binary, you may specify any constant arguments in the `script_file` value. For example, if you want to customize `--energy_range` for `vina-gpu` use `script_file: /path/to/dir/AutoDock-Vina-GPU-2-1 --opencl_binary_path /path/to/dir/ --energy_range 5`.
-
+There are two ways to pass arguments to programs which are executed by external binaries (currently these are all programs except vina). The first way is to specify arguments and their values as individual entries in `config.yml`. However, not all arguments can be set in this way. The second approach is specify constant arguments in the `script_file` value. For example, if you want to customize `--energy_range` for `qvina` use `script_file: /path/to/bin/dir/qvina2 --energy_range 5`. Each argument should be specified in either way, not both.
 
 ### Sampling of saturated rings
 

@@ -158,8 +158,9 @@ def main():
                         help='prefix which will be added to all molecule names. This might be useful if multiple '
                              'repeated runs are made which will be analyzed together.')
 
-    docking_group.add_argument('--program', metavar='STRING', required=False, choices=['vina', 'gnina', 'vina-gpu'],
-                        help='name of a docking program. Choices: vina, gnina, vina-gpu.')
+    docking_group.add_argument('--program', metavar='STRING', required=False,
+                               choices=['vina', 'gnina', 'vina-gpu', 'qvina'],
+                        help='name of a docking program. Choices: vina, gnina, vina-gpu, qvina.')
     docking_group.add_argument('--config', metavar='FILENAME', required=False, type=filepath_type,
                         help='YAML file with parameters used by docking program.\n'
                              'vina.yml\n'
@@ -258,8 +259,11 @@ def main():
             elif args.program == 'vina-gpu':
                 from easydock.vinagpu_dock import mol_dock
                 from easydock.vina_dock import pred_dock_time
+            elif args.program == 'qvina':
+                from easydock.qvina_dock import mol_dock
+                from easydock.vina_dock import pred_dock_time
             else:
-                raise ValueError(f'Illegal program argument was supplied: {args.program}')
+                raise ValueError(f'Illegal --program argument value was supplied: {args.program}')
 
             if args.dask_report:
                 dask_report_fname = os.path.splitext(args.output)[0] + '.html'
