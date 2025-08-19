@@ -59,9 +59,9 @@ def mol_dock(mol, config, ring_sample=False):
             cmd = f'{config["script_file"]} --receptor {config["protein"]} --ligand {ligand_fname} ' \
                   f'--out {output_fname} ' \
                   f'--config {config["protein_setup"]} ' \
-                  f'{"--seed " + config["seed"] if "seed" in config else ""} ' \
+                  f'{"--seed " + str(config["seed"]) if "seed" in config else ""} ' \
                   f'--thread {config.get("thread", 8000)} ' \
-                  f'{"----search_depth " + config["--search_depth"] if "--search_depth" in config else ""} ' \
+                  f'{"----search_depth " + str(config["--search_depth"]) if "--search_depth" in config else ""} ' \
                   f'--num_modes {config["n_poses"]}'
             subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)  # this will trigger CalledProcessError and skip next lines
 
