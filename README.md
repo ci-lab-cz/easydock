@@ -54,6 +54,7 @@ pip install paramiko vina
 
 #recommend to install the dev version, since it implements a fix making double bound non-rotatable, unlike the current release version
 pip install git+https://github.com/forlilab/Meeko.git@develop
+pip install gemmi
 
 #the current release version
 pip install git+https://github.com/forlilab/Meeko.git
