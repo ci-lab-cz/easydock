@@ -112,7 +112,7 @@ def mol_dock(mol, config, ring_sample=False):
                     dock_output_conformer_list.append(dock_output)
             
         except subprocess.CalledProcessError as e:
-            logging.warning(f'(gnina) Error caused by docking of {mol_id}\n'
+            logging.warning(f'(vina) Error caused by docking of {mol_id}\n'
                             f'{str(e)}\n'
                             f'STDERR output:\n'
                             f'{e.stderr}\n')
