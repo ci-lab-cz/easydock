@@ -30,7 +30,7 @@ def create_clean_db_copy(db_fname, new_db_fname):
 def main():
     parser = argparse.ArgumentParser(description='Create a clean copy of docked database file to be reused for another program or protein target'
                                      'The docking result of the database file is deleted, while the ligand preparation data is preserved',
-                                     formatter_class=RawTextArgumentDefaultsHelpFormatter)
+                                     formatter_class=lambda prog: argparse.ArgumentDefaultsHelpFormatter(prog, width=80))
     parser.add_argument('-i', '--input', metavar='FILENAME', required=True, type=filepath_type,
                         help='input db file that has been docked.')
     parser.add_argument('-o', '--output', metavar='FILENAME', required=True, type=filepath_type,

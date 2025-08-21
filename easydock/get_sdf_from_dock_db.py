@@ -12,7 +12,8 @@ from .preparation_for_docking import pdbqt2molblock
 
 def main():
     parser = argparse.ArgumentParser(description='Extract mol blocks of specified mol ids and additional fields into '
-                                                 'SDF. Also it is possible to extract SMILES file.')
+                                                 'SDF. Also it is possible to extract SMILES file.',
+                                     formatter_class=lambda prog: argparse.ArgumentDefaultsHelpFormatter(prog, width=80))
     parser.add_argument('-i', '--input', metavar='input.db', required=True, type=str,
                         help='SQLite DB, which is output of vina_dock script.')
     parser.add_argument('-o', '--output', metavar='output.sdf', required=True, type=str,
