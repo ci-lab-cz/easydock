@@ -63,7 +63,6 @@ def mol_dock(mol, config, ring_sample=False):
                   f'{"--seed " + str(config["seed"]) if "seed" in config else ""} ' \
                   f'--num_modes {config["n_poses"]} ' \
                   f'{"--cpu " + str(config["ncpu"]) if "ncpu" in config else ""} '
-            print(cmd)
             subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)  # this will trigger CalledProcessError and skip next lines
 
             score, pdbqt_out = __get_pdbqt_and_score(output_fname)
