@@ -1,0 +1,109 @@
+#!/usr/bin/env python3
+
+import argparse
+import logging
+import os
+import re
+import tempfile
+import timeit
+import subprocess
+import yaml
+
+from easydock.auxiliary import expand_path
+from easydock.preparation_for_docking import ligand_preparation, pdbqt2molblock
+
+
+class RawTextArgumentDefaultsHelpFormatter(argparse.RawTextHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
+    pass
+
+
+def __get_pdbqt_and_score(ligand_out_fname):
+    with open(ligand_out_fname) as f:
+        pdbqt_out = f.read()
+    match = re.search(r'REMARK VINA RESULT:\s+(-?[\d.]+)', pdbqt_out)
+    if match:
+        score = round(float(match.group(1)), 3)
+    else:
+        score = None
+
+    return score, pdbqt_out
+
+
+def mol_dock(mol, config, ring_sample=False):
+    """
+
+    :param mol: RDKit Mol of a ligand with title
+    :param config: yml-file with docking settings
+    :param ring_sample: whether to sample saturated rings and dock multiple starting conformers
+    :return:
+    """
+    config = __parse_config(config)
+
+    mol_id = mol.GetProp('_Name')
+    ligand_pdbqt_list = ligand_preparation(mol, boron_replacement=True, ring_sample=ring_sample)
+
+    if ligand_pdbqt_list is None:
+        return mol_id, None
+
+    dock_output_conformer_list = []
+    start_time = timeit.default_timer()
+    for ligand_pdbqt in ligand_pdbqt_list:
+        output_fd, output_fname = tempfile.mkstemp(suffix='_output.pdbqt', text=True)
+        ligand_fd, ligand_fname = tempfile.mkstemp(suffix='_ligand.pdbqt', text=True)
+
+        try:
+            with open(ligand_fname, 'wt') as f:
+                f.write(ligand_pdbqt)
+
+            # thread default value set to recommended 8000
+            cmd = f'{config["script_file"]} --receptor {config["protein"]} --ligand {ligand_fname} ' \
+                  f'--out {output_fname} ' \
+                  f'--config {config["protein_setup"]} ' \
+                  f'--exhaustiveness {config["exhaustiveness"]} ' \
+                  f'{"--seed " + str(config["seed"]) if "seed" in config else ""} ' \
+                  f'--num_modes {config["n_poses"]} ' \
+                  f'{"--cpu " + str(config["ncpu"]) if "ncpu" in config else ""} '
+            print(cmd)
+            subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)  # this will trigger CalledProcessError and skip next lines
+
+            score, pdbqt_out = __get_pdbqt_and_score(output_fname)
+            mol_block = pdbqt2molblock(pdbqt_out.split('MODEL')[1], mol, mol_id)
+
+            dock_output = {'docking_score': score,
+                           'pdb_block': pdbqt_out,
+                           'mol_block': mol_block}
+
+            dock_output_conformer_list.append(dock_output)
+
+        except subprocess.CalledProcessError as e:
+            logging.warning(f'(qvina) Error caused by docking of {mol_id}\n'
+                            f'{str(e)}\n'
+                            f'STDERR output:\n'
+                            f'{e.stderr}\n')
+
+        finally:
+            os.close(output_fd)
+            os.close(ligand_fd)
+            os.unlink(ligand_fname)
+            os.unlink(output_fname)
+
+    dock_time = round(timeit.default_timer() - start_time, 1)
+
+    logging.debug(f'(qvina) {mol_id}, docked nconf {len(dock_output_conformer_list)}')
+
+    if dock_output_conformer_list:
+        output = min(dock_output_conformer_list, key=lambda x: x['docking_score'])
+        output['dock_time'] = dock_time
+    else:
+        output = None
+
+    return mol_id, output
+
+
+def __parse_config(config_fname):
+    with open(config_fname) as f:
+        config = yaml.safe_load(f)
+    for arg in ['protein', 'protein_setup', 'script_file']:
+        config[arg] = expand_path(config[arg])
+
+    return config
