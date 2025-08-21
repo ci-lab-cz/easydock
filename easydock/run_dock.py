@@ -116,24 +116,9 @@ def create_dask_client(hostfile):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Perform docking of input molecules using Vina 1.2 or Gnina. '
-                                                 'The script automates the whole pipeline: protonates molecules, '
-                                                 'creates 3D structures, converts to PDBQT format, run docking using '
-                                                 'a single machine (multiprocessing) or a cluster of servers (dask), '
-                                                 'stores the best scores and poses in PDBQT and MOL formats to DB.\n'
-                                                 'To run on a single machine:\n'
-                                                 '  easydock -i input.smi -o output.db --program vina --config config.yml -c 4 -v\n\n'
-                                                 'To run on several machines using dask ssh-cluster (on PBS system):\n'
-                                                 '  dask ssh --hostfile $PBS_NODEFILE --nprocs 8 --nthreads 5 &\n'
-                                                 '  sleep 10\n'
-                                                 '  easydock -i input.smi -o output.db --program vina --config config.yml -hostfile $PBS_NODEFILE\n\n'
-                                                 '  $PBS_NODEFILE contains the list of addresses of computational nodes\n'
-                                                 'To continue interrupted calculations it is enough to run the script '
-                                                 'with just the output argument, all other arguments and data is '
-                                                 'stored in DB. If you supply other arguments in a command line they '
-                                                 'will be ignored with the exception of hostfile, dask_report, ncpu '
-                                                 'and verbose.',
-                                     formatter_class=RawTextArgumentDefaultsHelpFormatter)
+    parser = argparse.ArgumentParser(description='Automated molecular docking pipeline including all necessary ligand '
+                                                 'preparation steps.',
+                                     formatter_class=lambda prog: argparse.ArgumentDefaultsHelpFormatter(prog, width=80))
     input_output_group = parser.add_argument_group('Input/output files')
     init_group = parser.add_argument_group('Initialization parameters')
     docking_group = parser.add_argument_group('Docking parameters')
@@ -162,14 +147,7 @@ def main():
                                choices=['vina', 'gnina', 'vina-gpu', 'qvina'],
                         help='name of a docking program. Choices: vina, gnina, vina-gpu, qvina.')
     docking_group.add_argument('--config', metavar='FILENAME', required=False, type=filepath_type,
-                        help='YAML file with parameters used by docking program.\n'
-                             'vina.yml\n'
-                             'protein: path to pdbqt file with a protein\n'
-                             'protein_setup: path to a text file with coordinates of a binding site\n'
-                             'exhaustiveness: 8\n'
-                             'n_poses: 10\n'
-                             'seed: -1\n'
-                             'gnina.yml\n')
+                        help='YAML file with parameters used by docking program. See documentation for the format.')
     docking_group.add_argument('--ring_sample', action='store_true', default=False,
                         help='sample conformations of saturated rings. Multiple starting conformers will be docked and '
                              'the best one will be stored. Otherwise a single random ring conformer will be used.')
@@ -180,16 +158,17 @@ def main():
                              'passed as $PBS_NODEFILE variable from inside a PBS script. The first line in this file '
                              'will be the address of the scheduler running on the standard port 8786. If omitted, '
                              'calculations will run on a single machine as usual.')
-    docking_group.add_argument('--dask_report', default=False, type=filepath_type,
+    docking_group.add_argument('--dask_report', metavar='FILENAME', default=False, type=filepath_type,
                         help='save Dask report to HTML file. It will have the same name as the output database.')
     docking_group.add_argument('--tmpdir', metavar='DIRNAME', required=False, type=filepath_type, default=None,
                         help='path to a dir where to store temporary setup files accessible to a program. '
                              'Normally should be used if calculations with dask have to be continued,')
 
-    common_argument_group.add_argument('--log', required=False, default=None, type=filepath_type,
+    common_argument_group.add_argument('--log', metavar='FILENAME', required=False, default=None,
+                                       type=filepath_type,
                         help='log file path. If omitted logging information wil be printed to STDOUT.')
-    common_argument_group.add_argument('--log_level', metavar='STRING', required=False, type=int,
-                        default=2, choices=list(range(6)),
+    common_argument_group.add_argument('--log_level', metavar='INTEGER', required=False, type=int,
+                                       default=2, choices=list(range(6)),
                         help='the level of logging: 0 - NOTSET, 1 - DEBUG, 2 - INFO, 3 - WARNING, 4 - ERROR, '
                              '5 - CRITICAL.')
     common_argument_group.add_argument('-c', '--ncpu', default=1, type=cpu_type,
