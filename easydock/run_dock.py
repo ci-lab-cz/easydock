@@ -263,7 +263,7 @@ def main():
                                                 1):
                     if res:
                         update_db(conn, mol_id, res)
-                    if args.verbose and i % 100 == 0:
+                    if args.verbose and i % 10 == 0:
                         sys.stderr.write(f'\r{i} molecules were processed')
                 if args.verbose:
                     sys.stderr.write(f'\n{i} molecules were processed\n')
