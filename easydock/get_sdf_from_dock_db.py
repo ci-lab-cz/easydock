@@ -99,6 +99,8 @@ def main():
         res = cur.execute(sql, ids)  # ids can be empty if we retrieve all molecules, this works
 
     with open(args.output, 'wt')as f:
+        if ext == 'smi':
+            f.write(main_field + '\t' + '\t'.join(args.fields) + '\n')
         for item in res:  # (mol_block, ...)
             if ext == 'sdf':
                 mol_block = item[0]
