@@ -320,7 +320,7 @@ def update_db(db_conn, mol_id, data, table_name='mols', commit=True):
         cols, values = zip(*data.items())
         cur.execute(f"""UPDATE {table_name}
                         SET {', '.join(['%s = ?'] * len(cols))},
-                            time = CURRENT_TIMESTAMP
+                            time = datetime(current_timestamp, 'localtime')
                         WHERE
                             id = ? AND stereo_id = ?
                      """ % cols, list(values) + [mol_id, stereo_id])
