@@ -3,6 +3,9 @@ from itertools import islice
 from math import ceil
 import signal
 import functools
+import platform
+import threading
+
 
 def take(n, iterable):
     return list(islice(iterable, n))
@@ -29,17 +32,42 @@ def timeout(seconds=5, default=None):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
 
-            def handle_timeout(signum, frame):
-                raise TimeoutError()
+            if platform.system() == 'Windows':
+                # Windows fallback: use threading
+                result = {}
 
-            signal.signal(signal.SIGALRM, handle_timeout)
-            signal.alarm(seconds)
+                def target():
+                    try:
+                        result["value"] = func(*args, **kwargs)
+                    except Exception as e:
+                        result["error"] = e
 
-            result = func(*args, **kwargs)
+                t = threading.Thread(target=target)
+                t.daemon = True
+                t.start()
+                t.join(seconds)
 
-            signal.alarm(0)
+                if t.is_alive():
+                    return None
+                    # raise TimeoutError()
+                # if "error" in result:
+                #     raise result["error"]
+                return result.get("value", None)
 
-            return result
+            else:
+
+                # Unix: use SIGALRM
+                def handle_timeout(signum, frame):
+                    raise TimeoutError()
+
+                signal.signal(signal.SIGALRM, handle_timeout)
+                signal.alarm(seconds)
+
+                result = func(*args, **kwargs)
+
+                signal.alarm(0)
+
+                return result
 
         return wrapper
 
