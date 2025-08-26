@@ -11,9 +11,12 @@ import tempfile
 import timeit
 
 from rdkit.Chem.rdMolDescriptors import CalcNumRotatableBonds
-from vina import Vina
 from easydock.auxiliary import expand_path
 from easydock.preparation_for_docking import ligand_preparation, pdbqt2molblock
+
+import platform
+if platform.system() != 'Windows':
+    from vina import Vina
 
 
 class RawTextArgumentDefaultsHelpFormatter(argparse.RawTextHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
