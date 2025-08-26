@@ -57,12 +57,29 @@ def mol_dock(mol, config, ring_sample=False):
             with open(ligand_fname, 'wt') as f:
                 f.write(ligand_pdbqt)
 
-            cmd = f'{config["script_file"]} --receptor {config["protein"]} --ligand {ligand_fname} --out {output_fname} ' \
-                  f'--config {config["protein_setup"]} --exhaustiveness {config["exhaustiveness"]} ' \
-                  f'--seed {config["seed"]} --scoring {config["scoring"]} ' \
-                  f'--cpu {config["ncpu"]} --addH {config["addH"]} --cnn_scoring {config["cnn_scoring"]} ' \
-                  f'--cnn {config["cnn"]} --num_modes {config["n_poses"]}'
-            subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)  # this will trigger CalledProcessError and skip next lines
+            cmd = [
+                config["script_file"],
+                "--receptor", config["protein"],
+                "--ligand", ligand_fname,
+                "--out", output_fname,
+                "--config", config["protein_setup"],
+                "--exhaustiveness", config["exhaustiveness"],
+                "--seed", config["seed"],
+                "--scoring", config["scoring"],
+                "--cpu", config["ncpu"],
+                "--addH", config["addH"],
+                "--cnn_scoring", config["cnn_scoring"],
+                "--cnn", config["cnn"],
+                "--num_modes", config["n_poses"],
+            ]
+            cmd = list(map(str, cmd))
+
+            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+
+            if result.returncode != 0:
+                logging.warning(f'(gnina) Error caused by docking of {mol_id}\n'
+                                f'Subprocess STDERR output:\n'
+                                f'{result.stderr}\n')
 
             score, pdbqt_out = __get_pdbqt_and_score(output_fname)
             mol_block = pdbqt2molblock(pdbqt_out.split('MODEL')[1], mol, mol_id)
@@ -73,11 +90,9 @@ def mol_dock(mol, config, ring_sample=False):
 
             dock_output_conformer_list.append(dock_output)
 
-        except subprocess.CalledProcessError as e:
+        except Exception as e:
             logging.warning(f'(gnina) Error caused by docking of {mol_id}\n'
-                            f'{str(e)}\n'
-                            f'STDERR output:\n'
-                            f'{e.stderr}\n')
+                            f'{str(e)}\n')
 
         finally:
             os.close(output_fd)

@@ -70,14 +70,12 @@ def mol_dock(mol, config, ring_sample=False):
                 cmd += ["--cpu", config["ncpu"]]
             cmd = list(map(str, cmd))
 
-            result = subprocess.run(cmd, check=True, capture_output=True, text=True)  # this will trigger CalledProcessError and skip next lines
+            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
 
             if result.returncode != 0:
                 logging.warning(f'(qvina) Error caused by docking of {mol_id}\n'
                                 f'Subprocess STDERR output:\n'
                                 f'{result.stderr}\n')
-
-            print('stderr:' + result.stderr)
 
             score, pdbqt_out = __get_pdbqt_and_score(output_fname)
             mol_block = pdbqt2molblock(pdbqt_out.split('MODEL')[1], mol, mol_id)

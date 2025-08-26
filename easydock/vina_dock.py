@@ -97,11 +97,28 @@ def mol_dock(mol, config, ring_sample=False):
 
             p = os.path.realpath(__file__)
             python_exec = sys.executable
-            cmd = f'{python_exec} {os.path.dirname(p)}/vina_dock_cli.py -l {ligand_fname} -p {config["protein"]} ' \
-                f'-o {output_fname} --center {" ".join(map(str, config["center"]))} ' \
-                f'--box_size {" ".join(map(str, config["box_size"]))} ' \
-                f'-e {config["exhaustiveness"]} --seed {config["seed"]} --nposes {config["n_poses"]} -c {config["ncpu"]}'
-            subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)  # this will trigger CalledProcessError and skip next lines)
+
+            cmd = [
+                python_exec,
+                os.path.join(os.path.dirname(p), "vina_dock_cli.py"),
+                "-l", ligand_fname,
+                "-p", config["protein"],
+                "-o", output_fname,
+                "--center", *config["center"],
+                "--box_size", *config["box_size"],
+                "-e", config["exhaustiveness"],
+                "--seed", config["seed"],
+                "--nposes", config["n_poses"],
+                "-c", config["ncpu"],
+            ]
+            cmd = list(map(str, cmd))
+
+            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+
+            if result.returncode != 0:
+                logging.warning(f'(vina) Error caused by docking of {mol_id}\n'
+                                f'Subprocess STDERR output:\n'
+                                f'{result.stderr}\n')
 
             with open(output_fname) as f:
                 res = f.read()
@@ -113,12 +130,10 @@ def mol_dock(mol, config, ring_sample=False):
                                    'mol_block': mol_block}
                     
                     dock_output_conformer_list.append(dock_output)
-            
-        except subprocess.CalledProcessError as e:
+
+        except Exception as e:
             logging.warning(f'(vina) Error caused by docking of {mol_id}\n'
-                            f'{str(e)}\n'
-                            f'STDERR output:\n'
-                            f'{e.stderr}\n')
+                            f'{str(e)}\n')
 
         finally:
             os.close(output_fd)

@@ -56,14 +56,27 @@ def mol_dock(mol, config, ring_sample=False):
                 f.write(ligand_pdbqt)
 
             # thread default value set to recommended 8000
-            cmd = f'{config["script_file"]} --receptor {config["protein"]} --ligand {ligand_fname} ' \
-                  f'--out {output_fname} ' \
-                  f'--config {config["protein_setup"]} ' \
-                  f'{"--seed " + str(config["seed"]) if "seed" in config else ""} ' \
-                  f'--thread {config.get("thread", 8000)} ' \
-                  f'{"----search_depth " + str(config["--search_depth"]) if "--search_depth" in config else ""} ' \
-                  f'--num_modes {config["n_poses"]}'
-            subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)  # this will trigger CalledProcessError and skip next lines
+            cmd = [
+                config["script_file"],
+                "--receptor", config["protein"],
+                "--ligand", ligand_fname,
+                "--out", output_fname,
+                "--config", config["protein_setup"],
+                "--thread", config.get("thread", 8000),
+                "--num_modes", config["n_poses"]
+            ]
+            if "seed" in config:
+                cmd += ["--seed", config["seed"]]
+            if "search_depth" in config:
+                cmd += ["--search_depth", config["search_depth"]]
+            cmd = list(map(str, cmd))
+
+            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+
+            if result.returncode != 0:
+                logging.warning(f'(vina-gpu) Error caused by docking of {mol_id}\n'
+                                f'Subprocess STDERR output:\n'
+                                f'{result.stderr}\n')
 
             score, pdbqt_out = __get_pdbqt_and_score(output_fname)
             mol_block = pdbqt2molblock(pdbqt_out.split('MODEL')[1], mol, mol_id)
@@ -74,11 +87,9 @@ def mol_dock(mol, config, ring_sample=False):
 
             dock_output_conformer_list.append(dock_output)
 
-        except subprocess.CalledProcessError as e:
-            logging.warning(f'(vinagpu) Error caused by docking of {mol_id}\n'
-                            f'{str(e)}\n'
-                            f'STDERR output:\n'
-                            f'{e.stderr}\n')
+        except Exception as e:
+            logging.warning(f'(vina-gpu) Error caused by docking of {mol_id}\n'
+                            f'{str(e)}\n')
 
         finally:
             os.close(output_fd)
