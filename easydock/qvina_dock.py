@@ -56,9 +56,9 @@ def mol_dock(mol, config, ring_sample=False):
                 f.write(ligand_pdbqt)
 
             # thread default value set to recommended 8000
-            cmd = f'{config["script_file"]} --receptor {config["protein"]} --ligand {ligand_fname} ' \
-                  f'--out {output_fname} ' \
-                  f'--config {config["protein_setup"]} ' \
+            cmd = f'"{config["script_file"]}" --receptor "{config["protein"]}" --ligand "{ligand_fname}" ' \
+                  f'--out "{output_fname}" ' \
+                  f'--config "{config["protein_setup"]}" ' \
                   f'--exhaustiveness {config["exhaustiveness"]} ' \
                   f'{"--seed " + str(config["seed"]) if "seed" in config else ""} ' \
                   f'--num_modes {config["n_poses"]} ' \
