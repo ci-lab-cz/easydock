@@ -197,9 +197,23 @@ def mol_embedding_3d(mol: Chem.Mol, ring_sample: bool=False, seed: int=43) -> Ch
         params.randomSeed = randomSeed
         if has_saturated_ring:
             #10 is used as default according to the C language documentation iirc, but I have to specify the numbers.
-            conf_stat = AllChem.EmbedMultipleConfs(mole, 100, params)
+            conf_stat = AllChem.EmbedMultipleConfs(mole, 50, params)
+            # minimize structures
+            for cid in conf_stat:
+                AllChem.MMFFOptimizeMolecule(mol, confId=cid)
+                ff = AllChem.MMFFGetMoleculeForceField(mol, AllChem.MMFFGetMoleculeProperties(mol), confId=cid)
+                if not ff:
+                    logging.warning(f'MMFFGetMoleculeForceField failed for {mole.GetProp("_Name")}. '
+                                    f'Enhanced ring sampling will be skipped for this molecule.')
+                    conf_stat = AllChem.EmbedMolecule(mole, params)
+                    AllChem.UFFOptimizeMolecule(mole, maxIters=100)
+                    break
+                else:
+                    energy = ff.CalcEnergy()
+                    mole.GetConformer(cid).SetDoubleProp('energy', energy)
         else:
             conf_stat = AllChem.EmbedMolecule(mole, params)
+            AllChem.UFFOptimizeMolecule(mole, maxIters=100)
         return mole, conf_stat
     
     def calculate_ring_nconf(saturated_ring_ids: list[int]) -> int:
@@ -210,13 +224,19 @@ def mol_embedding_3d(mol: Chem.Mol, ring_sample: bool=False, seed: int=43) -> Ch
         else:
             return 4
         
-    def remove_confs_rms(mol: Chem.Mol, saturated_ring_list: list[list[int]], rms: float=0.25, keep_nconf: Optional[int]=None) -> Chem.Mol:
+    def remove_confs_rms(mol: Chem.Mol,
+                         saturated_ring_list: list[list[int]],
+                         rms: float=0.25,
+                         keep_nconf: Optional[int]=None,
+                         keep_lowest: bool=True) -> Chem.Mol:
         """
         The function uses AgglomerativeClustering to select conformers.
 
         :param mol: input molecule with multiple conformers
+        :param saturated_ring_list: list of lists of ids of atoms belonging to individual rings
         :param rms: discard conformers which are closer than given value to a kept conformer
         :param keep_nconf: keep at most the given number of conformers. This parameter has precedence over rms
+        :param keep_best: keep a conformer with the lowest energy. In this case each conformer should have a field "energy"
         :return:
         """
 
@@ -230,6 +250,12 @@ def mol_embedding_3d(mol: Chem.Mol, ring_sample: bool=False, seed: int=43) -> Ch
 
         if mol.GetNumConformers() <= 1:
             return mol
+
+        if keep_lowest:
+            tmp = min((c.GetDoubleProp('energy'), c.GetId()) for c in mol.GetConformers())
+            lowest_cid = tmp[1]
+        else:
+            lowest_cid = -100
 
         rms_ = GetConformerRMSMatrixForSaturatedRingMolecule(mol, atomIds=saturated_ring_list, prealigned=False)
 
@@ -245,6 +271,8 @@ def mol_embedding_3d(mol: Chem.Mol, ring_sample: bool=False, seed: int=43) -> Ch
             ids = np.where(cl.labels_ == i)[0]
             j = arr[np.ix_(ids, ids)].mean(axis=0).argmin()
             keep_ids.append(cids[ids[j]])
+        if lowest_cid >= 0 and lowest_cid not in keep_ids:
+            keep_ids.append(lowest_cid)
         remove_ids = set(cids) - set(keep_ids)
 
         for cid in sorted(remove_ids, reverse=True):
@@ -261,6 +289,8 @@ def mol_embedding_3d(mol: Chem.Mol, ring_sample: bool=False, seed: int=43) -> Ch
                 ids = np.where(cl.labels_ == i)[0]
                 j = arr[np.ix_(ids, ids)].mean(axis=0).argmin()
                 keep_ids.append(cids[ids[j]])
+            if lowest_cid >= 0 and lowest_cid not in keep_ids:
+                keep_ids.append(lowest_cid)
             remove_ids = set(cids) - set(keep_ids)
 
             for cid in sorted(remove_ids, reverse=True):
@@ -288,14 +318,13 @@ def mol_embedding_3d(mol: Chem.Mol, ring_sample: bool=False, seed: int=43) -> Ch
             mol, conf_stat = gen_conf(mol, useRandomCoords=True, randomSeed=seed, has_saturated_ring=has_saturated_ring)
             if conf_stat == -1:
                 return None
-        AllChem.UFFOptimizeMolecule(mol, maxIters=100)
 
         if ring_sample:
             mol = remove_confs_rms(mol,
                                    saturated_rings_with_substituents,
                                    rms=1,
                                    keep_nconf=sum(calculate_ring_nconf(saturated_ring) for saturated_ring in saturated_ring_list))
-            AlignMolConformers(mol)  # why we need this?
+            # AlignMolConformers(mol)  # why we need this?
 
             logging.debug(f'{mol.GetProp("_Name")} has {len(saturated_rings_with_substituents)} saturated rings')
 
