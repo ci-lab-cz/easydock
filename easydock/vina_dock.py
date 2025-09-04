@@ -111,14 +111,9 @@ def mol_dock(mol, config, ring_sample=False):
                 "--nposes", config["n_poses"],
                 "-c", config["ncpu"],
             ]
-            cmd = list(map(str, cmd))
+            cmd = ' '.join(map(str, cmd))
 
-            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-
-            if result.returncode != 0:
-                logging.warning(f'(vina) Error caused by docking of {mol_id}\n'
-                                f'Subprocess STDERR output:\n'
-                                f'{result.stderr}\n')
+            subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)
 
             with open(output_fname) as f:
                 res = f.read()
@@ -131,7 +126,7 @@ def mol_dock(mol, config, ring_sample=False):
                     
                     dock_output_conformer_list.append(dock_output)
 
-        except Exception as e:
+        except subprocess.CalledProcessError as e:
             logging.warning(f'(vina) Error caused by docking of {mol_id}\n'
                             f'{str(e)}\n')
 

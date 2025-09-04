@@ -72,14 +72,9 @@ def mol_dock(mol, config, ring_sample=False):
                 "--cnn", config["cnn"],
                 "--num_modes", config["n_poses"],
             ]
-            cmd = list(map(str, cmd))
+            cmd = ' '.join(map(str, cmd))
 
-            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-
-            if result.returncode != 0:
-                logging.warning(f'(gnina) Error caused by docking of {mol_id}\n'
-                                f'Subprocess STDERR output:\n'
-                                f'{result.stderr}\n')
+            subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)
 
             score, pdbqt_out = __get_pdbqt_and_score(output_fname)
             mol_block = pdbqt2molblock(pdbqt_out.split('MODEL')[1], mol, mol_id)
@@ -90,7 +85,7 @@ def mol_dock(mol, config, ring_sample=False):
 
             dock_output_conformer_list.append(dock_output)
 
-        except Exception as e:
+        except subprocess.CalledProcessError as e:
             logging.warning(f'(gnina) Error caused by docking of {mol_id}\n'
                             f'{str(e)}\n')
 
@@ -105,7 +100,7 @@ def mol_dock(mol, config, ring_sample=False):
     logging.debug(f'(gnina) {mol_id}, docked nconf {len(dock_output_conformer_list)}')
 
     if dock_output_conformer_list:
-        output = min(dock_output_conformer_list, key=lambda x: x['docking_score'])
+        output = max(dock_output_conformer_list, key=lambda x: x['docking_score'])
         output['dock_time'] = dock_time
     else:
         output = None
