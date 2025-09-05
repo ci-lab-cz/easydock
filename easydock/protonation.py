@@ -36,6 +36,7 @@ partial(protonate_xxx, arg1=value1, ...) at the intialization step.
 
 # MolGpKa fix patterns
 # patterns + ids of atoms in a pattern to be fixed + type of a pattern
+# this group of patterns has two centers and only one with more favorable pKa/pKb value will be remained after fix
 molgpka_patterns1 = [('[#7+;!$([#7+][O-]);!$([#7+H0v4])]~*~[#7+;!$([#7+][O-]);!$([#7+H0v4])]', (0, 2), 'pos'),    # 21
                      ('[#7+;!$([#7+][O-]);!$([#7+H0v4])]**[#7+;!$([#7+][O-]);!$([#7+H0v4])]', (0, 3), 'pos'),   # 3
                      # ('[#7+;!$([#7+][O-]);!$([#7+H0v4]);!$([#7+X3v4])]***[#7+;!$([#7+][O-]);!$([#7+H0v4]);!$([#7+X3v4])]', (0, 4), 'pos'),  # 4
@@ -45,6 +46,7 @@ molgpka_patterns1 = [('[#7+;!$([#7+][O-]);!$([#7+H0v4])]~*~[#7+;!$([#7+][O-]);!$
                      ('[O-]caac[O-]', (0, 5), 'neg')]   # 15
 molgpka_patterns1 = [(Chem.MolFromSmarts(p), ids, p_type) for p, ids, p_type in molgpka_patterns1]
 
+# this group of patterns has one center which will be reverted to a neutral state
 molgpka_patterns2 = [('[$([NH+,NH2+,NH3+]-[*]=[O,S])]', 'pos'), # 1
                      ('[$([N-](C(=O))[N-]S(=O)=O)]', 'neg'),  # 2
                      ('[$([N-]1C(=O)N(C)C(=O)C1)]', 'neg'),  # 5
