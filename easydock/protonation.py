@@ -59,7 +59,9 @@ molgpka_patterns2 = [('[$([NH+,NH2+,NH3+]-[*]=[O,S])]', 'pos'), # 1
                      ('[$([O-][CX4][CX3][O-])]', 'neg'),  # 18
                      ('[$([N+]=C[N-]S(=O)=O)]', 'pos'),  # 19
                      ('[$([n-]1cnc(=O)c2cccn12)]', 'neg'),  # 20
-                     ('[$([N-](a)C([NH2])=[NH2+])]', 'neg')]  #22
+                     ('[$([N-](a)C([NH2])=[NH2+])]', 'neg'),  #22
+                     ('[$([NX4+;H1,H2,H3]c)]', 'pos'), #23
+                     ('[$([O-][CX4])]', 'neg')]  #24
 molgpka_patterns2 = [(Chem.MolFromSmarts(p), p_type) for p, p_type in molgpka_patterns2]
 
 
