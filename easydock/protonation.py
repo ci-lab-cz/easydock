@@ -39,7 +39,7 @@ partial(protonate_xxx, arg1=value1, ...) at the intialization step.
 # this group of patterns has two centers and only one with more favorable pKa/pKb value will be remained after fix
 molgpka_patterns1 = [('[#7+;!$([#7+][O-]);!$([#7+H0v4])]~*~[#7+;!$([#7+][O-]);!$([#7+H0v4])]', (0, 2), 'pos'),    # 21
                      ('[#7+;!$([#7+][O-]);!$([#7+H0v4])]**[#7+;!$([#7+][O-]);!$([#7+H0v4])]', (0, 3), 'pos'),   # 3
-                     # ('[#7+;!$([#7+][O-]);!$([#7+H0v4]);!$([#7+X3v4])]***[#7+;!$([#7+][O-]);!$([#7+H0v4]);!$([#7+X3v4])]', (0, 4), 'pos'),  # 4
+                     ('[#7+;!$([#7+][O-]);!$([#7+H0v4])]***[#7+;!$([#7+][O-]);!$([#7+H0v4])]', (0, 4), 'pos'),  # 4
                      ('c[n-][n-]c', (1, 2), 'neg'),     # 9
                      ('[O-]cc[O-]', (0, 3), 'neg'),     # 13
                      ('[O-]cac[O-]', (0, 4), 'neg'),    # 14
