@@ -66,10 +66,6 @@ molgpka_patterns2 = [('[$([NH+,NH2+,NH3+]-[*]=[O,S])]', 'pos'), # 1
                      ('[$([O-][CX4])]', 'neg')]  #24
 molgpka_patterns2 = [(Chem.MolFromSmarts(p), p_type) for p, p_type in molgpka_patterns2]
 
-# this group of patterns maps centers which should be ionized (applied after previous fixes)
-molgpka_patterns3 = [('[NX3;!a;!$(*=[*]);!$(*~*=[*]);!$(*#[*]);!$(*~*#[*]);!$(*a);!$(*~[+]);!$(*~*~[+]);!$(*~*~*~[+])]', 'pos')]  # aliphatic nitrogen with no positively charged atoms within 3 bonds, not conjugated with double/triple bond, not aniline
-molgpka_patterns3 = [(Chem.MolFromSmarts(p), p_type) for p, p_type in molgpka_patterns3]
-
 
 def protonate_chemaxon(input_fname, output_fname, tautomerize=True):
     cmd_run = ['cxcalc', '-S', '--ignore-error', 'majormicrospecies', '-H', '7.4', '-K',
@@ -292,22 +288,6 @@ def __protonate_molgpka(args, models):
                     atom.SetFormalCharge(atom.GetFormalCharge() + 1)
                     atom.SetNumExplicitHs(atom.GetNumExplicitHs() + 1)
                     atom.UpdatePropertyCache()
-        editable_mol.UpdatePropertyCache()
-
-        # forced protonation
-        for pattern, pattern_type in molgpka_patterns3:
-            match = editable_mol.GetSubstructMatch(pattern)
-            while match:
-                atom = editable_mol.GetAtomWithIdx(match[0])
-                if pattern_type == 'pos':
-                    atom.SetFormalCharge(atom.GetFormalCharge() + 1)
-                    atom.SetNumExplicitHs(atom.GetNumExplicitHs() + 1)
-                    atom.UpdatePropertyCache()
-                if pattern_type == 'neg':
-                    atom.SetFormalCharge(atom.GetFormalCharge() - 1)
-                    atom.SetNumExplicitHs(atom.GetNumExplicitHs() - 1)
-                    atom.UpdatePropertyCache()
-                match = editable_mol.GetSubstructMatch(pattern)
         editable_mol.UpdatePropertyCache()
 
         changed_smi = Chem.MolToSmiles(Chem.RemoveHs(editable_mol))
