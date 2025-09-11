@@ -1,3 +1,13 @@
+**1.1.0**
+- integrate QVina2, QVina-W, Vina-GPU, QVina2-GPU, QVinaW-GPU
+- make easydock running on Windows, however, this will work only with docking programs which can be run on Windows (e.g. Python Vina cannot be installed on Windows, but if you have a binary you can run docking with it)
+- add the lowest energy conformer to a set of representative structures selected during the ring sampling
+- improve SMARTS fix rules for MolGpKa protonation prediction
+- add a header to output of get_sdf_from_dock_db if output is SMILES format
+- fix docking timestamp (now the local time is used)
+- update README with more examples (e.g. use docking programs from containers) and improved the description
+- improve logging
+
 **1.0.0**
 - separate initialization of a database (ligand preparation) and docking steps [#43](https://github.com/ci-lab-cz/easydock/pull/43)
 - create a script to clear docking data from a database to reuse it for other docking (different protein, settings, etc)
