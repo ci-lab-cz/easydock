@@ -271,6 +271,7 @@ Since rings are considered rigid, to improve docking of compounds containing sat
 ```
 easydock -i input.smi -o output.db --program vina --config config.yml -c 4 --ring_sample 
 ```
+Sampling will work incorrectly in cases when `vina/smina` scores are selected for `gnina`, because the direction of all `gnina` scores is considered as the greater the better, that contradicts `vina/smina` scores. It will be fixed in future releases. 
 
 ### Docking using multiple servers
 
