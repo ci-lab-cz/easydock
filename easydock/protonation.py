@@ -8,7 +8,7 @@ import warnings
 
 from functools import partial
 from multiprocessing import Pool
-from typing import Iterator
+from typing import Iterator, Tuple
 
 from rdkit import Chem
 from easydock.auxiliary import chunk_into_n
@@ -29,7 +29,7 @@ efficient. The implementation consists of a single function:
 1) protonate_xxx which is a generator. It should take items argument which is a generator over tuples of (smi, mol_name) 
 and yield a tuple of (SMILES, mol_name).
 
-These functions should be intergated in database.add_protonation function, there is a special section of initialization 
+These functions should be integrated in database.add_protonation function, there is a special section of initialization 
 of protonation functions. All functions may take additional arguments, which should be passed with 
 partial(protonate_xxx, arg1=value1, ...) at the intialization step.   
 """
@@ -125,7 +125,7 @@ def read_smiles(fname):
             yield tuple(line.strip().split()[:2])
 
 
-def protonate_pkasolver(items: str, ncpu: int = 1, mol_count=1):
+def protonate_pkasolver(items: Iterator[Tuple[str, str]], ncpu: int = 1, mol_count=1):
     import torch
     from pkasolver.query import QueryModel
 
@@ -168,7 +168,7 @@ def __protonate_pkasolver(args, model):
     return Chem.MolToSmiles(output_mol), mol_name
 
 
-def protonate_molgpka(items: str, ncpu: int = 1):
+def protonate_molgpka(items: Iterator[Tuple[str, str]], ncpu: int = 1):
     # parallel execution of protonation was disabled because runs much slower than a single process protonation
     warnings.filterwarnings('ignore', category=UserWarning)
     from molgpka.predict_pka_mp import load_state_dicts, load_models
