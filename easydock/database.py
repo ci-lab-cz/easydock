@@ -9,10 +9,19 @@ from multiprocessing import Pool
 from typing import Optional, Union
 
 import yaml
+
 from easydock import read_input
 from easydock.preparation_for_docking import mol_is_3d
 from easydock.auxiliary import take, mol_name_split, timeout, expand_path
-from easydock.protonation import protonate_chemaxon, read_protonate_chemaxon, protonate_dimorphite, read_smiles, protonate_pkasolver, protonate_molgpka
+from easydock.protonation import (
+    protonate_chemaxon,
+    read_protonate_chemaxon,
+    protonate_dimorphite,
+    read_smiles,
+    protonate_pkasolver,
+    protonate_molgpka,
+    protonate_apptainer
+)
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem.EnumerateStereoisomers import EnumerateStereoisomers, StereoEnumerationOptions
@@ -445,12 +454,13 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
         sql += add_sql
         cur.execute(sql)
 
-        if program in ['chemaxon']:  # file-based protocol, files are created by chunks
+        if program in ['chemaxon'] or (os.path.isfile(program) and program.endswith('.sif')):  # file-based protocol, files are created by chunks
             if program == 'chemaxon':
                 protonate_func = partial(protonate_chemaxon, tautomerize=tautomerize)
                 read_func = read_protonate_chemaxon
             else:
-                raise ValueError(f'There is no implemented functions to protonate molecules by {program}')
+                protonate_func = partial(protonate_apptainer, container_fname=program)
+                read_func = read_smiles
 
             nmols = ncpu * 500  # batch size
             while True:
@@ -510,6 +520,9 @@ def update_db_protonated_smiles(conn, items, table_name='mols'):
     output_data_mol = []
 
     cur = conn.cursor()
+
+    if not isinstance(items, list):  # this will fix if items is a generator
+        items = list(items)
 
     data_pairset = tuple(mol_name_split(mol_name) for smi, mol_name in items)
 

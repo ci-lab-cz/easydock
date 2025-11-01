@@ -14,6 +14,7 @@ from rdkit.Chem.rdMolDescriptors import CalcNumRotatableBonds
 from easydock.database import create_db, restore_setup_from_db, init_db, check_db_status, update_db, save_sdf, select_mols_to_dock, \
     add_protonation, populate_setup_db
 from easydock.preparation_for_docking import cpu_type, filepath_type
+from easydock.args_validation import protonation_type, protonation_programs
 
 
 class RawTextArgumentDefaultsHelpFormatter(argparse.RawTextHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
@@ -135,8 +136,10 @@ def main():
 
     init_group.add_argument('-s', '--max_stereoisomers', metavar='INTEGER', type=int, required=False, default=1,
                         help='maximum number of isomers to enumerate. The default is set to 1.')
-    init_group.add_argument('--protonation', default=None, required=False, choices=['chemaxon', 'pkasolver', 'molgpka'],
-                        help='choose a protonation program supported by EasyDock.')
+    init_group.add_argument('--protonation', default=None, required=False, type=protonation_type,
+                        help=f'choose a protonation program supported by EasyDock ({", ".join(protonation_programs)}). '
+                             f'An existing apptainer container (.sif) with implemented protonation script and '
+                             f'an installed environment can be passed as well.')
     init_group.add_argument('--no_tautomerization', action='store_true', default=False,
                         help='disable tautomerization of molecules during protonation (applicable to chemaxon only).')
     init_group.add_argument('--prefix', metavar='STRING', required=False, type=str, default=None,
