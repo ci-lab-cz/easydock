@@ -13,8 +13,7 @@ from rdkit import Chem
 from rdkit.Chem.rdMolDescriptors import CalcNumRotatableBonds
 from easydock.database import create_db, restore_setup_from_db, init_db, check_db_status, update_db, save_sdf, select_mols_to_dock, \
     add_protonation, populate_setup_db
-from easydock.preparation_for_docking import cpu_type, filepath_type
-from easydock.args_validation import protonation_type, protonation_programs
+from easydock.args_validation import protonation_type, protonation_programs, cpu_type, filepath_type
 
 
 class RawTextArgumentDefaultsHelpFormatter(argparse.RawTextHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):

@@ -1,7 +1,8 @@
 import sqlite3
 import argparse
 import shutil
-from easydock.preparation_for_docking import filepath_type
+from easydock.args_validation import filepath_type
+
 
 class RawTextArgumentDefaultsHelpFormatter(argparse.RawTextHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
     pass
