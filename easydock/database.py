@@ -9,6 +9,7 @@ from multiprocessing import Pool
 from typing import Optional, Union
 
 import yaml
+from molgpka.train_graph import batch_size
 
 from easydock import read_input
 from easydock.preparation_for_docking import mol_is_3d
@@ -458,11 +459,13 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
             if program == 'chemaxon':
                 protonate_func = partial(protonate_chemaxon, tautomerize=tautomerize)
                 read_func = read_protonate_chemaxon
+                batch_size = 500
             else:
                 protonate_func = partial(protonate_apptainer, container_fname=program)
                 read_func = read_smiles
+                batch_size = 10
 
-            nmols = ncpu * 500  # batch size
+            nmols = ncpu * batch_size
             while True:
                 with tempfile.NamedTemporaryFile(suffix='.smi', mode='w', encoding='utf-8') as tmp:
                     res = cur.fetchmany(nmols)
@@ -660,7 +663,7 @@ def get_mol(conn, mol_id, stereo_id, field_name='mol_block'):
     elif field_name in ['smi']:
         func = Chem.MolFromSmiles
     else:
-        raise AttributeError(f'Wrong field name was specified for a get_mols functions. '
+        raise AttributeError(f'Wrong field name was specified for a get_mol functions. '
                              f'Allowed: mol_block, source_mol_block, smi. Supplied: {field_name}')
 
     cur = conn.cursor()
