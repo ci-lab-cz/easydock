@@ -9,7 +9,6 @@ from multiprocessing import Pool
 from typing import Optional, Union
 
 import yaml
-from molgpka.train_graph import batch_size
 
 from easydock import read_input
 from easydock.preparation_for_docking import mol_is_3d
