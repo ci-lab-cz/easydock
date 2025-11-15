@@ -475,14 +475,17 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
                             tmp.write(f'{smi}\t{mol_name}\n')
                     tmp.flush()
 
-                    fd, output = tempfile.mkstemp()
+                    # create temp dir, not a file; pass file by name, and it will be created inside a container/program
+                    tmpdir = tempfile.mkdtemp()
+                    output = os.path.join(tmpdir, "output.smi")
                     try:
                         protonate_func(tmp.name, output)
                         items = read_func(output)  #  generator of tuples (smi, mol_name)
                         update_db_protonated_smiles(conn, items, table_name)
                     finally:
-                        os.remove(output)
-                        os.close(fd)
+                        if os.path.exists(output):
+                            os.remove(output)
+                        os.rmdir(tmpdir)
 
         elif program in ['pkasolver', 'molgpka']:  # native python protocol
             if program == 'pkasolver':

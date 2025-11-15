@@ -11,7 +11,8 @@ from multiprocessing import Pool
 from typing import Iterator, Tuple
 
 from rdkit import Chem
-from easydock.auxiliary import chunk_into_n
+from easydock.containers import apptainer_exec
+from easydock.auxiliary import chunk_into_n, expand_path
 
 """
 There two types of protonation programs:
@@ -314,16 +315,9 @@ def __protonate_molgpka(args, models):
 def protonate_apptainer(input_fname: str, output_fname: str, container_fname: str) -> None:
 
     bind_path = set()
-    bind_path.add(os.path.dirname(os.path.abspath(input_fname)))
-    bind_path.add(os.path.dirname(os.path.abspath(output_fname)))
-    bind_arg = ','.join(f'{p}' for p in bind_path)
+    bind_path.add(os.path.dirname(expand_path(input_fname)))
+    bind_path.add(os.path.dirname(expand_path(output_fname)))
 
-    cmd = ['apptainer', 'run', '-B', bind_arg, container_fname, 'protonate', '-i', input_fname, '-o', output_fname]
-    cmd = ' '.join(cmd)
-
-    try:
-        subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)
-
-    except subprocess.CalledProcessError as e:
-        logging.warning(f'(Uni-pKa) Error running the command {cmd}\n'
-                        f'{str(e)}\n')
+    apptainer_exec(container_fname,
+                   ['protonate', '-i', input_fname, '-o', output_fname],
+                   list(bind_path))
