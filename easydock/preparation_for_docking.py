@@ -410,7 +410,7 @@ def boron_reduction(mol_B, mol):
     return mol_
 
 
-def pdbqt2molblock(pdbqt_block, template_mol, mol_id):
+def pdbqt2molblock(pdbqt_block, template_mol, mol_id=''):
     """
     The function takes PDBQT block with one or more poses and converts top pose to MDL MOL format. The function tries
     to return back boron atoms
@@ -436,8 +436,10 @@ def pdbqt2molblock(pdbqt_block, template_mol, mol_id):
         else:
             mol = assign_bonds_from_template(template_mol, rdkit_mol)
 
-        mol.SetProp("_Name", mol_id)
+        if mol_id:
+            mol.SetProp("_Name", mol_id)
         mol_block = Chem.MolToMolBlock(mol)
+
     except Exception:
         logging.warning(f"{mol_id}, could not assign bond orders while parsing PDB. Trying to fix.\n"
                         f"{traceback.format_exc()}")

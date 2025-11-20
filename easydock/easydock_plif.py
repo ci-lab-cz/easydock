@@ -7,18 +7,7 @@ from typing import Optional, List
 from rdkit import Chem, DataStructs
 from easydock.auxiliary import split_generator_to_chunks
 from easydock.preparation_for_docking import cpu_type, filepath_type, str_lower_type
-from easydock.database import get_mols, tables_exist, init_plif_var_tables, load_module_table, set_variable
-
-
-def get_docked_mol_ids(conn):
-    """
-    Returns mol_ids for molecules which where docked at the given iteration and conversion to mol block was successful
-    :param conn:
-    :return:
-    """
-    cur = conn.cursor()
-    res = cur.execute(f"SELECT id FROM mols WHERE docking_score IS NOT NULL")  # TODO: use docking_score instead of mol_block
-    return [i[0] for i in res]
+from easydock.database import get_mols, get_docked_mol_ids, tables_exist, init_plif_var_tables, load_module_table, set_variable
 
 
 def insert_plif_data(df, conn):

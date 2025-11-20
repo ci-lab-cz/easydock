@@ -606,44 +606,6 @@ def select_from_db(cur, sql, values):
             yield item
 
 
-def get_mols(conn, mol_ids, field_name='mol_block', return_rowid=False):
-    """
-    Returns list of Mol objects from docking DB, order is arbitrary, molecules with errors will be silently skipped
-    :param conn: connection to docking DB
-    :param mol_ids: list of molecule ids (ignores stereo_id)
-    :param field_name: name of the field from which a molecule should be retrieved
-    :return: list of RDKit Mol objects
-    """
-    if field_name in ['mol_block', 'source_mol_block']:
-        func = partial(Chem.MolFromMolBlock, removeHs=False)
-    elif field_name in ['smi']:
-        func = Chem.MolFromSmiles
-    else:
-        raise AttributeError(f'Wrong field name was specified for a get_mols functions. '
-                             f'Allowed: mol_block, source_mol_block, smi. Supplied: {field_name}')
-
-    cur = conn.cursor()
-    if return_rowid:
-        t = ', rowid'
-    else:
-        t = ''
-
-    # one "?" because we use the special retrieve function - select_from_db - which does it in chunks
-    sql = f'SELECT {field_name}{t} FROM mols WHERE id IN (?) AND {field_name} IS NOT NULL'
-
-    mols = []
-    for items in select_from_db(cur, sql, mol_ids):
-        m = func(items[0])
-        if m:
-            Chem.AssignStereochemistryFrom3D(m)
-            if len(items) > 1:
-                mols.append((m,) + items[1:])
-            else:
-                mols.append(m)
-    cur.close()
-    return mols
-
-
 def get_mols(conn, mol_ids, field_name='mol_block', return_rowid=False, poses=None):
     """
     Returns list of Mol objects from docking DB, order is arbitrary, molecules with errors will be silently skipped
@@ -683,7 +645,6 @@ def get_mols(conn, mol_ids, field_name='mol_block', return_rowid=False, poses=No
                 mols.append((m,) + items[1])
             elif len(items) == 3:
                 pdb_block_list = items[2].strip().split('ENDMDL')
-                # print(pdb_block_list)
                 mols.append((m, items[1], 1))
                 for i in poses[1:]:  # 1-based
                     try:
@@ -700,6 +661,17 @@ def get_mols(conn, mol_ids, field_name='mol_block', return_rowid=False, poses=No
                 mols.append(m)
     cur.close()
     return mols
+
+
+def get_docked_mol_ids(conn):
+    """
+    Returns mol_ids for molecules which where docked at the given iteration and conversion to mol block was successful
+    :param conn:
+    :return:
+    """
+    cur = conn.cursor()
+    res = cur.execute(f"SELECT id FROM mols WHERE docking_score IS NOT NULL")
+    return [i[0] for i in res]
 
 
 def tables_exist(conn, table_names):
@@ -776,6 +748,7 @@ def init_plif_var_tables(conn):
 
     conn.commit()
     return conn
+
 
 def set_variable(conn, module: str, name: str, value):
     if isinstance(value, (int, float, str)):
