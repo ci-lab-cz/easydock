@@ -212,9 +212,17 @@ def main():
         ids = get_docked_mol_ids(conn)
     elif os.path.isfile(args.ids[0]):
         with open(args.ids[0]) as f:
-            ids = [line.strip() for line in f]
+            ids = {line.strip() for line in f}
     else:
-        ids = args.ids
+        ids = set(args.ids)
+
+    cur = conn.execute("""
+        SELECT m.id FROM plif_res r
+        JOIN mols m ON m.rowid = r.id""")
+
+    ids_done = {row[0] for row in cur.fetchall()}
+
+    ids = ids.difference(ids_done)
 
     poses = list(args.poses)
 
