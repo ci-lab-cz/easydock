@@ -1,5 +1,7 @@
+import datetime
 import logging
 import os
+import json
 import sqlite3
 import tempfile
 import traceback
@@ -12,6 +14,7 @@ import yaml
 from easydock import read_input
 from easydock.preparation_for_docking import mol_is_3d
 from easydock.auxiliary import take, mol_name_split, timeout, expand_path
+from easydock.preparation_for_docking import pdbqt2molblock
 from easydock.protonation import protonate_chemaxon, read_protonate_chemaxon, protonate_dimorphite, read_smiles, protonate_pkasolver, protonate_molgpka
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -603,7 +606,7 @@ def select_from_db(cur, sql, values):
             yield item
 
 
-def get_mols(conn, mol_ids, field_name='mol_block'):
+def get_mols(conn, mol_ids, field_name='mol_block', return_rowid=False):
     """
     Returns list of Mol objects from docking DB, order is arbitrary, molecules with errors will be silently skipped
     :param conn: connection to docking DB
@@ -620,28 +623,39 @@ def get_mols(conn, mol_ids, field_name='mol_block'):
                              f'Allowed: mol_block, source_mol_block, smi. Supplied: {field_name}')
 
     cur = conn.cursor()
+    if return_rowid:
+        t = ', rowid'
+    else:
+        t = ''
+
     # one "?" because we use the special retrieve function - select_from_db - which does it in chunks
-    sql = f'SELECT {field_name} FROM mols WHERE id IN (?) AND {field_name} IS NOT NULL'
+    sql = f'SELECT {field_name}{t} FROM mols WHERE id IN (?) AND {field_name} IS NOT NULL'
 
     mols = []
     for items in select_from_db(cur, sql, mol_ids):
         m = func(items[0])
         if m:
             Chem.AssignStereochemistryFrom3D(m)
-            mols.append(m)
+            if len(items) > 1:
+                mols.append((m,) + items[1:])
+            else:
+                mols.append(m)
     cur.close()
     return mols
 
 
-def get_mol(conn, mol_id, stereo_id, field_name='mol_block'):
+def get_mols(conn, mol_ids, field_name='mol_block', return_rowid=False, poses=None):
     """
-    Returns a single molecule from database
+    Returns list of Mol objects from docking DB, order is arbitrary, molecules with errors will be silently skipped
     :param conn: connection to docking DB
-    :param mol_id: id of a molecule
-    :param stereo_id: stereo_id of a molecule
+    :param mol_ids: list of molecule ids (ignores stereo_id)
     :param field_name: name of the field from which a molecule should be retrieved
-    :return:
+    :return: list of RDKit Mol objects
     """
+
+    if poses is None:
+        poses = [1]
+
     if field_name in ['mol_block', 'source_mol_block']:
         func = partial(Chem.MolFromMolBlock, removeHs=False)
     elif field_name in ['smi']:
@@ -651,7 +665,136 @@ def get_mol(conn, mol_id, stereo_id, field_name='mol_block'):
                              f'Allowed: mol_block, source_mol_block, smi. Supplied: {field_name}')
 
     cur = conn.cursor()
-    sql = f'SELECT {field_name} FROM mols WHERE id = ? AND stereo_id = ? AND {field_name} IS NOT NULL'
-    res = cur.execute(sql, (mol_id, stereo_id))
-    mol = func(res.fetchone()[0])
-    return mol
+    # one "?" because we use the special retrieve function - select_from_db - which does it in chunks
+    t = ''
+    if return_rowid:
+        t += ', rowid'
+    if poses != [1]:
+        t += ', pdb_block'
+
+    sql = f'SELECT {field_name}{t} FROM mols WHERE id IN (?) AND {field_name} IS NOT NULL'
+
+    mols = []
+    for items in select_from_db(cur, sql, mol_ids):
+        m = func(items[0])
+        if m:
+            Chem.AssignStereochemistryFrom3D(m)
+            if len(items) == 2:
+                mols.append((m,) + items[1])
+            elif len(items) == 3:
+                pdb_block_list = items[2].strip().split('ENDMDL')
+                # print(pdb_block_list)
+                mols.append((m, items[1], 1))
+                for i in poses[1:]:  # 1-based
+                    try:
+                        pose_mol_block = pdbqt2molblock(pdb_block_list[i - 1] + 'ENDMDL\n', m)
+                        m = Chem.MolFromMolBlock(pose_mol_block)
+                        mols.append((m, items[1], i))
+                    except IndexError:
+                        # logging.warning(f'Pose number {i} is not in the PDB block. '
+                        #                  f'It will be skipped.')
+                        print(f'Pose number {i} is not in the PDB block. '
+                              f'It will be skipped.')
+
+            else:
+                mols.append(m)
+    cur.close()
+    return mols
+
+
+def tables_exist(conn, table_names):
+    placeholders = ','.join('?' for _ in table_names)
+
+    query = f"""
+        SELECT name FROM sqlite_master 
+        WHERE type='table' AND name IN ({placeholders})
+    """
+
+    cur = conn.execute(query, tuple(table_names))
+    found = {row[0] for row in cur.fetchall()}
+
+    return {name: (name in found) for name in table_names}
+
+
+def load_module_table(conn, module: str):
+    cur = conn.execute(
+        "SELECT name, value_type, value FROM variables WHERE module=?",
+        (module,)
+    )
+
+    rows = cur.fetchall()
+    table = []
+
+    for name, value_type, value in rows:
+        if value_type == "int":
+            parsed = int(value)
+        elif value_type == "float":
+            parsed = float(value)
+        elif value_type == "json":
+            parsed = json.loads(value)
+        else:  # str
+            parsed = value
+
+        table.append({
+            "name": name,
+            "value_type": value_type,
+            "value": parsed
+        })
+
+    return table
+
+
+def init_plif_var_tables(conn):
+    """
+
+    """
+    cur = conn.cursor()
+
+    cur.executescript("""
+        CREATE TABLE IF NOT EXISTS plif_name (
+            plif_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            contact_name TEXT UNIQUE
+        );
+
+        CREATE TABLE IF NOT EXISTS plif_res (
+            id INTEGER,
+            pose INTEGER,
+            plif_id INTEGER,
+            FOREIGN KEY (id) REFERENCES mols(id),
+            FOREIGN KEY (plif_id) REFERENCES plif_name(plif_id)
+        );
+        
+        CREATE TABLE IF NOT EXISTS variables (
+            module      TEXT NOT NULL,
+            name        TEXT NOT NULL,
+            value_type  TEXT,
+            value       TEXT,
+            updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (module, name)
+        );
+    """)
+
+    conn.commit()
+    return conn
+
+def set_variable(conn, module: str, name: str, value):
+    if isinstance(value, (int, float, str)):
+        value_type = type(value).__name__
+        value_str = str(value)
+    else:
+        value_type = "json"
+        value_str = json.dumps(value)
+
+    now = datetime.datetime.now()
+
+    conn.execute("""
+        INSERT INTO variables (module, name, value_type, value, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(module, name)
+        DO UPDATE SET 
+            value = excluded.value,
+            value_type = excluded.value_type,
+            updated_at = excluded.updated_at;
+    """, (module, name, value_type, value_str, now))
+
+    conn.commit()

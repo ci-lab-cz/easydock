@@ -25,6 +25,13 @@ def filepath_type(x):
         return x
 
 
+def str_lower_type(x):
+    if x:
+        return x.lower()
+    else:
+        return x
+
+
 def mol_is_3d(mol):
     if mol.GetConformers() and list(mol.GetConformers())[0].Is3D():
         return True
