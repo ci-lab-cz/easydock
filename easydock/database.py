@@ -671,7 +671,7 @@ def get_docked_mol_ids(conn):
     """
     cur = conn.cursor()
     res = cur.execute(f"SELECT id FROM mols WHERE docking_score IS NOT NULL")
-    return [i[0] for i in res]
+    return {row[0] for row in res}
 
 
 def tables_exist(conn, table_names):
