@@ -165,8 +165,6 @@ def main():
                                      formatter_class=lambda prog: argparse.ArgumentDefaultsHelpFormatter(prog, width=80))
     parser.add_argument('-i', '--input', metavar='input.db', required=True, type=str,
                         help='SQLite DB, which is output of vina_dock script.')
-    parser.add_argument('-o', '--output', metavar='output.sdf', required=True, type=str,
-                        help='output SDF file (with mol blocks) or SMILES. Output format is guessed from extension.')
     parser.add_argument('-p', '--protein', metavar='FILENAME', required=True, type=filepath_type,
                         help='PDB file of a protein.')
     parser.add_argument('--ref_plif', metavar='STRING', default=None, required=False, nargs='*',
