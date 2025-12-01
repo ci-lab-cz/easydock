@@ -647,7 +647,7 @@ def get_mols(conn, mol_ids, field_name='mol_block', return_rowid=False, poses=No
         if m:
             Chem.AssignStereochemistryFrom3D(m)
             if len(items) == 2:
-                mols.append((m,) + items[1])
+                mols.append((m, + items[1], 1))
             elif len(items) == 3:
                 pdb_block_list = items[2].strip().split('ENDMDL')
                 mols.append((m, items[1], 1))
