@@ -3,6 +3,7 @@ import logging
 import os
 import json
 import sqlite3
+import sys
 import tempfile
 import traceback
 from copy import deepcopy
@@ -655,7 +656,7 @@ def get_mols(conn, mol_ids, field_name='mol_block', return_rowid=False, poses=No
                     try:
                         pose = pdb_block_list[i - 1]
                     except IndexError:
-                        logging.warning(f'Pose number {i} is not in the PDB block. '
+                        sys.stderr.write(f'Pose number {i} is not in the PDB block. '
                                          f'It will be skipped.')
                     if pose:
                         pose_mol_block = pdbqt2molblock(pose + 'ENDMDL\n', m)
