@@ -17,7 +17,7 @@ def insert_plif_data(df, conn):
     cur = conn.cursor()
 
 
-    contacts = [(c,) for c in df.columns]
+    contacts = [(c,) for c in df.columns[2:]]
     cur.executemany("INSERT OR IGNORE INTO plif_name (contact_name) VALUES (?)", contacts)
     conn.commit()
 
@@ -139,7 +139,9 @@ def make_plif_summary_to_file(
             plif_ref_df = pd.DataFrame([{col: (1 if col in plif_list else 0) for col in df_batch.columns}])
 
             with pd.option_context("future.no_silent_downcasting", True):
-                df = pd.concat([plif_ref_df, df_batch]).fillna(False).astype(bool)
+                df = pd.concat([plif_ref_df, df_batch], ignore_index=True)
+                contacts_cols = df.columns[4:]
+                df[contacts_cols] = df[contacts_cols].fillna(False).astype(bool)
                 b = plf.to_bitvectors(df)
                 sim = DataStructs.BulkTverskySimilarity(b[0], b[1:], 1, 0)
                 sim = [round(x, 3) for x in sim]
