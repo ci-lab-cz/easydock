@@ -88,6 +88,8 @@ def make_plif_summary_to_file(
     """
 
     """
+    if os.path.exists(output_file):
+        os.remove(output_file)
 
     conn = sqlite3.connect(db_path)
 
@@ -149,7 +151,7 @@ def make_plif_summary_to_file(
                 df_batch['plif_sim'] = sim
                 df_batch = df_batch[['id', 'stereo_id', 'pose', 'plif_sim']]
 
-        df_batch.to_csv(output_file, mode='a', sep=sep, index=False, header=first_batch)
+        df_batch.to_csv(output_file, mode='w' if first_batch else 'a', sep=sep, index=False, header=first_batch)
         first_batch = False
 
         if len(df_batch) < batch_size:
