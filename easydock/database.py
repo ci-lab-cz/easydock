@@ -665,6 +665,30 @@ def get_mols(conn, mol_ids, field_name='mol_block', return_rowid=False, poses=No
     return mols
 
 
+def get_mol(conn, mol_id, stereo_id, field_name='mol_block'):
+    """
+    Returns a single molecule from database
+    :param conn: connection to docking DB
+    :param mol_id: id of a molecule
+    :param stereo_id: stereo_id of a molecule
+    :param field_name: name of the field from which a molecule should be retrieved
+    :return:
+    """
+    if field_name in ['mol_block', 'source_mol_block']:
+        func = partial(Chem.MolFromMolBlock, removeHs=False)
+    elif field_name in ['smi']:
+        func = Chem.MolFromSmiles
+    else:
+        raise AttributeError(f'Wrong field name was specified for a get_mol functions. '
+                             f'Allowed: mol_block, source_mol_block, smi. Supplied: {field_name}')
+
+    cur = conn.cursor()
+    sql = f'SELECT {field_name} FROM mols WHERE id = ? AND stereo_id = ? AND {field_name} IS NOT NULL'
+    res = cur.execute(sql, (mol_id, stereo_id))
+    mol = func(res.fetchone()[0])
+    return mol
+
+
 def get_docked_mol_ids(conn):
     """
     Returns mol_ids for molecules which where docked at the given iteration and conversion to mol block was successful
