@@ -224,12 +224,12 @@ def main():
 
     ids_done = {row[0] for row in cur.fetchall()}
 
-    ids = ids.difference(ids_done)
+    ids_f = ids.difference(ids_done)
 
     poses = list(args.poses)
 
     chunk_size = 10 * args.ncpu // len(poses)
-    for chunk in split_generator_to_chunks(ids, chunk_size=chunk_size):
+    for chunk in split_generator_to_chunks(ids_f, chunk_size=chunk_size):
         mols = get_mols(conn, chunk, return_rowid=True, poses=poses)
 
         if mols:
