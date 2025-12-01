@@ -140,9 +140,9 @@ def make_plif_summary_to_file(
 
             with pd.option_context("future.no_silent_downcasting", True):
                 df = pd.concat([plif_ref_df, df_batch], ignore_index=True)
-                contacts_cols = df.columns[4:]
+                contacts_cols = df.columns[3:]
                 df[contacts_cols] = df[contacts_cols].fillna(False).astype(bool)
-                b = plf.to_bitvectors(df)
+                b = plf.to_bitvectors(df.iloc[:, 3:])
                 sim = DataStructs.BulkTverskySimilarity(b[0], b[1:], 1, 0)
                 sim = [round(x, 3) for x in sim]
 
