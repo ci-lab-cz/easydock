@@ -169,7 +169,7 @@ def main():
                         help='SQLite DB, which is output of vina_dock script.')
     parser.add_argument('-p', '--protein', metavar='FILENAME', required=True, type=filepath_type,
                         help='PDB file of a protein.')
-    parser.add_argument('-o', '--output', metavar='output.txt', required=True, type=str,
+    parser.add_argument('-o', '--output', metavar='output.txt', required=False, type=str,
                         help='output TXT file with prolif results.')
     parser.add_argument('--ref_plif', metavar='STRING', default=None, required=False, nargs='*',
                         type=str_lower_type,
