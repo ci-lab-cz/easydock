@@ -619,6 +619,9 @@ def get_mols(conn, mol_ids, field_name='mol_block', return_rowid=False, poses=No
     if poses is None:
         poses = [1]
 
+    if len(poses) > 1 and 1 in poses:
+        poses.remove(1)
+
     if field_name in ['mol_block', 'source_mol_block']:
         func = partial(Chem.MolFromMolBlock, removeHs=False)
     elif field_name in ['smi']:
@@ -638,6 +641,7 @@ def get_mols(conn, mol_ids, field_name='mol_block', return_rowid=False, poses=No
     sql = f'SELECT {field_name}{t} FROM mols WHERE id IN (?) AND {field_name} IS NOT NULL'
 
     mols = []
+    pose= ''
     for items in select_from_db(cur, sql, mol_ids):
         m = func(items[0])
         if m:
@@ -647,16 +651,16 @@ def get_mols(conn, mol_ids, field_name='mol_block', return_rowid=False, poses=No
             elif len(items) == 3:
                 pdb_block_list = items[2].strip().split('ENDMDL')
                 mols.append((m, items[1], 1))
-                for i in poses[1:]:  # 1-based
+                for i in poses:
                     try:
-                        pose_mol_block = pdbqt2molblock(pdb_block_list[i - 1] + 'ENDMDL\n', m)
+                        pose = pdb_block_list[i - 1]
+                    except IndexError:
+                        logging.warning(f'Pose number {i} is not in the PDB block. '
+                                         f'It will be skipped.')
+                    if pose:
+                        pose_mol_block = pdbqt2molblock(pose + 'ENDMDL\n', m)
                         m = Chem.MolFromMolBlock(pose_mol_block)
                         mols.append((m, items[1], i))
-                    except IndexError:
-                        # logging.warning(f'Pose number {i} is not in the PDB block. '
-                        #                  f'It will be skipped.')
-                        print(f'Pose number {i} is not in the PDB block. '
-                              f'It will be skipped.')
 
             else:
                 mols.append(m)
