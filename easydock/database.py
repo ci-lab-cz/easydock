@@ -56,8 +56,6 @@ def create_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', '
                      PRIMARY KEY (id, stereo_id)
                     )""")
 
-        init_plif_var_tables(conn)
-
         # this will create a setup table with the first item in YAML format which contains all input args, and additional
         # fields with names identical to selected arg names pointed out on text files (e.g config, protein.pdbqt,
         # protein setup file, etc). These additional fields will store content of those files as TEXT
@@ -89,6 +87,7 @@ def create_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', '
             cur.execute(f"INSERT INTO setup (yaml) VALUES (?)", values)
 
         conn.commit()
+        init_plif_var_tables(conn)
 
 
 def populate_setup_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', 'protein_setup')):
