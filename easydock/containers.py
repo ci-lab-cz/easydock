@@ -12,7 +12,7 @@ from easydock.auxiliary import expand_path
 def docker_available():
     try:
         subprocess.run(
-            ["docker", "info"],
+            ["docker", "version"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             check=True,
@@ -21,6 +21,38 @@ def docker_available():
     except (subprocess.CalledProcessError, FileNotFoundError, PermissionError) as e:
         sys.stderr.write(e)
         sys.stderr.write('Docker is not installed or properly configured. It should be accessible from the command '
+                         'line without elevated privileges\n')
+        return False
+
+
+def apptainer_available():
+    try:
+        subprocess.run(
+            ["apptainer", "version"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=True,
+        )
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError, PermissionError) as e:
+        sys.stderr.write(e)
+        sys.stderr.write('Apptainer is not installed or properly configured. It should be accessible from the command '
+                         'line without elevated privileges\n')
+        return False
+
+
+def singularity_available():
+    try:
+        subprocess.run(
+            ["singularity", "version"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=True,
+        )
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError, PermissionError) as e:
+        sys.stderr.write(e)
+        sys.stderr.write('Singularity is not installed or properly configured. It should be accessible from the command '
                          'line without elevated privileges\n')
         return False
 
@@ -65,7 +97,12 @@ def apptainer_exec(sif_path: str,
 
     if system == "Linux":
         # Native Apptainer available
-        cmd = ["apptainer", "run"] + apptainer_bind_args + [sif_path] + inner_cmd
+        if apptainer_available():
+            cmd = ["apptainer", "run"] + apptainer_bind_args + [sif_path] + inner_cmd
+        elif singularity_available():
+            cmd = ["singularity", "run"] + apptainer_bind_args + [sif_path] + inner_cmd
+        else:
+            sys.stderr.write('Neither apptainer nor singularity are available. Protonation will be skipped.\n')
 
     else:
         # Windows or macOS: run Apptainer inside Docker
