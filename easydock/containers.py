@@ -59,7 +59,7 @@ def singularity_available():
 
 def apptainer_exec(sif_path: str,
                    inner_cmd: List,
-                   binds: List[Union[str | Tuple[str, str]]] = None):
+                   binds: List[Union[str, Tuple[str, str]]] = None):
     """
     Example of a call.
     apptainer_exec('~/imgs/unipka.sif',
@@ -157,3 +157,13 @@ def apptainer_exec(sif_path: str,
                         f'{e.stderr}\n'
                         f'STDOUT:\n'
                         f'{e.stdout}\n')
+
+
+# apptainer_exec('~/imgs/unipka.sif',
+#                ['protonate', '-i', '/home/pavel/python/easydock/test/apptainer/molgpka_test.smi', '-o', '/home/pavel/python/easydock/test/apptainer/molgpka_test_prot.smi'],
+#                ['/home/pavel/python/easydock/test/apptainer'])
+
+# apptainer_exec('~/imgs/unipka.sif',
+#                # ['protonate', '-i', '/tmp/2.smi', '-o', '/tmp/2out.smi'],
+#                ['ls', '-l', '/tmp/2out.smi', '>', '/tmp/text'],
+#                ['/tmp'])
