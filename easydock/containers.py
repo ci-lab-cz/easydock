@@ -4,7 +4,7 @@ import platform
 import subprocess
 import sys
 import traceback
-from typing import List, Tuple
+from typing import List, Tuple, Union
 
 from easydock.auxiliary import expand_path
 
@@ -59,7 +59,7 @@ def singularity_available():
 
 def apptainer_exec(sif_path: str,
                    inner_cmd: List,
-                   binds: List[str | Tuple[str, str]] = None):
+                   binds: List[Union[str | Tuple[str, str]]] = None):
     """
     Example of a call.
     apptainer_exec('~/imgs/unipka.sif',
