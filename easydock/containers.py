@@ -20,8 +20,8 @@ def docker_available():
         return True
     except (subprocess.CalledProcessError, FileNotFoundError, PermissionError) as e:
         # sys.stderr.write(e)
-        sys.stderr.write('Docker is not installed or properly configured. It should be accessible from the command '
-                         'line without elevated privileges\n')
+        # sys.stderr.write('Docker is not installed or properly configured. It should be accessible from the command '
+        #                  'line without elevated privileges\n')
         return False
 
 
@@ -36,8 +36,8 @@ def apptainer_available():
         return True
     except (subprocess.CalledProcessError, FileNotFoundError, PermissionError) as e:
         # sys.stderr.write(e)
-        sys.stderr.write('Apptainer is not installed or properly configured. It should be accessible from the command '
-                         'line without elevated privileges\n')
+        # sys.stderr.write('Apptainer is not installed or properly configured. It should be accessible from the command '
+        #                  'line without elevated privileges\n')
         return False
 
 
@@ -52,8 +52,8 @@ def singularity_available():
         return True
     except (subprocess.CalledProcessError, FileNotFoundError, PermissionError) as e:
         # sys.stderr.write(e)
-        sys.stderr.write('Singularity is not installed or properly configured. It should be accessible from the command '
-                         'line without elevated privileges\n')
+        # sys.stderr.write('Singularity is not installed or properly configured. It should be accessible from the command '
+        #                  'line without elevated privileges\n')
         return False
 
 
