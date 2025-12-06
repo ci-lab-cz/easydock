@@ -104,8 +104,8 @@ def apptainer_exec(sif_path: str,
         else:
             sys.stderr.write('Neither apptainer nor singularity are available. Protonation will be skipped.\n')
 
-    else:
-        # Windows or macOS: run Apptainer inside Docker
+    elif system == "Darwin":
+        # macOS: run Apptainer inside Docker
         # Before a Docker image that contains Apptainer named "apptainer:latest" must be built
         #
         # FROM ubuntu:22.04
@@ -138,12 +138,16 @@ def apptainer_exec(sif_path: str,
         inner = ["run", "--no-mount=bind-paths"] + apptainer_bind_args + [sif_path] + inner_cmd
 
         cmd = [
-                  "docker", "run", "--privileged",
+                  "docker", "run", "--platform", "linux/amd64", "--privileged",
                   # "-v", f"{os.getcwd()}:{os.getcwd()}",
                   # "-w", os.getcwd()
               ] + docker_binds + [
                   docker_image
               ] + inner
+
+    else:
+        logging.error(f'Unsupported system: {system}')
+        sys.exit(1)
 
     cmd = ' '.join(cmd)
     try:
