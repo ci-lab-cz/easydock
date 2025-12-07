@@ -1,6 +1,9 @@
 # EasyDock - Python module to automate molecular docking
 
 ## Table of content
+- [Description](#description)
+  - [Features](#features)
+  - [Pipeline](#pipeline)
 - [Installation](#installation)
   - [Dependencies](#dependencies)
   - [Setup virtualization to run containers](#setup-virtualization-to-run-containers)
@@ -8,9 +11,6 @@
     - [MacOS](#macos)
     - [Windows](#windows)
     - [Containers](#containers)
-- [Description](#description)
-  - [Features](#features)
-  - [Pipeline](#pipeline)
 - [Examples](#examples)
   - [Initialization of a database](#initialization-of-a-database)
   - [Docking from command line](#docking-from-command-line)
@@ -32,6 +32,48 @@
 - [Changelog](#changelog)
 - [License](#licence)
 - [Citation](#citation)
+
+## Description
+
+The fully automatic pipeline for molecular docking.  
+
+An important feature, once the database is initialized it will store all command line arguments and input files as a part of the setup table. This will allow to easy rerun interrupted calculations and keep all data in one place for consistency, but this also makes impossible to change some settings afterwards by providing other values in command line arguments. The existing database will never be overwritten. Therefore, if the database was initialized wrongly, it should be deleted before rerun the command line script. Alternatively, incorrect values of arguments can be edited directly in the database.  
+
+### Features
+
+- the major script `easydock` supports docking with `vina`, `gnina` (`gnina` also supports `smina` and its custom scoring functions), `qvina` (`qvina` is a collective term to use either QVina2 or QVina-W), `vina-gpu` (`vina-gpu` is a collective term to use any of Vina-GPU, QVina2-GPU or QVinaW-GPU)
+- can be used as a command line utility or imported as a python module
+- if input molecules are 3D, these conformations will be used as starting ones for docking (enable usage of external conformer generators)
+- input molecules are checked for salts and attempted to fix by SaltRemover 
+- stereoisomers can be enumerated for unspecified chiral centers and double bonds (since some compounds may require very long runtimes, the maximum runtime for individual molecules was set to 300 sec)
+- several protonation options: molgpka, chemaxon and pkasolver (check notes below). If omitted input protonation state will be used (enables usage of external protonation tools)
+- docking of compounds with saturated rings can be enhanced by additional sampling of starting ring conformers and only the best one is stored to the database
+- supports distributed computing using `dask` library
+- supports docking of boron-containing compounds using `vina` and `smina` (boron is replaced with carbon before docking and returned back)
+- all outputs are stored in an SQLite database
+- interrupted calculations can be continued by invoking the same command or by supplying just a single argument (`--output`) - the existing output database
+- `get_sdf_from_dock_db` is used to extract data from output DB
+- all command line arguments and input files are stored in the setup table and the majority of those parameters cannot be changed later. This will prevent losing input settings. If some changes should be made after DB was created a direct editing the DB can be a solution   
+
+### Pipeline
+
+The pipeline consists of two major parts which can be run separately or simultaneously:
+1. Initialization of database, which includes:
+- input SMILES are converted in 3D by RDKit, if input is 3D structures in SDF their conformations wil be taken as starting without changes.
+- compounds having salts are stripped, if this fails the whole compound will be omitted for docking reporting to STDERR 
+- up to a specified number of stereoisomers are enumerated for molecules with undefined chiral centers or double bond configurations (by default 1 random but reproducible stereoisomer is generated)
+- ligands are protonated by MolGpKa/Chemaxon/pKasolver at pH 7.4 and the most stable tautomers are generated (optional, requires a Chemaxon license)
+2. Docking step includes:
+- molecules are converted in PDBQT format using Meeko
+- docking with `vina`/`gnina`/`qvina`/`vina-gpu`
+- top docked poses are converted in MOL format and stored into output DB along with docking scores
+
+### Notes
+
+- These two parts of the pipeline allows to create a DB and reuse it for docking with different proteins/settings/etc.  
+- There is also a script `make_clean_copy` which creates a copy of an existing DB removing all docking data to use it for docking with different proteins/settings/etc.        
+- Protonation with MolGpKa will run in a single cpu mode, but it will use 25-50% of available cores.   
+
 
 ## Installation
 
@@ -138,47 +180,6 @@ Currently there is no option to run sif-images natively in Win platform. Therefo
 |---------------------|-----------------------------------------|----------------------------------------------|
 | unipka.sif          | https://doi.org/10.5281/zenodo.17506577 | Uni-pKa model for small molecule protonation |
 
-
-## Description
-
-The fully automatic pipeline for molecular docking.  
-
-An important feature, once the database is initialized it will store all command line arguments and input files as a part of the setup table. This will allow to easy rerun interrupted calculations and keep all data in one place for consistency, but this also makes impossible to change some settings afterwards by providing other values in command line arguments. The existing database will never be overwritten. Therefore, if the database was initialized wrongly, it should be deleted before rerun the command line script. Alternatively, incorrect values of arguments can be edited directly in the database.  
-
-### Features
-
-- the major script `easydock` supports docking with `vina`, `gnina` (`gnina` also supports `smina` and its custom scoring functions), `qvina` (`qvina` is a collective term to use either QVina2 or QVina-W), `vina-gpu` (`vina-gpu` is a collective term to use any of Vina-GPU, QVina2-GPU or QVinaW-GPU)
-- can be used as a command line utility or imported as a python module
-- if input molecules are 3D, these conformations will be used as starting ones for docking (enable usage of external conformer generators)
-- input molecules are checked for salts and attempted to fix by SaltRemover 
-- stereoisomers can be enumerated for unspecified chiral centers and double bonds (since some compounds may require very long runtimes, the maximum runtime for individual molecules was set to 300 sec)
-- several protonation options: molgpka, chemaxon and pkasolver (check notes below). If omitted input protonation state will be used (enables usage of external protonation tools)
-- docking of compounds with saturated rings can be enhanced by additional sampling of starting ring conformers and only the best one is stored to the database
-- supports distributed computing using `dask` library
-- supports docking of boron-containing compounds using `vina` and `smina` (boron is replaced with carbon before docking and returned back)
-- all outputs are stored in an SQLite database
-- interrupted calculations can be continued by invoking the same command or by supplying just a single argument (`--output`) - the existing output database
-- `get_sdf_from_dock_db` is used to extract data from output DB
-- all command line arguments and input files are stored in the setup table and the majority of those parameters cannot be changed later. This will prevent losing input settings. If some changes should be made after DB was created a direct editing the DB can be a solution   
-
-### Pipeline
-
-The pipeline consists of two major parts which can be run separately or simultaneously:
-1. Initialization of database, which includes:
-- input SMILES are converted in 3D by RDKit, if input is 3D structures in SDF their conformations wil be taken as starting without changes.
-- compounds having salts are stripped, if this fails the whole compound will be omitted for docking reporting to STDERR 
-- up to a specified number of stereoisomers are enumerated for molecules with undefined chiral centers or double bond configurations (by default 1 random but reproducible stereoisomer is generated)
-- ligands are protonated by MolGpKa/Chemaxon/pKasolver at pH 7.4 and the most stable tautomers are generated (optional, requires a Chemaxon license)
-2. Docking step includes:
-- molecules are converted in PDBQT format using Meeko
-- docking with `vina`/`gnina`/`qvina`/`vina-gpu`
-- top docked poses are converted in MOL format and stored into output DB along with docking scores
-
-### Notes
-
-- These two parts of the pipeline allows to create a DB and reuse it for docking with different proteins/settings/etc.  
-- There is also a script `make_clean_copy` which creates a copy of an existing DB removing all docking data to use it for docking with different proteins/settings/etc.        
-- Protonation with MolGpKa will run in a single cpu mode, but it will use 25-50% of available cores.   
 
 ## Examples
 
