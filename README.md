@@ -3,6 +3,11 @@
 ## Table of content
 - [Installation](#installation)
   - [Dependencies](#dependencies)
+  - [Setup virtualization to run containers](#setup-virtualization-to-run-containers)
+    - [Linux](#linux)
+    - [MacOS](#macos)
+    - [Windows](#windows)
+    - [Containers](#containers)
 - [Description](#description)
   - [Features](#features)
   - [Pipeline](#pipeline)
@@ -79,13 +84,58 @@ pip install torch-scatter torch-sparse torch-cluster torch-spline-conv -f https:
 ```
 pip install torch==1.13.1+cpu  --extra-index-url https://download.pytorch.org/whl/cpu
 pip install torch-geometric==2.0.1
-pip install torch_scatter==2.1.1+pt113cpu -f https://data.pyg.org/whl/torch-1.13.1%2Bcpu.html
-pip install torch_sparse==0.6.17+pt113cpu -f https://data.pyg.org/whl/torch-1.13.1%2Bcpu.html
-pip install torch_spline_conv==1.2.2+pt113cpu -f https://data.pyg.org/whl/torch-1.13.1%2Bcpu.html
+pip install torch_scatter==2.1.1 -f https://data.pyg.org/whl/torch-1.13.1%2Bcpu.html
+pip install torch_sparse==0.6.17 -f https://data.pyg.org/whl/torch-1.13.1%2Bcpu.html
+pip install torch_spline_conv==1.2.2 -f https://data.pyg.org/whl/torch-1.13.1%2Bcpu.html
 pip install cairosvg svgutils
 pip install git+https://github.com/Feriolet/dimorphite_dl.git
 pip install git+https://github.com/DrrDom/pkasolver.git
 ```
+
+### Setup virtualization to run containers
+
+Some external tools may require specific dependencies which may conflict with the main environment. These tools can be supplied as containers. For example, we provide a container for Uni-pKa model to make protonation.
+Currently EasyDock accepts only `singularity/apptainer` images (sif-files).
+
+#### Linux
+
+Install `singularity` or `apptainer`. 
+
+#### MacOS
+
+It is impossible to run `singularity/apptainer` images natively on MacOS. Therefore, they will be run automatically through `docker`.
+1. Install `docker`. It should be accessible without sudo privileges.
+2. Create a container using the docker file below and the command:
+```
+FROM ubuntu:22.04
+
+# Install Apptainer
+RUN apt-get update && apt-get install -y \
+    wget build-essential squashfs-tools uidmap fuse3 git \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN wget https://github.com/apptainer/apptainer/releases/download/v1.3.4/apptainer_1.3.4_amd64.deb \
+    && dpkg -i apptainer_1.3.4_amd64.deb
+
+ENTRYPOINT ["apptainer"]
+```
+Switch to the directory where dockerfile was stored and run the command
+```bash
+docker build -t apptainer:latest  --platform=linux/amd64 .
+```
+
+EasyDock will automatically will run sif-images through the docker container with the tag `apptainer:latest`.  
+
+#### Windows
+
+Currently there is no option to run sif-images natively in Win platform. Therefore, if you need to use them, we suggest to install EasyDock inside Windows Subsystem Linux (WSL). 
+
+#### Containers
+
+| Container           | Link                                    | Description                                  |
+|---------------------|-----------------------------------------|----------------------------------------------|
+| unipka.sif          | https://doi.org/10.5281/zenodo.17506577 | Uni-pKa model for small molecule protonation |
+
 
 ## Description
 
@@ -139,6 +189,10 @@ easydock -i input.smi -o output.db -c 4
 Initialize DB and protonate molecules with MolGpKa
 ```
 easydock -i input.smi -o output.db -c 4 --protonation molgpka
+```
+Initialize DB and protonate molecules with Uni-pKa incorporated in a sif-container
+```
+easydock -i input.smi -o output.db -c 4 --protonation /path/to/unipka.sif
 ```
 
 ### Docking from command line
