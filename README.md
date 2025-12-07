@@ -18,6 +18,8 @@
     - [Gnina / Smina](#gnina--smina)
     - [Vina-GPU / QVina-GPU / QVinaW-GPU](#vina-gpu--qvina-gpu--qvinaw-gpu)
     - [QVina2 / Qvina-W](#qvina2--qvina-w)
+    - [Config.yml](#configyml)
+    - [Docking using containerized programs](#docking-using-containerized-programs)
   - [Sampling of saturated rings](#sampling-of-saturated-rings)
   - [Docking using multiple servers](#docking-using-multiple-servers)
   - [Docking from Python](#docking-from-python)
@@ -259,21 +261,6 @@ ncpu: 1
 seed: 0
 ```
 
-To use `gnina` (or other tools) from within a `docker/apptainer` container it is necessary to change the `script_file` argument. There is also a need to bind a local directory to a directory inside a container using the same path (in `docker` there is `-v` argument for that).
-```
-script_file: apptainer exec -B /path/to/dir:/path/to/dir container.sif gnina
-protein: /path/to/dir/protein.pdbqt
-protein_setup: /path/to/dir/grid.txt
-exhaustiveness: 8
-scoring: default
-cnn_scoring: rescore
-cnn: dense_ensemble
-n_poses: 10
-addH: False
-ncpu: 1
-seed: 0
-```
-
 #### Vina-GPU / QVina-GPU / QVinaW-GPU
 
 To use any of Vina-GPU, QVina2-GPU or QVinaW-GPU use `--program vina-gpu`:
@@ -318,6 +305,28 @@ Specify path to either QVina2 or QVina-W to use a particular program.
 #### Config.yml
 
 There are two ways to pass arguments to programs which are executed by external binaries (currently these are all programs except vina). The first way is to specify arguments and their values as individual entries in `config.yml`. However, not all arguments can be set in this way. The second approach is specify constant arguments in the `script_file` value. For example, if you want to customize `--energy_range` for `qvina` use `script_file: /path/to/bin/dir/qvina2 --energy_range 5`. Each argument should be specified in either way, not both.
+
+#### Docking using containerized programs
+
+Programs above can be run through their `docker/singularity/apptainer` containers. This will require to change only the value of the `script_file` argument. 
+
+Below is an example how to use `gnina` from within an `apptainer` container. Insert a whole command to bu invoked as a main program. Arguments from config.yml will be attached by EasyDock.  
+
+Please note, that there is also a need to mount a local directory(ies), where protein and grid box files are stored, to a directory inside a container (in `docker` there is `-v` argument for that).
+```
+script_file: apptainer exec -B /path/to/dir:/path/to/dir container.sif gnina
+protein: /path/to/dir/protein.pdbqt
+protein_setup: /path/to/dir/grid.txt
+exhaustiveness: 8
+scoring: default
+cnn_scoring: rescore
+cnn: dense_ensemble
+n_poses: 10
+addH: False
+ncpu: 1
+seed: 0
+```
+
 
 ### Sampling of saturated rings
 
@@ -406,6 +415,7 @@ There are two integrated open-source approaches (molgpka and pkasolver) and one 
 1. Chemaxon is pretty reliable, however it requires a paid license.
 2. MolGpKa is a model trained on predictions of Chemaxon and thus aligns well with it. Protonation states of each atom are chosen based on the predicted pKa and pKb values. However, there are certain issues. Some issues were fixed by post-processing SMARTS patterns (avoid protonation of amide groups, etc). However, some issues are difficult to fix (e.g. missing protonation of aliphatic amines, piperizines, etc).  
 3. pkasolver enumerates protonation states and the form closest to pH 7.4 is selected as a relevant one. In some cases it may return invalid SMILES, e.g. `O=C(N1CCN(CC1)C(=O)C=2C=CC=C(C#CC3CC3)C2)C=4NN=C5CCCC45 -> O=C(c1cccc(C#CC2CC2)c1)N1CC[NH](C(=O)c2[nH]nc3c2CCC3)CC1`, which will be skipped and a corresponding warning message will appear. It has many issues with protonated forms (very frequent protonation of amide groups, etc). Therefore, we do not recommend its usage.
+4. Uni-pKa seems the most accurate models among integrated ones and is recommended to use. However, it is the slowest one.
 
 ### Multiple CPUs
 
