@@ -458,13 +458,12 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
             if program == 'chemaxon':
                 protonate_func = partial(protonate_chemaxon, tautomerize=tautomerize)
                 read_func = read_protonate_chemaxon
-                batch_size = 500
+                nmols = ncpu * 500
             else:
                 protonate_func = partial(protonate_apptainer, container_fname=program)
                 read_func = read_smiles
-                batch_size = 10
+                nmols = 2000
 
-            nmols = ncpu * batch_size
             while True:
                 with tempfile.NamedTemporaryFile(suffix='.smi', mode='w', encoding='utf-8') as tmp:
                     res = cur.fetchmany(nmols)
