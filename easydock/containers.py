@@ -9,15 +9,24 @@ from typing import List, Tuple, Union
 from easydock.auxiliary import expand_path
 
 
-def docker_available():
+def docker_available(container=None):
     try:
-        subprocess.run(
-            ["docker", "version"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=True,
-        )
-        return True
+        if not container:
+            subprocess.run(
+                ["docker", "version"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=True,
+            )
+            return True
+        else:
+            subprocess.run(
+                ["docker", "inspect", container],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=True,
+            )
+            return True
     except (subprocess.CalledProcessError, FileNotFoundError, PermissionError) as e:
         # sys.stderr.write(e)
         # sys.stderr.write('Docker is not installed or properly configured. It should be accessible from the command '
@@ -102,7 +111,8 @@ def apptainer_exec(sif_path: str,
         elif singularity_available():
             cmd = ["singularity", "run"] + apptainer_bind_args + [sif_path] + inner_cmd
         else:
-            sys.stderr.write('Neither apptainer nor singularity are available. Protonation will be skipped.\n')
+            logging.error('Neither apptainer nor singularity are available.')
+            sys.exit(1)
 
     elif system == "Darwin":
         # macOS: run Apptainer inside Docker
@@ -120,6 +130,10 @@ def apptainer_exec(sif_path: str,
         #
         # ENTRYPOINT ["apptainer"]
         docker_image = "apptainer:latest"
+
+        if not docker_available(docker_image):
+            logging.error('Either docker or an image apptainer:latest are not available.')
+            sys.exit(1)
 
         # Convert host paths to absolute so Docker can bind them
         docker_binds = []
@@ -146,7 +160,7 @@ def apptainer_exec(sif_path: str,
               ] + inner
 
     else:
-        logging.error(f'Unsupported system: {system}')
+        logging.error(f'Unsupported system ({system}) to run containerized tools')
         sys.exit(1)
 
     cmd = ' '.join(cmd)
