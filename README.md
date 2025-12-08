@@ -10,7 +10,7 @@
     - [Linux](#linux)
     - [MacOS](#macos)
     - [Windows](#windows)
-    - [Containers](#containers)
+    - [Pre-built containers](#pre-built-containers)
 - [Examples](#examples)
   - [Initialization of a database](#initialization-of-a-database)
   - [Docking from command line](#docking-from-command-line)
@@ -46,10 +46,10 @@ An important feature, once the database is initialized it will store all command
 - if input molecules are 3D, these conformations will be used as starting ones for docking (enable usage of external conformer generators)
 - input molecules are checked for salts and attempted to fix by SaltRemover 
 - stereoisomers can be enumerated for unspecified chiral centers and double bonds (since some compounds may require very long runtimes, the maximum runtime for individual molecules was set to 300 sec)
-- several protonation options: molgpka, chemaxon and pkasolver (check notes below). If omitted input protonation state will be used (enables usage of external protonation tools)
+- several protonation options: `uni-pka`, `molgpka`, `chemaxon` and `pkasolver` (check notes below). If omitted the input protonation states will be used (enables usage of external protonation tools)
 - docking of compounds with saturated rings can be enhanced by additional sampling of starting ring conformers and only the best one is stored to the database
 - supports distributed computing using `dask` library
-- supports docking of boron-containing compounds using `vina` and `smina` (boron is replaced with carbon before docking and returned back)
+- supports docking of boron-containing compounds for programs which cannot natively process boron atoms (boron is replaced with carbon before docking and returned back)
 - all outputs are stored in an SQLite database
 - interrupted calculations can be continued by invoking the same command or by supplying just a single argument (`--output`) - the existing output database
 - `get_sdf_from_dock_db` is used to extract data from output DB
@@ -141,6 +141,13 @@ pip install git+https://github.com/DrrDom/pkasolver.git
 Some external tools may require specific dependencies which may conflict with the main environment. These tools can be supplied as containers. For example, we provide a container for Uni-pKa model to make protonation.
 Currently EasyDock accepts only `singularity/apptainer` images (sif-files).
 
+Example protonation with Uni-pKa:
+```
+easydock -i input.smi -o output.db -c 4 --protonation /path/to/unipka.sif
+```
+
+To use containerized tools install additional dependencies.
+
 #### Linux
 
 Install `singularity` or `apptainer`. 
@@ -148,8 +155,8 @@ Install `singularity` or `apptainer`.
 #### MacOS
 
 It is impossible to run `singularity/apptainer` images natively on MacOS. Therefore, they will be run automatically through `docker`.
-1. Install `docker`. It should be accessible without sudo privileges.
-2. Create a container using the docker file below and the command:
+1. Install `docker`. It should be accessible without sudo privileges from the command line.
+2. Create a container using the docker file below (save the content as Dockerfile):
 ```
 FROM ubuntu:22.04
 
@@ -163,18 +170,19 @@ RUN wget https://github.com/apptainer/apptainer/releases/download/v1.3.4/apptain
 
 ENTRYPOINT ["apptainer"]
 ```
-Switch to the directory where dockerfile was stored and run the command
+Switch to the directory where the dockerfile was stored and run the command:
 ```bash
 docker build -t apptainer:latest  --platform=linux/amd64 .
 ```
 
-EasyDock will automatically will run sif-images through the docker container with the tag `apptainer:latest`.  
+EasyDock automatically will run a sif-images through the docker container with the tag `apptainer:latest`. Therefore, the `easydock` command will be the same as on Linux.
+If the docker or a docker image will not be detected an error will occur and the protonation will be skipped.
 
 #### Windows
 
 Currently there is no option to run sif-images natively in Win platform. Therefore, if you need to use them, we suggest to install EasyDock inside Windows Subsystem Linux (WSL). 
 
-#### Containers
+#### Pre-built containers
 
 | Container           | Link                                    | Description                                  |
 |---------------------|-----------------------------------------|----------------------------------------------|
@@ -188,6 +196,10 @@ Currently there is no option to run sif-images natively in Win platform. Therefo
 This will create a DB with checked molecules using 4 cores. If `--protonation` argument was not used molecules will keep their input protonations states (this enables docking of molecules protonated by an external tool)
 ```
 easydock -i input.smi -o output.db -c 4
+```
+Initialize DB and enumerate up to 4 stereoisomers for undefined centers and double bonds. By default a single stereoisomer will be generated. This is a reproducible enumeration. 
+```
+easydock -i input.smi -o output.db -c 4 -s 4
 ```
 Initialize DB and protonate molecules with MolGpKa
 ```
@@ -416,7 +428,7 @@ There are two integrated open-source approaches (molgpka and pkasolver) and one 
 1. Chemaxon is pretty reliable, however it requires a paid license.
 2. MolGpKa is a model trained on predictions of Chemaxon and thus aligns well with it. Protonation states of each atom are chosen based on the predicted pKa and pKb values. However, there are certain issues. Some issues were fixed by post-processing SMARTS patterns (avoid protonation of amide groups, etc). However, some issues are difficult to fix (e.g. missing protonation of aliphatic amines, piperizines, etc).  
 3. pkasolver enumerates protonation states and the form closest to pH 7.4 is selected as a relevant one. In some cases it may return invalid SMILES, e.g. `O=C(N1CCN(CC1)C(=O)C=2C=CC=C(C#CC3CC3)C2)C=4NN=C5CCCC45 -> O=C(c1cccc(C#CC2CC2)c1)N1CC[NH](C(=O)c2[nH]nc3c2CCC3)CC1`, which will be skipped and a corresponding warning message will appear. It has many issues with protonated forms (very frequent protonation of amide groups, etc). Therefore, we do not recommend its usage.
-4. Uni-pKa seems the most accurate models among integrated ones and is recommended to use. However, it is the slowest one.
+4. Uni-pKa seems the most accurate models among integrated open-source ones and is recommended to use. However, it is relatively slow.
 
 ### Multiple CPUs
 
