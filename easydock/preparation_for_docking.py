@@ -1,28 +1,16 @@
 import logging
-import os
-import re
-import sys
 import traceback
-from multiprocessing import cpu_count
 
-from meeko import (MoleculePreparation, PDBQTMolecule, PDBQTWriterLegacy,
+from meeko import (MoleculePreparation,
+                   PDBQTMolecule,
+                   PDBQTWriterLegacy,
                    RDKitMolCreate)
 from rdkit import Chem
-from rdkit.Chem import AllChem, Draw
+from rdkit.Chem import AllChem
 import numpy as np
 from sklearn.cluster import AgglomerativeClustering
 from rdkit.Chem.rdMolAlign import AlignMolConformers
 from typing import Optional, Iterator
-
-def cpu_type(x):
-    return max(1, min(int(x), cpu_count()))
-
-
-def filepath_type(x):
-    if x:
-        return os.path.abspath(x)
-    else:
-        return x
 
 
 def str_lower_type(x):
