@@ -25,6 +25,7 @@
   - [Docking from Python](#docking-from-python)
   - [Data retrieval from the output database](#data-retrieval-from-the-output-database)
     - [Examples](#examples-1)
+  - [Protein-ligand fingerprints](#protein-ligand-fingerprints)
 - [Customization](#customization)
 - [Notes](#notes)
   - [Protonation notes](#protonation-notes)
@@ -53,7 +54,8 @@ An important feature, once the database is initialized it will store all command
 - all outputs are stored in an SQLite database
 - interrupted calculations can be continued by invoking the same command or by supplying just a single argument (`--output`) - the existing output database
 - `get_sdf_from_dock_db` is used to extract data from output DB
-- all command line arguments and input files are stored in the setup table and the majority of those parameters cannot be changed later. This will prevent losing input settings. If some changes should be made after DB was created a direct editing the DB can be a solution   
+- all command line arguments and input files are stored in the setup table and the majority of those parameters cannot be changed later. This will prevent losing input settings. If some changes should be made after DB was created a direct editing the DB can be a solution
+- `easydock_plif` command to calculate PLIFs of docked molecules (by `ProLIF`) and similarity to a reference PLIF
 
 ### Pipeline
 
@@ -419,6 +421,37 @@ Retrieve top poses for compounds with docking score less than -10:
 ```
 get_sdf_from_dock_db -i output.db -o output.sdf --fields docking_score --add_sql 'docking_score < -10' 
 ```
+
+
+### Protein-ligand fingerprints
+
+To calculate PLIF for docked molecules specify a DB and a corresponding protein PDB file with all hydrogens (`-c` is a number of cores). The calculated PLIFs will be stored in DB.
+```
+easydock_plif -i output.db -p protein.pdb -c 4
+```
+By default, PLIF only for top scored poses will be computed. To specify other poses use `--poses 1 2 3`.
+
+To retrieve calculated PLIFs from DB use (by default PLIFs only for top poses will be returned):
+```
+easydock_plif -i output.db -o output.txt
+```
+The script can take SDF as input to calculate PLIFs. This can be useful to get PLIF names of a reference ligand.
+```
+easydock_plif -i input.sdf -o output.txt -c 4
+```
+To calculate similarity between PLIFs of molecules in DB an reference ones:
+```
+easydock_plif -i output.db -o output.txt --ref_plif ala31.a.hydrophobic asp86.a.cationic
+```
+Arguments can be combined to compute PLIF and get PLIF similarity in a single command
+```
+easydock_plif -i output.db -p protein.pbd -o output.txt --ref_plif ala31.a.hydrophobic asp86.a.cationic -c 4
+```
+There is also an option to specify ids of molecules for which PLIF should be computed and retrieved (`-d` argument).
+
+#### Note
+Protein PDB file is stored in DB at the first run (for reference and later usage). Therefore, if one computes PLIF for top poses and later wants to compute for other poses, it is not necessary to specify the protein file in a command line. However, if a user will specify protein file which differ from the file stored in DB, the stored file will be replaced and all previously computed PLIFs will be erased without notification. This was done for consistency of data in DB. Be aware about this feature to not lose computed PLIFs.
+
 
 ## Customization
 
