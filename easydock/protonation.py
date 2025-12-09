@@ -11,7 +11,8 @@ from multiprocessing import Pool
 from typing import Iterator, Tuple
 
 from rdkit import Chem
-from easydock.auxiliary import chunk_into_n
+from easydock.containers import apptainer_exec
+from easydock.auxiliary import chunk_into_n, expand_path
 
 """
 There two types of protonation programs:
@@ -91,13 +92,13 @@ def read_protonate_chemaxon(fname):
                 yield smi, mol_name
 
 
-def __protonate_dimorphite_mp(input_output_fname: tuple[str, str]):
+def __protonate_dimorphite_mp(input_output_fname: Tuple[str, str]):
     from dimorphite_dl.dimorphite_dl import run as dimorphite_run
     input_fname, output_fname = input_output_fname
     dimorphite_run(smiles_file=input_fname, output_file=output_fname, max_variants=1, silent=True, min_ph=7.4, max_ph=7.4)
 
 
-def protonate_dimorphite(input_fname: Iterator[tuple[str, str]], output_fname: str, ncpu: int = 1):
+def protonate_dimorphite(input_fname: Iterator[Tuple[str, str]], output_fname: str, ncpu: int = 1):
 
     with open(input_fname,'r') as input_file:
         smi_l = input_file.readlines()
@@ -314,16 +315,9 @@ def __protonate_molgpka(args, models):
 def protonate_apptainer(input_fname: str, output_fname: str, container_fname: str) -> None:
 
     bind_path = set()
-    bind_path.add(os.path.dirname(os.path.abspath(input_fname)))
-    bind_path.add(os.path.dirname(os.path.abspath(output_fname)))
-    bind_arg = ','.join(f'{p}' for p in bind_path)
+    bind_path.add(os.path.dirname(expand_path(input_fname)))
+    bind_path.add(os.path.dirname(expand_path(output_fname)))
 
-    cmd = ['apptainer', 'run', '-B', bind_arg, container_fname, 'protonate', '-i', input_fname, '-o', output_fname]
-    cmd = ' '.join(cmd)
-
-    try:
-        subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)
-
-    except subprocess.CalledProcessError as e:
-        logging.warning(f'(Uni-pKa) Error running the command {cmd}\n'
-                        f'{str(e)}\n')
+    apptainer_exec(container_fname,
+                   ['protonate', '-i', input_fname, '-o', output_fname],
+                   list(bind_path))

@@ -1,11 +1,16 @@
 # EasyDock - Python module to automate molecular docking
 
 ## Table of content
-- [Installation](#installation)
-  - [Dependencies](#dependencies)
 - [Description](#description)
   - [Features](#features)
   - [Pipeline](#pipeline)
+- [Installation](#installation)
+  - [Dependencies](#dependencies)
+  - [Setup virtualization to run containers](#setup-virtualization-to-run-containers)
+    - [Linux](#linux)
+    - [MacOS](#macos)
+    - [Windows](#windows)
+    - [Pre-built containers](#pre-built-containers)
 - [Examples](#examples)
   - [Initialization of a database](#initialization-of-a-database)
   - [Docking from command line](#docking-from-command-line)
@@ -13,6 +18,8 @@
     - [Gnina / Smina](#gnina--smina)
     - [Vina-GPU / QVina-GPU / QVinaW-GPU](#vina-gpu--qvina-gpu--qvinaw-gpu)
     - [QVina2 / Qvina-W](#qvina2--qvina-w)
+    - [Config.yml](#configyml)
+    - [Docking using containerized programs](#docking-using-containerized-programs)
   - [Sampling of saturated rings](#sampling-of-saturated-rings)
   - [Docking using multiple servers](#docking-using-multiple-servers)
   - [Docking from Python](#docking-from-python)
@@ -25,6 +32,48 @@
 - [Changelog](#changelog)
 - [License](#licence)
 - [Citation](#citation)
+
+## Description
+
+The fully automatic pipeline for molecular docking.  
+
+An important feature, once the database is initialized it will store all command line arguments and input files as a part of the setup table. This will allow to easy rerun interrupted calculations and keep all data in one place for consistency, but this also makes impossible to change some settings afterwards by providing other values in command line arguments. The existing database will never be overwritten. Therefore, if the database was initialized wrongly, it should be deleted before rerun the command line script. Alternatively, incorrect values of arguments can be edited directly in the database.  
+
+### Features
+
+- the major script `easydock` supports docking with `vina`, `gnina` (`gnina` also supports `smina` and its custom scoring functions), `qvina` (`qvina` is a collective term to use either QVina2 or QVina-W), `vina-gpu` (`vina-gpu` is a collective term to use any of Vina-GPU, QVina2-GPU or QVinaW-GPU)
+- can be used as a command line utility or imported as a python module
+- if input molecules are 3D, these conformations will be used as starting ones for docking (enable usage of external conformer generators)
+- input molecules are checked for salts and attempted to fix by SaltRemover 
+- stereoisomers can be enumerated for unspecified chiral centers and double bonds (since some compounds may require very long runtimes, the maximum runtime for individual molecules was set to 300 sec)
+- several protonation options: `uni-pka`, `molgpka`, `chemaxon` and `pkasolver` (check notes below). If omitted the input protonation states will be used (enables usage of external protonation tools)
+- docking of compounds with saturated rings can be enhanced by additional sampling of starting ring conformers and only the best one is stored to the database
+- supports distributed computing using `dask` library
+- supports docking of boron-containing compounds for programs which cannot natively process boron atoms (boron is replaced with carbon before docking and returned back)
+- all outputs are stored in an SQLite database
+- interrupted calculations can be continued by invoking the same command or by supplying just a single argument (`--output`) - the existing output database
+- `get_sdf_from_dock_db` is used to extract data from output DB
+- all command line arguments and input files are stored in the setup table and the majority of those parameters cannot be changed later. This will prevent losing input settings. If some changes should be made after DB was created a direct editing the DB can be a solution   
+
+### Pipeline
+
+The pipeline consists of two major parts which can be run separately or simultaneously:
+1. Initialization of database, which includes:
+- input SMILES are converted in 3D by RDKit, if input is 3D structures in SDF their conformations wil be taken as starting without changes.
+- compounds having salts are stripped, if this fails the whole compound will be omitted for docking reporting to STDERR 
+- up to a specified number of stereoisomers are enumerated for molecules with undefined chiral centers or double bond configurations (by default 1 random but reproducible stereoisomer is generated)
+- ligands are protonated by MolGpKa/Chemaxon/pKasolver at pH 7.4 and the most stable tautomers are generated (optional, requires a Chemaxon license)
+2. Docking step includes:
+- molecules are converted in PDBQT format using Meeko
+- docking with `vina`/`gnina`/`qvina`/`vina-gpu`
+- top docked poses are converted in MOL format and stored into output DB along with docking scores
+
+### Notes
+
+- These two parts of the pipeline allows to create a DB and reuse it for docking with different proteins/settings/etc.  
+- There is also a script `make_clean_copy` which creates a copy of an existing DB removing all docking data to use it for docking with different proteins/settings/etc.        
+- Protonation with MolGpKa will run in a single cpu mode, but it will use 25-50% of available cores.   
+
 
 ## Installation
 
@@ -79,54 +128,66 @@ pip install torch-scatter torch-sparse torch-cluster torch-spline-conv -f https:
 ```
 pip install torch==1.13.1+cpu  --extra-index-url https://download.pytorch.org/whl/cpu
 pip install torch-geometric==2.0.1
-pip install torch_scatter==2.1.1+pt113cpu -f https://data.pyg.org/whl/torch-1.13.1%2Bcpu.html
-pip install torch_sparse==0.6.17+pt113cpu -f https://data.pyg.org/whl/torch-1.13.1%2Bcpu.html
-pip install torch_spline_conv==1.2.2+pt113cpu -f https://data.pyg.org/whl/torch-1.13.1%2Bcpu.html
+pip install torch_scatter==2.1.1 -f https://data.pyg.org/whl/torch-1.13.1%2Bcpu.html
+pip install torch_sparse==0.6.17 -f https://data.pyg.org/whl/torch-1.13.1%2Bcpu.html
+pip install torch_spline_conv==1.2.2 -f https://data.pyg.org/whl/torch-1.13.1%2Bcpu.html
 pip install cairosvg svgutils
 pip install git+https://github.com/Feriolet/dimorphite_dl.git
 pip install git+https://github.com/DrrDom/pkasolver.git
 ```
 
-## Description
+### Setup virtualization to run containers
 
-The fully automatic pipeline for molecular docking.  
+Some external tools may require specific dependencies which may conflict with the main environment. These tools can be supplied as containers. For example, we provide a container for Uni-pKa model to make protonation.
+Currently EasyDock accepts only `singularity/apptainer` images (sif-files).
 
-An important feature, once the database is initialized it will store all command line arguments and input files as a part of the setup table. This will allow to easy rerun interrupted calculations and keep all data in one place for consistency, but this also makes impossible to change some settings afterwards by providing other values in command line arguments. The existing database will never be overwritten. Therefore, if the database was initialized wrongly, it should be deleted before rerun the command line script. Alternatively, incorrect values of arguments can be edited directly in the database.  
+Example protonation with Uni-pKa:
+```
+easydock -i input.smi -o output.db -c 4 --protonation /path/to/unipka.sif
+```
 
-### Features
+To use containerized tools install additional dependencies.
 
-- the major script `easydock` supports docking with `vina`, `gnina` (`gnina` also supports `smina` and its custom scoring functions), `qvina` (`qvina` is a collective term to use either QVina2 or QVina-W), `vina-gpu` (`vina-gpu` is a collective term to use any of Vina-GPU, QVina2-GPU or QVinaW-GPU)
-- can be used as a command line utility or imported as a python module
-- if input molecules are 3D, these conformations will be used as starting ones for docking (enable usage of external conformer generators)
-- input molecules are checked for salts and attempted to fix by SaltRemover 
-- stereoisomers can be enumerated for unspecified chiral centers and double bonds (since some compounds may require very long runtimes, the maximum runtime for individual molecules was set to 300 sec)
-- several protonation options: molgpka, chemaxon and pkasolver (check notes below). If omitted input protonation state will be used (enables usage of external protonation tools)
-- docking of compounds with saturated rings can be enhanced by additional sampling of starting ring conformers and only the best one is stored to the database
-- supports distributed computing using `dask` library
-- supports docking of boron-containing compounds using `vina` and `smina` (boron is replaced with carbon before docking and returned back)
-- all outputs are stored in an SQLite database
-- interrupted calculations can be continued by invoking the same command or by supplying just a single argument (`--output`) - the existing output database
-- `get_sdf_from_dock_db` is used to extract data from output DB
-- all command line arguments and input files are stored in the setup table and the majority of those parameters cannot be changed later. This will prevent losing input settings. If some changes should be made after DB was created a direct editing the DB can be a solution   
+#### Linux
 
-### Pipeline
+Install `singularity` or `apptainer`. 
 
-The pipeline consists of two major parts which can be run separately or simultaneously:
-1. Initialization of database, which includes:
-- input SMILES are converted in 3D by RDKit, if input is 3D structures in SDF their conformations wil be taken as starting without changes.
-- compounds having salts are stripped, if this fails the whole compound will be omitted for docking reporting to STDERR 
-- up to a specified number of stereoisomers are enumerated for molecules with undefined chiral centers or double bond configurations (by default 1 random but reproducible stereoisomer is generated)
-- ligands are protonated by MolGpKa/Chemaxon/pKasolver at pH 7.4 and the most stable tautomers are generated (optional, requires a Chemaxon license)
-2. Docking step includes:
-- molecules are converted in PDBQT format using Meeko
-- docking with `vina`/`gnina`/`qvina`/`vina-gpu`
-- top docked poses are converted in MOL format and stored into output DB along with docking scores
+#### MacOS
 
-### Notes
+It is impossible to run `singularity/apptainer` images natively on MacOS. Therefore, they will be run automatically through `docker`.
+1. Install `docker`. It should be accessible without sudo privileges from the command line.
+2. Create a container using the docker file below (save the content as Dockerfile):
+```
+FROM ubuntu:22.04
 
-- These two parts of the pipeline allows to create a DB and reuse it for docking with different proteins/settings/etc.  
-- There is also a script `make_clean_copy` which creates a copy of an existing DB removing all docking data to use it for docking with different proteins/settings/etc.        
-- Protonation with MolGpKa will run in a single cpu mode, but it will use 25-50% of available cores.   
+# Install Apptainer
+RUN apt-get update && apt-get install -y \
+    wget build-essential squashfs-tools uidmap fuse3 git \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN wget https://github.com/apptainer/apptainer/releases/download/v1.3.4/apptainer_1.3.4_amd64.deb \
+    && dpkg -i apptainer_1.3.4_amd64.deb
+
+ENTRYPOINT ["apptainer"]
+```
+Switch to the directory where the dockerfile was stored and run the command:
+```bash
+docker build -t apptainer:latest  --platform=linux/amd64 .
+```
+
+EasyDock automatically will run a sif-images through the docker container with the tag `apptainer:latest`. Therefore, the `easydock` command will be the same as on Linux.
+If the docker or a docker image will not be detected an error will occur and the protonation will be skipped.
+
+#### Windows
+
+Currently there is no option to run sif-images natively in Win platform. Therefore, if you need to use them, we suggest to install EasyDock inside Windows Subsystem Linux (WSL). 
+
+#### Pre-built containers
+
+| Container           | Link                                    | Description                                  |
+|---------------------|-----------------------------------------|----------------------------------------------|
+| unipka.sif          | https://doi.org/10.5281/zenodo.17506577 | Uni-pKa model for small molecule protonation |
+
 
 ## Examples
 
@@ -136,9 +197,17 @@ This will create a DB with checked molecules using 4 cores. If `--protonation` a
 ```
 easydock -i input.smi -o output.db -c 4
 ```
+Initialize DB and enumerate up to 4 stereoisomers for undefined centers and double bonds. By default a single stereoisomer will be generated. This is a reproducible enumeration. 
+```
+easydock -i input.smi -o output.db -c 4 -s 4
+```
 Initialize DB and protonate molecules with MolGpKa
 ```
 easydock -i input.smi -o output.db -c 4 --protonation molgpka
+```
+Initialize DB and protonate molecules with Uni-pKa incorporated in a sif-container
+```
+easydock -i input.smi -o output.db -c 4 --protonation /path/to/unipka.sif
 ```
 
 ### Docking from command line
@@ -205,21 +274,6 @@ ncpu: 1
 seed: 0
 ```
 
-To use `gnina` (or other tools) from within a `docker/apptainer` container it is necessary to change the `script_file` argument. There is also a need to bind a local directory to a directory inside a container using the same path (in `docker` there is `-v` argument for that).
-```
-script_file: apptainer exec -B /path/to/dir:/path/to/dir container.sif gnina
-protein: /path/to/dir/protein.pdbqt
-protein_setup: /path/to/dir/grid.txt
-exhaustiveness: 8
-scoring: default
-cnn_scoring: rescore
-cnn: dense_ensemble
-n_poses: 10
-addH: False
-ncpu: 1
-seed: 0
-```
-
 #### Vina-GPU / QVina-GPU / QVinaW-GPU
 
 To use any of Vina-GPU, QVina2-GPU or QVinaW-GPU use `--program vina-gpu`:
@@ -264,6 +318,28 @@ Specify path to either QVina2 or QVina-W to use a particular program.
 #### Config.yml
 
 There are two ways to pass arguments to programs which are executed by external binaries (currently these are all programs except vina). The first way is to specify arguments and their values as individual entries in `config.yml`. However, not all arguments can be set in this way. The second approach is specify constant arguments in the `script_file` value. For example, if you want to customize `--energy_range` for `qvina` use `script_file: /path/to/bin/dir/qvina2 --energy_range 5`. Each argument should be specified in either way, not both.
+
+#### Docking using containerized programs
+
+Programs above can be run through their `docker/singularity/apptainer` containers. This will require to change only the value of the `script_file` argument. 
+
+Below is an example how to use `gnina` from within an `apptainer` container. Insert a whole command to bu invoked as a main program. Arguments from config.yml will be attached by EasyDock.  
+
+Please note, that there is also a need to mount a local directory(ies), where protein and grid box files are stored, to a directory inside a container (in `docker` there is `-v` argument for that).
+```
+script_file: apptainer exec -B /path/to/dir:/path/to/dir container.sif gnina
+protein: /path/to/dir/protein.pdbqt
+protein_setup: /path/to/dir/grid.txt
+exhaustiveness: 8
+scoring: default
+cnn_scoring: rescore
+cnn: dense_ensemble
+n_poses: 10
+addH: False
+ncpu: 1
+seed: 0
+```
+
 
 ### Sampling of saturated rings
 
@@ -352,6 +428,7 @@ There are two integrated open-source approaches (molgpka and pkasolver) and one 
 1. Chemaxon is pretty reliable, however it requires a paid license.
 2. MolGpKa is a model trained on predictions of Chemaxon and thus aligns well with it. Protonation states of each atom are chosen based on the predicted pKa and pKb values. However, there are certain issues. Some issues were fixed by post-processing SMARTS patterns (avoid protonation of amide groups, etc). However, some issues are difficult to fix (e.g. missing protonation of aliphatic amines, piperizines, etc).  
 3. pkasolver enumerates protonation states and the form closest to pH 7.4 is selected as a relevant one. In some cases it may return invalid SMILES, e.g. `O=C(N1CCN(CC1)C(=O)C=2C=CC=C(C#CC3CC3)C2)C=4NN=C5CCCC45 -> O=C(c1cccc(C#CC2CC2)c1)N1CC[NH](C(=O)c2[nH]nc3c2CCC3)CC1`, which will be skipped and a corresponding warning message will appear. It has many issues with protonated forms (very frequent protonation of amide groups, etc). Therefore, we do not recommend its usage.
+4. Uni-pKa seems the most accurate models among integrated open-source ones and is recommended to use. However, it is relatively slow.
 
 ### Multiple CPUs
 
