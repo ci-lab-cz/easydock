@@ -5,7 +5,7 @@
   - [Features](#features)
   - [Pipeline](#pipeline)
 - [Installation](#installation)
-  - [Dependencies](#dependencies)
+  - [Step-by-step installation](#step-by-step-installation)
   - [Setup virtualization to run containers](#setup-virtualization-to-run-containers)
     - [Linux](#linux)
     - [MacOS](#macos)
@@ -77,6 +77,12 @@ The pipeline consists of two major parts which can be run separately or simultan
 
 ## Installation
 
+Install an environment with the latest version of `EasyDock` from github, `vina` as a docking tool and `MolGpKa` as a protonation tool.
+```bash
+conda env create -f env.yml
+```
+
+### Step-by-step installation
 ```
 pip install easydock
 ```
@@ -85,7 +91,7 @@ or the latest version from github
 pip install git+https://github.com/ci-lab-cz/easydock.git
 ```
 
-### Dependencies
+#### Dependencies
 
 - from conda
 ```
