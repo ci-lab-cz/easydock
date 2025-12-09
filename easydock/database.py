@@ -1,4 +1,3 @@
-import datetime
 import logging
 import os
 import json
@@ -9,7 +8,7 @@ import traceback
 from copy import deepcopy
 from functools import partial
 from multiprocessing import Pool
-from typing import Optional, Union
+from typing import Optional, Union, List, Dict
 
 import yaml
 
@@ -97,7 +96,10 @@ def create_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', '
             cur.execute(f"INSERT INTO setup (yaml) VALUES (?)", values)
 
         conn.commit()
-        init_plif_var_tables(conn)
+
+        # create some tables separately to keep backward compatibility
+        create_variables_table(conn)
+        create_plif_tables(conn)
 
 
 def populate_setup_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', 'protein_setup')):
@@ -345,7 +347,7 @@ def update_db(db_conn, mol_id, data, table_name='mols', commit=True):
 def insert_db(db_fname, data, cols=None, table_name='mols'):
     """
 
-    :param db_fname:
+    :param db_fname: DB file name or sqlite3.Connection object
     :param data: list of values to insert or a list of lists to insert multiple records
     :param cols: list of corresponding column names in the same order
     :param table_name:
@@ -353,7 +355,15 @@ def insert_db(db_fname, data, cols=None, table_name='mols'):
     """
     inserted_row_count = 0
     if data:
-        with sqlite3.connect(db_fname, timeout=90) as conn:
+
+        should_close = False
+        if isinstance(db_fname, sqlite3.Connection):
+            conn = db_fname
+        else:
+            conn = sqlite3.connect(db_fname, timeout=90)
+            should_close = True
+
+        try:
             # transform data to list of lists to perform executemany and be compatible with data if it is lists of lists
             if not isinstance(data[0], (list, tuple)):
                 data = [data]
@@ -369,6 +379,11 @@ def insert_db(db_fname, data, cols=None, table_name='mols'):
             conn.commit()
             cur.execute(f"SELECT COUNT(rowid) FROM {table_name}")
             inserted_row_count = cur.fetchone()[0] - row_count
+
+        except sqlite3.OperationalError:
+            if should_close:
+                conn.close()
+
     return inserted_row_count
 
 
@@ -623,20 +638,24 @@ def select_from_db(cur, sql, values):
             yield item
 
 
-def get_mols(conn, mol_ids, field_name='mol_block', return_rowid=False, poses=None):
+def get_mols(conn, mol_ids, field_name='mol_block', poses=None):
     """
     Returns list of Mol objects from docking DB, order is arbitrary, molecules with errors will be silently skipped
     :param conn: connection to docking DB
     :param mol_ids: list of molecule ids (ignores stereo_id)
     :param field_name: name of the field from which a molecule should be retrieved
-    :return: list of RDKit Mol objects
+    :param poses: list of poses, if None the first pose will be used. Number of poses will be inserted into SDF field
+                  _easydock_pose
+    :return: list of RDKit Mol objects. To each Mol object a field '_easydock_rowid' will be added.
     """
+
+    if field_name != 'mol_block':
+        poses = [1]
 
     if poses is None:
         poses = [1]
 
-    if len(poses) > 1 and 1 in poses:
-        poses.remove(1)
+    poses = list(sorted(set(poses)))
 
     if field_name in ['mol_block', 'source_mol_block']:
         func = partial(Chem.MolFromMolBlock, removeHs=False)
@@ -647,39 +666,35 @@ def get_mols(conn, mol_ids, field_name='mol_block', return_rowid=False, poses=No
                              f'Allowed: mol_block, source_mol_block, smi. Supplied: {field_name}')
 
     cur = conn.cursor()
-    # one "?" because we use the special retrieve function - select_from_db - which does it in chunks
     t = ''
-    if return_rowid:
-        t += ', rowid'
     if poses != [1]:
-        t += ', pdb_block'
+        t = ', pdb_block'
 
-    sql = f'SELECT {field_name}{t} FROM mols WHERE id IN (?) AND {field_name} IS NOT NULL'
+    sql = f'SELECT id, stereo_id, rowid, {field_name} {t} FROM mols WHERE id IN (?) AND {field_name} IS NOT NULL'
 
     mols = []
-    pose= ''
-    for items in select_from_db(cur, sql, mol_ids):
-        m = func(items[0])
-        if m:
-            Chem.AssignStereochemistryFrom3D(m)
-            if len(items) == 2:
-                mols.append((m, + items[1], 1))
-            elif len(items) == 3:
-                pdb_block_list = items[2].strip().split('ENDMDL')
-                mols.append((m, items[1], 1))
-                for i in poses:
+    for items in select_from_db(cur, sql, mol_ids):   # mol_block/smi, rowid, pdb_block
+        m0 = func(items[3])
+        if m0:
+            m0.SetIntProp('_easydock_rowid', items[2])
+            m0.SetIntProp('_easydock_pose', 1)
+            # Chem.AssignStereochemistryFrom3D(m0)  # TODO check to work with 2D structures from SMILES
+            if 1 in poses:
+                mols.append(m0)
+            if poses != [1]:
+                pdb_block_list = items[4].strip().split('ENDMDL')
+                for i in [j for j in poses if j != 1]:
                     try:
                         pose = pdb_block_list[i - 1]
-                    except IndexError:
-                        sys.stderr.write(f'Pose number {i} is not in the PDB block. '
-                                         f'It will be skipped.')
-                    if pose:
-                        pose_mol_block = pdbqt2molblock(pose + 'ENDMDL\n', m)
+                        pose_mol_block = pdbqt2molblock(pose + 'ENDMDL\n', m0)
                         m = Chem.MolFromMolBlock(pose_mol_block)
-                        mols.append((m, items[1], i))
-
-            else:
-                mols.append(m)
+                        m.SetProp('_Name', f'{items[0]}_{items[1]}')
+                        m.SetIntProp('_easydock_rowid', items[2])
+                        m.SetIntProp('_easydock_pose', i)
+                        mols.append(m)
+                    except IndexError:
+                        logging.warning(f'Pose number {i} is not in the PDB block of {m0.GetProp("_Name")}. '
+                                        f'It will be skipped.')
     cur.close()
     return mols
 
@@ -719,7 +734,13 @@ def get_docked_mol_ids(conn):
     return {row[0] for row in res}
 
 
-def tables_exist(conn, table_names):
+def tables_exist(conn, table_names: List[str]) -> Dict[str, bool]:
+    """
+    Returns a dictionary with table names as keys and True/False as values
+    :param conn:
+    :param table_names:
+    :return:
+    """
     placeholders = ','.join('?' for _ in table_names)
 
     query = f"""
@@ -733,14 +754,20 @@ def tables_exist(conn, table_names):
     return {name: (name in found) for name in table_names}
 
 
-def load_module_table(conn, module: str):
+def get_variables_for_module(conn, module: str):
+    """
+    Returns a dictionary with variables names and values for a given module
+    :param conn:
+    :param module:
+    :return:
+    """
     cur = conn.execute(
-        "SELECT name, value_type, value FROM variables WHERE module=?",
+        "SELECT name, value_type, value FROM variables WHERE module = ?",
         (module,)
     )
 
     rows = cur.fetchall()
-    table = []
+    output = dict()
 
     for name, value_type, value in rows:
         if value_type == "int":
@@ -752,35 +779,34 @@ def load_module_table(conn, module: str):
         else:  # str
             parsed = value
 
-        table.append({
-            "name": name,
-            "value_type": value_type,
-            "value": parsed
-        })
+        output[name] = parsed
 
-    return table
+    return output
 
 
-def init_plif_var_tables(conn):
-    """
-
-    """
+def create_plif_tables(conn):
     cur = conn.cursor()
-
     cur.executescript("""
-        CREATE TABLE IF NOT EXISTS plif_name (
+        CREATE TABLE IF NOT EXISTS plif_names (
             plif_id INTEGER PRIMARY KEY AUTOINCREMENT,
             contact_name TEXT UNIQUE
         );
 
         CREATE TABLE IF NOT EXISTS plif_res (
-            id INTEGER,
+            mols_rowid INTEGER,
             pose INTEGER,
             plif_id INTEGER,
-            FOREIGN KEY (id) REFERENCES mols(id),
-            FOREIGN KEY (plif_id) REFERENCES plif_name(plif_id)
+            UNIQUE(mols_rowid, pose, plif_id),
+            FOREIGN KEY (mols_rowid) REFERENCES mols(rowid),
+            FOREIGN KEY (plif_id) REFERENCES plif_names(plif_id)
         );
-        
+    """)
+    conn.commit()
+
+
+def create_variables_table(conn):
+    cur = conn.cursor()
+    cur.executescript("""
         CREATE TABLE IF NOT EXISTS variables (
             module      TEXT NOT NULL,
             name        TEXT NOT NULL,
@@ -790,12 +816,11 @@ def init_plif_var_tables(conn):
             PRIMARY KEY (module, name)
         );
     """)
-
     conn.commit()
-    return conn
 
 
 def set_variable(conn, module: str, name: str, value):
+
     if isinstance(value, (int, float, str)):
         value_type = type(value).__name__
         value_str = str(value)
@@ -803,16 +828,14 @@ def set_variable(conn, module: str, name: str, value):
         value_type = "json"
         value_str = json.dumps(value)
 
-    now = datetime.datetime.now()
-
     conn.execute("""
         INSERT INTO variables (module, name, value_type, value, updated_at)
-        VALUES (?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, datetime(current_timestamp, 'localtime'))
         ON CONFLICT(module, name)
         DO UPDATE SET 
             value = excluded.value,
             value_type = excluded.value_type,
             updated_at = excluded.updated_at;
-    """, (module, name, value_type, value_str, now))
+    """, (module, name, value_type, value_str))
 
     conn.commit()

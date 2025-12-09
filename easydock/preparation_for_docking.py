@@ -13,13 +13,6 @@ from rdkit.Chem.rdMolAlign import AlignMolConformers
 from typing import Optional, Iterator
 
 
-def str_lower_type(x):
-    if x:
-        return x.lower()
-    else:
-        return x
-
-
 def mol_is_3d(mol):
     if mol.GetConformers() and list(mol.GetConformers())[0].Is3D():
         return True
@@ -366,7 +359,7 @@ def assign_bonds_from_template(template_mol, mol):
                                             a.GetAtomicNum() != 6])
     mol = AllChem.AssignBondOrdersFromTemplate(template_mol_, mol)
     Chem.SanitizeMol(mol)
-    Chem.AssignStereochemistry(mol, cleanIt=True, force=True, flagPossibleStereoCenters=True)
+    Chem.AssignStereochemistry(mol, cleanIt=True, force=True, flagPossibleStereoCenters=True)  # TODO why not AssignStereochemistryFrom3D?
     return mol
 
 

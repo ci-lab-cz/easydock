@@ -26,3 +26,10 @@ def filepath_type(x):
         return os.path.abspath(x)
     else:
         return x
+
+
+def str_lower_type(x):
+    if x:
+        return x.lower()
+    else:
+        return x

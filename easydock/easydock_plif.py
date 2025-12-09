@@ -1,31 +1,39 @@
 import argparse
+import logging
 import sqlite3
 import os
 import pandas as pd
 import prolif as plf
+import sys
 from typing import Optional, List
 from rdkit import Chem, DataStructs
+
 from easydock.auxiliary import split_generator_to_chunks
-from easydock.preparation_for_docking import cpu_type, filepath_type, str_lower_type
-from easydock.database import get_mols, get_docked_mol_ids, tables_exist, init_plif_var_tables, load_module_table, set_variable
+from easydock.args_validation import cpu_type, filepath_type, str_lower_type
+from easydock.database import (
+    get_mols,
+    get_docked_mol_ids,
+    create_variables_table,
+    create_plif_tables,
+    get_variables_for_module,
+    set_variable,
+    insert_db
+)
 
 
-def insert_plif_data(df, conn):
+def insert_plif_data(conn, df):
     """
 
     """
     cur = conn.cursor()
 
-
+    # insert new contact names
     contacts = [(c,) for c in df.columns[2:]]
-    cur.executemany("INSERT OR IGNORE INTO plif_name (contact_name) VALUES (?)", contacts)
+    cur.executemany("INSERT OR IGNORE INTO plif_names (contact_name) VALUES (?)", contacts)
     conn.commit()
 
-
-    cur.execute("SELECT plif_id, contact_name FROM plif_name")
-    plif_map = dict(cur.fetchall())  # {plif_id: contact_name}
-    plif_map = {v: k for k, v in plif_map.items()}  # {contact_name: plif_id}
-
+    cur.execute("SELECT plif_id, contact_name FROM plif_names")
+    plif_map = {v: k for k, v in cur.fetchall()}  # {contact_name: plif_id}
 
     rows_to_insert = []
     for mol_name, row in df.iterrows():
@@ -38,42 +46,35 @@ def insert_plif_data(df, conn):
                 contact_id = plif_map[contact_name]
                 rows_to_insert.append((rowid, pose, contact_id))
 
-    cur.executemany(
-        "INSERT INTO plif_res (id, pose, plif_id) VALUES (?, ?, ?)",
-        rows_to_insert
-    )
-    conn.commit()
+    insert_db(conn, rows_to_insert, ['mols_rowid', 'pose', 'plif_id'], 'plif_res')
     cur.close()
 
 
-def calc_plif(mols, plif_protein_fname, ncpu=1):
+def calc_plif(mols, plif_protein, ncpu=1):
     """
     Calculate Tversky similarity between reference plif and plif of molecules. For Tversky index alpha was set 1 and
     beta to 0. This means that all bits not present in the reference plif will be ignored.
-    May be changed in future.
+    May be changed in the future.
 
-    :param mol: RDKit Mol
-    :param plif_protein_fname: PDB file with a protein containing all hydrogens
-    :param plif_ref_df: pandas.DataFrame of reference interactions (with a single row simplified header, dot-separated)
+    :param mols: list of RDKit Mol
+    :param plif_protein: PDB block with a protein containing all hydrogens
     :param ncpu: number of cpus to use
     :return:
     """
-    mol_names = [mol.GetProp('_Name') for mol, _, _ in mols]
-    mols_ = [mol for mol, _, _ in mols]
-    rowids = [rowid for _, rowid, _ in mols]
-    poses = [pose for _, _, pose in mols]
-    plf_prot = plf.Molecule(Chem.MolFromPDBFile(plif_protein_fname, removeHs=False, sanitize=False))
+    # mol_names = [mol.GetProp('_Name') for mol, _, _ in mols]
+    # mols_ = [mol for mol, _, _ in mols]
+    # rowids = [rowid for _, rowid, _ in mols]
+    # poses = [pose for _, _, pose in mols]
+    plf_prot = plf.Molecule(Chem.MolFromPDBBlock(plif_protein, removeHs=False, sanitize=True))
     fp = plf.Fingerprint(['Hydrophobic', 'HBDonor', 'HBAcceptor', 'Anionic', 'Cationic', 'CationPi', 'PiCation',
                           'FaceToFace', 'EdgeToFace', 'MetalAcceptor'])
-    #fp.run_from_iterable([plf.Molecule.from_rdkit(mol)], plf_prot, n_jobs=ncpu)
-    fp.run_from_iterable([plf.Molecule.from_rdkit(mol) for mol in mols_], plf_prot, n_jobs=ncpu)
+    fp.run_from_iterable([plf.Molecule.from_rdkit(mol) for mol in mols], plf_prot, n_jobs=ncpu)
     df = fp.to_dataframe()
     df.columns = ['.'.join(item.strip().lower() for item in items[1:]) for items in df.columns]
-    df.insert(0, 'rowid', rowids)
-    df.insert(1, 'pose', poses)
-    df.index = mol_names
+    df.insert(0, 'rowid', [m.GetIntProp('_easydock_rowid') for m in mols])
+    df.insert(1, 'pose', [m.GetIntProp('_easydock_pose') for m in mols])
+    df.index = [m.GetProp('_Name') for m in mols]
     return df
-
 
 
 def make_plif_summary_to_file(
@@ -91,154 +92,178 @@ def make_plif_summary_to_file(
     if os.path.exists(output_file):
         os.remove(output_file)
 
-    conn = sqlite3.connect(db_path)
+    with sqlite3.connect(db_path) as conn:
 
-    contacts = pd.read_sql_query("SELECT DISTINCT contact_name FROM plif_name", conn)['contact_name'].tolist()
+        contacts = pd.read_sql_query("SELECT DISTINCT contact_name FROM plif_names", conn)['contact_name'].tolist()
 
-    cases = ",\n       ".join(
-        [f"MAX(CASE WHEN n.contact_name = '{c}' THEN 1 ELSE 0 END) AS '{c}'" for c in contacts])
+        cases = ",\n       ".join(
+            [f"MAX(CASE WHEN n.contact_name = '{c}' THEN 1 ELSE 0 END) AS '{c}'" for c in contacts])
 
-    base_query = f"""
-    SELECT m.id, m.stereo_id, r.pose, {cases} FROM plif_res r 
-    JOIN mols m ON m.rowid = r.id 
-    JOIN plif_name n ON n.plif_id = r.plif_id"""
+        base_query = f"""
+        SELECT m.id, m.stereo_id, p.pose, {cases} FROM plif_res p 
+        JOIN mols m ON m.rowid = p.mols_rowid 
+        JOIN plif_names n ON n.plif_id = p.plif_id"""
 
-    conditions = []
-    params = []
+        conditions = []
+        params = []
 
-    if ids:
-        placeholders = ','.join(['?'] * len(ids))
-        conditions.append(f"m.id IN ({placeholders})")
-        params.extend(ids)
+        if ids:
+            placeholders = ','.join(['?'] * len(ids))
+            conditions.append(f"m.id IN ({placeholders})")
+            params.extend(ids)
 
-    if poses:
-        placeholders = ','.join(['?'] * len(poses))
-        conditions.append(f"r.pose IN ({placeholders})")
-        params.extend(poses)
+        if poses:
+            placeholders = ','.join(['?'] * len(poses))
+            conditions.append(f"p.pose IN ({placeholders})")
+            params.extend(poses)
 
-    if conditions:
-        base_query += " WHERE " + " AND ".join(conditions)
+        if conditions:
+            base_query += " WHERE " + " AND ".join(conditions)
 
-    base_query += "\nGROUP BY m.id, r.pose"
+        base_query += "\nGROUP BY m.id, p.pose"
 
-    if ids:
-        case_str = ' '.join(f'WHEN "{mol_id}" THEN {i}' for i, mol_id in enumerate(ids, 1))
-        base_query += f"\nORDER BY CASE m.id {case_str} END, r.pose"
+        if ids:
+            case_str = ' '.join(f'WHEN "{mol_id}" THEN {i}' for i, mol_id in enumerate(ids, 1))
+            base_query += f"\nORDER BY CASE m.id {case_str} END, p.pose"
 
-    else:
-        base_query += "\nORDER BY m.id, r.pose"
+        else:
+            base_query += "\nORDER BY m.id, p.pose"
 
-    offset = 0
-    first_batch = True
+        offset = 0
+        first_batch = True
 
-    while True:
-        batch_query = f"{base_query} LIMIT {batch_size} OFFSET {offset}"
-        df_batch = pd.read_sql_query(batch_query, conn, params=params)
-        if df_batch.empty:
-            break
+        while True:
+            batch_query = f"{base_query} LIMIT {batch_size} OFFSET {offset}"
+            df_batch = pd.read_sql_query(batch_query, conn, params=params)
+            if df_batch.empty:
+                break
 
-        if plif_list is not None:
-            plif_ref_df = pd.DataFrame([{col: (1 if col in plif_list else 0) for col in df_batch.columns}])
+            if plif_list is not None:
+                plif_ref_df = pd.DataFrame([{col: (1 if col in plif_list else 0) for col in df_batch.columns}])
 
-            with pd.option_context("future.no_silent_downcasting", True):
-                df = pd.concat([plif_ref_df, df_batch], ignore_index=True)
-                contacts_cols = df.columns[3:]
-                df[contacts_cols] = df[contacts_cols].fillna(False).astype(bool)
-                b = plf.to_bitvectors(df.iloc[:, 3:])
-                sim = DataStructs.BulkTverskySimilarity(b[0], b[1:], 1, 0)
-                sim = [round(x, 3) for x in sim]
+                with pd.option_context("future.no_silent_downcasting", True):
+                    df = pd.concat([plif_ref_df, df_batch], ignore_index=True)
+                    contacts_cols = df.columns[3:]
+                    df[contacts_cols] = df[contacts_cols].fillna(False).astype(bool)
+                    b = plf.to_bitvectors(df.iloc[:, 3:])
+                    sim = DataStructs.BulkTverskySimilarity(b[0], b[1:], 1, 0)
+                    sim = [round(x, 3) for x in sim]
 
-                df_batch['plif_sim'] = sim
-                df_batch = df_batch[['id', 'stereo_id', 'pose', 'plif_sim']]
+                    df_batch['plif_sim'] = sim
+                    df_batch = df_batch[['id', 'stereo_id', 'pose', 'plif_sim']]
 
-        df_batch.to_csv(output_file, mode='w' if first_batch else 'a', sep=sep, index=False, header=first_batch)
-        first_batch = False
+            df_batch.to_csv(output_file, mode='w' if first_batch else 'a', sep=sep, index=False, header=first_batch)
+            first_batch = False
 
-        if len(df_batch) < batch_size:
-            break
+            if len(df_batch) < batch_size:
+                break
 
-        offset += batch_size
-
-
-    conn.close()
+            offset += batch_size
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Extract mol blocks of specified mol ids and additional fields into '
-                                                 'SDF. Also it is possible to extract SMILES file.',
+    parser = argparse.ArgumentParser(description='Calculates protein-ligand interactions using ProLIF for EasyDock '
+                                                 'database.',
                                      formatter_class=lambda prog: argparse.ArgumentDefaultsHelpFormatter(prog, width=80))
     parser.add_argument('-i', '--input', metavar='input.db', required=True, type=str,
-                        help='SQLite DB, which is output of vina_dock script.')
-    parser.add_argument('-p', '--protein', metavar='FILENAME', required=True, type=filepath_type,
-                        help='PDB file of a protein.')
+                        help='EasyDock output SQLite DB.')
+    parser.add_argument('-p', '--protein', metavar='FILENAME', required=False, type=filepath_type,
+                        default=None,
+                        help='PDB file of a protein with all hydrogen atoms. It is necessary only for the first run to '
+                             'detect protein-ligand contacts. The protein structure will be stored in DB and later '
+                             'calls will not require it. If you provide the protein structure which differ from the '
+                             'previously used one, it will replace the previous protein structure in DB and all '
+                             'previously detected protein-ligand contacts will be erased without notification. '
+                             'Be careful.')
     parser.add_argument('-o', '--output', metavar='output.txt', required=False, type=str,
-                        help='output TXT file with prolif results.')
+                        help='output TXT file with prolif results (optional). Computed results are always stored in '
+                             'the DB and can be retrieved later if an output file is specified')
     parser.add_argument('--ref_plif', metavar='STRING', default=None, required=False, nargs='*',
                         type=str_lower_type,
-                        help='list of desired protein-ligand interactions compatible with ProLIF. Derive '
-                             'these names from a reference ligand. Example: glu80.ahbdonor leu82.ahbacceptor. '
-                             'If this argument is specified, the script returns metrics corresponding '
-                             'to the proportion of required contacts from the desired ones.')
+                        help='list of desired protein-ligand interactions compatible with ProLIF. If specified the '
+                             'fraction of satisfied contacts will be returned instead of a list of protein-ligand '
+                             'contacts. Names of reference contacts can be obtained from a reference ligand. '
+                             'The format of names is a dot separated string: residue name and number, chain and the '
+                             'type of a contact. Example: glu80.a.hbdonor leu82.a.hbacceptor.')
     parser.add_argument('-d', '--ids', metavar='mol_ids', required=False, type=str, default=None, nargs='*',
-                        help='a list of mol ids in DB or a text file with mol ids on individual lines. '
-                             'If omitted all records in DB will be saved to SDF.')
-    parser.add_argument('--poses', default=[], type=int, nargs="*",
-                        help='list of pose numbers to retrieve, starting from 1. If specified, poses will be retrieved '
-                             'from PDB block and a trailing pose id will be added to each molecule name.')
+                        help='a list of molecule ids in DB or a text file with molecule ids on individual lines. '
+                             'If omitted all records in DB will be processed.')
+    parser.add_argument('--poses', default=[1], required=False, type=int, nargs="+",
+                        help='list of pose numbers to retrieve, starting from 1. Please note the to all molecule names '
+                             'a trailing pose number is added..')
     parser.add_argument('-c', '--ncpu', metavar='INTEGER', default=1, type=cpu_type,
                         help='number of cpus.')
 
+    # redirect logging messages to STDERR
+    logger = logging.getLogger()
+    handler = logging.StreamHandler(sys.stderr)
+    logger.handlers = [handler]
+
     args = parser.parse_args()
 
+    with sqlite3.connect(args.input) as conn:
 
-    conn = sqlite3.connect(args.input)
+        # for backward compatibility, create tables if not exists
+        create_variables_table(conn)
+        create_plif_tables(conn)
 
-    tables = tables_exist(conn, {"variables", "plif_res", "plif_name"})
+        # read variables used by a module
+        variables = get_variables_for_module(conn, "easydock_plif")
+        plif_protein = variables.get('plif_protein')
 
-    if not all(tables.values()):
-        init_plif_var_tables(conn)
+        if plif_protein is None and args.protein is None:
+            raise ValueError('There is no protein previously stored in a database and no input protein file. '
+                             'Please supply a PDB file of a corresponding protein having all hydrogen atoms to calculate PLIF')
 
-    rows = load_module_table(conn, 'prolif')
-    values_dict = {row["name"]: row["value"] for row in rows}
-    old_plif_protein = values_dict.get('plif_protein')
+        # update plif_protein variable if necessary and clean dependent tables simultaneously
+        # a user may lose data if incorrect protein was submitted via command line
+        if args.protein is not None:
 
-    with open(args.protein, "r") as f:
-        plif_protein = f.read()
+            with open(args.protein, "r") as f:
+                args_plif_protein = f.read()
 
-    if old_plif_protein != plif_protein:
-        set_variable(conn, "prolif", "plif_protein", plif_protein)
-        conn.execute("DELETE FROM plif_name")
-        conn.execute("DELETE FROM plif_res")
-        conn.commit()
+            if plif_protein != args_plif_protein:
+                plif_protein = args_plif_protein
+                set_variable(conn, "easydock_plif", "plif_protein", plif_protein)
+                conn.execute("DROP TABLE plif_names")
+                conn.execute("DROP TABLE plif_res")
+                conn.execute("VACUUM")
+                create_plif_tables(conn)
+                conn.commit()
 
+        # determine poses to process
+        poses = list(sorted(set(args.poses)))
 
-    if args.ids is None:
-        ids = get_docked_mol_ids(conn)
-    elif os.path.isfile(args.ids[0]):
-        with open(args.ids[0]) as f:
-            ids = {line.strip() for line in f}
-    else:
-        ids = set(args.ids)
-
-    cur = conn.execute("""
-        SELECT m.id FROM plif_res r
-        JOIN mols m ON m.rowid = r.id""")
-
-    ids_done = {row[0] for row in cur.fetchall()}
-
-    ids_f = ids.difference(ids_done)
-
-    poses = list(args.poses)
-
-    chunk_size = 10 * args.ncpu // len(poses)
-    for chunk in split_generator_to_chunks(ids_f, chunk_size=chunk_size):
-        mols = get_mols(conn, chunk, return_rowid=True, poses=poses)
-
-        if mols:
-            df = calc_plif(mols, args.protein, ncpu=args.ncpu)
-            insert_plif_data(df, conn)
+        # determine which molecules and poses where not processed yet
+        if args.ids is None:
+            ids = get_docked_mol_ids(conn)
+        elif os.path.isfile(args.ids[0]):
+            with open(args.ids[0]) as f:
+                ids = {line.strip() for line in f}
         else:
-            conn.close()
+            ids = set(args.ids)
+
+        cur = conn.execute(f"""
+                           SELECT m.id
+                               FROM plif_res p
+                               JOIN mols m ON m.rowid = p.mols_rowid
+                               WHERE p.pose IN ({','.join('?' * len(poses))}) 
+                               GROUP BY m.id
+                               HAVING COUNT(DISTINCT p.pose) = {len(poses)}""",
+                           poses)
+
+        ids_done = {row[0] for row in cur.fetchall()}
+
+        ids_todo = ids.difference(ids_done)
+
+        chunk_size = 10 * args.ncpu // len(poses)
+
+        for mol_ids_batch in split_generator_to_chunks(ids_todo, chunk_size=chunk_size):
+            # when compute PLIFs we always add pose 1
+            mols = get_mols(conn, mol_ids_batch, poses=(lambda x: x if 1 in x else [1] + x)(poses))
+            if mols:
+                df = calc_plif(mols, plif_protein, ncpu=args.ncpu)
+                insert_plif_data(conn, df)
 
     if args.output:
         make_plif_summary_to_file(args.input, args.output, ids, poses, plif_list=args.ref_plif)
