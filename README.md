@@ -106,7 +106,7 @@ conda install -c conda-forge boost swig
 - from pypi
 
 ```
-pip install paramiko vina
+pip install paramiko vina prolif
 # has fixes with rdkit.six import
 
 #recommend to install the dev version, since it implements a fix making double bound non-rotatable, unlike the current release version
