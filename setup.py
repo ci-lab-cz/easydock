@@ -30,5 +30,6 @@ setuptools.setup(
                       ['run_dock = easydock.run_dock_obsolete:main',
                        'easydock = easydock.run_dock:main',
                        'get_sdf_from_dock_db = easydock.get_sdf_from_dock_db:main',
-                       'make_clean_copy = easydock.make_clean_copy:main']}
+                       'make_clean_copy = easydock.make_clean_copy:main',
+                       'easydock_plif = easydock.easydock_plif:main',]}
 )
