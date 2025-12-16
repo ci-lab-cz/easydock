@@ -437,7 +437,7 @@ easydock_plif -i output.db -o output.txt
 ```
 The script can take SDF as input to calculate PLIFs. This can be useful to get PLIF names of a reference ligand.
 ```
-easydock_plif -i input.sdf -o output.txt -c 4
+easydock_plif -i input.sdf -p protein.pdb -o output.txt -c 4
 ```
 To calculate similarity between PLIFs of molecules in DB an reference ones:
 ```
@@ -445,7 +445,7 @@ easydock_plif -i output.db -o output.txt --ref_plif ala31.a.hydrophobic asp86.a.
 ```
 Arguments can be combined to compute PLIF and get PLIF similarity in a single command
 ```
-easydock_plif -i output.db -p protein.pbd -o output.txt --ref_plif ala31.a.hydrophobic asp86.a.cationic -c 4
+easydock_plif -i output.db -p protein.pdb -o output.txt --ref_plif ala31.a.hydrophobic asp86.a.cationic -c 4
 ```
 There is also an option to specify ids of molecules for which PLIF should be computed and retrieved (`-d` argument).
 
