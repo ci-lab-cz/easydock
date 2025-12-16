@@ -53,7 +53,7 @@ An important feature, once the database is initialized it will store all command
 - supports docking of boron-containing compounds for programs which cannot natively process boron atoms (boron is replaced with carbon before docking and returned back)
 - all outputs are stored in an SQLite database
 - interrupted calculations can be continued by invoking the same command or by supplying just a single argument (`--output`) - the existing output database
-- `get_sdf_from_dock_db` is used to extract data from output DB
+- `get_sdf_from_easydock` is used to extract data from output DB
 - all command line arguments and input files are stored in the setup table and the majority of those parameters cannot be changed later. This will prevent losing input settings. If some changes should be made after DB was created a direct editing the DB can be a solution
 - `easydock_plif` command to calculate PLIFs of docked molecules (by `ProLIF`) and similarity to a reference PLIF
 
@@ -403,23 +403,23 @@ for mol_id, res in docking(mols, dock_func=mol_dock, dock_config='config.yml', n
 
 1. Using `--sdf` argument of the main script `easydock` will return top poses with docking scores. If there were several enumerated stereoisomers, it will return the pose and the score of the best scoring stereoisomer only.  
 
-2. Using `get_sdf_from_dock_db` script. it has a rich set of settings and can return SDF as well as SMILES files. The only restriction it cannot currently return the best pose among enumerated stereoisomers. In this case it is advised to use the previous option and invoke `easydock -o database.db --sdf` on the database with docked molecules.
+2. Using `get_sdf_from_easydock` script. it has a rich set of settings and can return SDF as well as SMILES files. The only restriction it cannot currently return the best pose among enumerated stereoisomers. In this case it is advised to use the previous option and invoke `easydock -o database.db --sdf` on the database with docked molecules.
 
 #### Examples
 
 Extract top poses with their scores (additional information in DB fields can be extracted only for the top poses):
 ```
-get_sdf_from_dock_db -i output.db -o output.sdf --fields docking_score
+get_sdf_from_easydock -i output.db -o output.sdf --fields docking_score
 ```
 Retrieve second poses for compounds `mol_1` and `mol_4` in SDF format:
 ```
-get_sdf_from_dock_db -i output.db -o output.sdf -d mol_1 mol_4 --poses 2 
+get_sdf_from_easydock -i output.db -o output.sdf -d mol_1 mol_4 --poses 2 
 ```
 Instead of a list of ids a text file can be supplied as an argument `-d`.
 
 Retrieve top poses for compounds with docking score less than -10:
 ```
-get_sdf_from_dock_db -i output.db -o output.sdf --fields docking_score --add_sql 'docking_score < -10' 
+get_sdf_from_easydock -i output.db -o output.sdf --fields docking_score --add_sql 'docking_score < -10' 
 ```
 
 
