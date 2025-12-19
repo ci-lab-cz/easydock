@@ -12,7 +12,7 @@ theme:
     - navigation.instant
     - navigation.tracking
     - navigation.tabs
-    - navigation.top
+    - navigation.left
     - content.code.copy
     - content.action.edit
   palette:
