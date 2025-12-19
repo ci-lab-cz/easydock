@@ -1,0 +1,47 @@
+site_name: EasyDock
+site_description: Automated molecular docking pipeline
+site_author: Pavel Polishchuk, Guzel Minibaeva
+site_url: https://easydock.readthedocs.io
+
+repo_name: ci-lab-cz/easydock
+repo_url: https://github.com/ci-lab-cz/easydock
+
+theme:
+  name: material
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.top
+    - content.code.copy
+    - content.action.edit
+  palette:
+    - scheme: default
+      primary: teal
+      accent: cyan
+    - scheme: slate
+      primary: teal
+      accent: cyan
+
+markdown_extensions:
+  - admonition
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - pymdownx.details
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Usage: usage.md
+  - Advanced features: advanced.md
+  - Data retrieval: data_retrieval.md
+  - PLIF analysis: plif.md
+  - Python API: python_api.md
+  - Customization: customization.md
+
+plugins:
+  - search
