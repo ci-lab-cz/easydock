@@ -24,8 +24,8 @@ div.highlight pre code {
 
 /* Code block container */
 .rst-content div.highlight pre {
-    padding: 0.5em 0.75em;
-    margin: 0.4em 0;
+    padding: 0.25em 0.75em !important;
+    margin: 0.3em 0 !important;
     font-size: 0.95em;
     line-height: 1.45;
 }
