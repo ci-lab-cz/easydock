@@ -9,7 +9,7 @@ repo_url: https://github.com/ci-lab-cz/easydock
 theme:
   name: readthedocs
   highlightjs: true
-  logo: assets/light_icon.svg
+  logo: assets/light.svg
 #  features:
 #    - navigation.instant
 #    - navigation.tracking

@@ -48,28 +48,10 @@ div.highlight pre code {
     background: #1f2933;   /* dark blue-gray */
 }
 
-/* Sidebar links */
-.wy-menu-vertical a {
-    color: #d1d5db;
-}
-
-/* Active item */
-.wy-menu-vertical li.current > a {
-    background: #2563eb;   /* blue */
-    color: #ffffff;
-}
-
-/* Top navigation bar */
-.wy-nav-top {
-    background: #2563eb;
-}
-
-/* Main content background */
-.wy-nav-content {
-    background: #ffffff;
-}
-
-/* Links */
-.rst-content a {
-    color: #2563eb;
+/* Logo background and position */
+.wy-side-nav-search {
+    background-color: #1f2933;   /* dark navy */
+    border-bottom: 1px solid #1f2933;
+    padding: 10px;
+    max-width: 180px;
 }
