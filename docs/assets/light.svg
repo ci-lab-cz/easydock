@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   version="1.1"
+   id="svg747"
+   width="1711.5239"
+   height="278.8421"
+   viewBox="0 0 1711.5239 278.8421"
+   sodipodi:docname="1.svg"
+   inkscape:version="1.2.2 (b0a8486541, 2022-12-01)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs751" />
+  <sodipodi:namedview
+     id="namedview749"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     showgrid="false"
+     inkscape:zoom="0.32593203"
+     inkscape:cx="912.767"
+     inkscape:cy="860.60888"
+     inkscape:window-width="1398"
+     inkscape:window-height="831"
+     inkscape:window-x="1962"
+     inkscape:window-y="32"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="g753" />
+  <g
+     inkscape:groupmode="layer"
+     inkscape:label="Image"
+     id="g753"
+     transform="translate(-1162.823,-695.55463)">
+    <path
+       id="rect825-3-2"
+       style="fill:#2dd4bf;fill-opacity:1;stroke-width:0.974333"
+       d="m 1162.823,695.55465 0.2656,26.03711 0.2676,26.03516 104.5,0.082 c 57.475,0.0456 107.874,0.49593 111.9981,1 15.967,1.95159 29.5033,11.68993 36.373,26.16601 4.1789,8.80599 5.6289,15.39295 5.6289,25.57618 0,9.72568 -1.9426,17.45998 -6.9433,27.66015 -4.7028,9.59259 -9.8849,15.49107 -36.0567,41.02739 -20.8472,20.3408 -25.9665,23.9107 -37.8008,26.371 -3.5222,0.7323 -25.7381,1.1016 -66.25,1.1016 h -60.9492 v -24.5 -24.5 h 68 68 v -25.49999 -25.5 h -92.5 c -50.8749,0 -92.8375,-0.1125 -93.25,-0.25 -0.4125,-0.1375 -0.8648,33.85387 -1.0058,75.53519 l -0.2579,75.78319 93.2579,-0.3008 c 92.2323,-0.2982 93.3385,-0.3264 100.9277,-2.47459 21.46,-6.0748 32.843,-13.189 53.4844,-33.4278 l 15.1601,-14.8652 h 43.5899 43.5898 v 20.0508 c 0,22.1142 0.5469,24.6309 5.9668,27.4336 1.6134,0.8343 4.8531,1.51569 7.1992,1.51569 h 4.2657 l 33.8554,-33.75009 c 18.6203,-18.5624 34.4973,-34.964 35.2832,-36.4492 1.9682,-3.7195 1.7839,-9.7071 -0.4101,-13.3047 -2.1585,-3.5395 -65.0612,-65.31564 -68.3867,-67.1621 -5.1905,-2.88194 -12.4123,-0.61484 -15.8145,4.96484 -1.766,2.89636 -1.9518,5.13097 -1.9551,23.45117 v 20.25 h -24.1074 c -22.5804,0 -24.0597,-0.11082 -23.3516,-1.75 6.6771,-15.45623 9.459,-29.09171 9.459,-46.37695 0,-47.93261 -27.9345,-84.85759 -73.5,-97.1543 -7.9451,-2.14412 -8.7925,-2.16099 -123.2676,-2.46679 z"
+       inkscape:export-filename="light.png"
+       inkscape:export-xdpi="300"
+       inkscape:export-ydpi="300" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-size:266.667px;line-height:0;font-family:'Inter Display';-inkscape-font-specification:'Inter Display Semi-Bold';fill:#2dd4bf;fill-opacity:1"
+       x="1666.1425"
+       y="919.9696"
+       id="text30776-3"><tspan
+         sodipodi:role="line"
+         id="tspan30774-7"
+         x="1666.1425"
+         y="919.9696">EasyDock</tspan></text>
+  </g>
+</svg>
