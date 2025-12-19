@@ -7,21 +7,22 @@ repo_name: ci-lab-cz/easydock
 repo_url: https://github.com/ci-lab-cz/easydock
 
 theme:
-  name: material
-  features:
-    - navigation.instant
-    - navigation.tracking
-    - navigation.sections
-    - navigation.expand
-    - content.code.copy
-    - content.action.edit
-  palette:
-    - scheme: default
-      primary: teal
-      accent: cyan
-    - scheme: slate
-      primary: teal
-      accent: cyan
+  name: readthedocs
+  highlightjs: true
+#  features:
+#    - navigation.instant
+#    - navigation.tracking
+#    - navigation.sections
+#    - navigation.expand
+#    - content.code.copy
+#    - content.action.edit
+#  palette:
+#    - scheme: default
+#      primary: teal
+#      accent: cyan
+#    - scheme: slate
+#      primary: teal
+#      accent: cyan
 
 markdown_extensions:
   - admonition
