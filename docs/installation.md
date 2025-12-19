@@ -16,12 +16,12 @@ This installs EasyDock with Vina (docking) and MolGpKa (protonation).
 
 ### Install EasyDock Package
 
-**From PyPI:**
+From PyPI:
 ```bash
 pip install easydock
 ```
 
-**From GitHub (latest development version):**
+From GitHub (latest development version):
 ```bash
 pip install git+https://github.com/ci-lab-cz/easydock.git
 ```
@@ -36,7 +36,7 @@ conda install -c conda-forge python=3.11 rdkit numpy==1.26
 conda install -c conda-forge scipy dask distributed scikit-learn
 ```
 
-**Additional for macOS:**
+Additional for macOS:
 ```bash
 conda install -c conda-forge boost swig
 ```
@@ -47,14 +47,14 @@ conda install -c conda-forge boost swig
 pip install paramiko vina prolif gemmi
 ```
 
-**Meeko (recommended development version):**
+Meeko (recommended development version):
 ```bash
 pip install git+https://github.com/forlilab/Meeko.git@develop
 ```
 
 The development version includes fixes that make double bonds non-rotatable, improving accuracy.
 
-**Or current release version:**
+Or current release version:
 ```bash
 pip install git+https://github.com/forlilab/Meeko.git
 ```

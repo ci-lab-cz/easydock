@@ -1,3 +1,11 @@
+**1.2.0**
+- implement support of singularity/apptainer containers incorporating protonation tools on Linux and MacOS
+- integrate uni-pka protonation as a container
+- integrate protein-ligand fingerprint detection for docking poses of ligands based on ProLIF
+- add env.yml to make setup and installation easier
+- the console script get_sdf_from_dock_db was renamed to get_sdf_from_easydock
+- documentation was created
+
 **1.1.0**
 - integrate QVina2, QVina-W, Vina-GPU, QVina2-GPU, QVinaW-GPU
 - make easydock running on Windows, however, this will work only with docking programs which can be run on Windows (e.g. Python Vina cannot be installed on Windows, but if you have a binary you can run docking with it)

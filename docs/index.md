@@ -42,3 +42,4 @@ easydock -i input.smi -o output.db --program vina --config config.yml --protonat
 - **[Python API](python_api.md)**: Using EasyDock programmatically
 - **[Customization](customization.md)**: Extending EasyDock functionality
 - **[Citation](citation.md)**: Citation information
+- **[Changelog](changelog.md)**: Changes in each version

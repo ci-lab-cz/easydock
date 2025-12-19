@@ -2,7 +2,7 @@
 
 There are two major stages which can run separately or simultaneously: ligand preparation and their docking.
 
-## Database Initialization
+## Database Initialization / Ligand Ppreparation
 
 EasyDock uses an SQLite database to store all inputs, parameters, and results. Once initialized, the database preserves all settings for reproducibility.
 
