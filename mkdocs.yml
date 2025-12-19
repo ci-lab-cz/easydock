@@ -12,8 +12,10 @@ theme:
     - navigation.instant
     - navigation.tracking
     - navigation.left
+    - navigation.expand
     - content.code.copy
     - content.action.edit
+    - toc.integrate
   palette:
     - scheme: default
       primary: teal
