@@ -16,3 +16,29 @@ div.highlight pre code {
 .rst-content .highlight pre code {
     border: none !important;
 }
+
+.rst-content pre,
+.rst-content code {
+    font-family: "JetBrains Mono", "Fira Code", monospace;
+}
+
+/* Code block container */
+.rst-content div.highlight pre {
+    padding: 0.5em 0.75em;
+    margin: 0.6em 0;
+    font-size: 0.95em;
+    line-height: 1.45;
+}
+
+/* Inner code element */
+.rst-content div.highlight pre code {
+    padding: 0;
+    margin: 0;
+    border: none;
+}
+
+/* Inline code */
+.rst-content code.literal {
+    font-size: 0.9em;
+    padding: 0.1em 0.25em;
+}
