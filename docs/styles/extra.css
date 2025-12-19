@@ -1,9 +1,18 @@
-.rst-content pre {
-    border: 1px solid #e1e4e5;
-    border-radius: 4px;
-    background: #f8f8f8;
+div.highlight pre {
+    border: 1px solid #ddd !important;
+    box-shadow: none !important;
+    background: #f8f8f8 !important;
 }
 
-.rst-content pre code {
-    border: none;
+div.highlight pre code {
+    border: none !important;
+}
+
+.rst-content .highlight pre {
+    border: none !important;
+    box-shadow: none !important;
+}
+
+.rst-content .highlight pre code {
+    border: none !important;
 }
