@@ -46,3 +46,6 @@ nav:
 
 plugins:
   - search
+
+extra_css:
+  - styles/extra.css

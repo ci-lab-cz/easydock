@@ -1,0 +1,9 @@
+.rst-content pre {
+    border: 1px solid #e1e4e5;
+    border-radius: 4px;
+    background: #f8f8f8;
+}
+
+.rst-content pre code {
+    border: none;
+}
