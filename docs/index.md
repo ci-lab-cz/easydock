@@ -39,7 +39,6 @@ easydock -i input.smi -o output.db --program vina --config config.yml --protonat
 - **[Advanced Features](advanced.md)**: Ring sampling, distributed computing, and more
 - **[Data Retrieval](data_retrieval.md)**: Extracting and analyzing results
 - **[PLIF Analysis](plif.md)**: Protein-ligand interaction fingerprints
-- **[Configuration](configuration.md)**: Parameter reference
 - **[Python API](python_api.md)**: Using EasyDock programmatically
 - **[Customization](customization.md)**: Extending EasyDock functionality
-- **[Troubleshooting](troubleshooting.md)**: Solutions to common problems
+- **[Citation](citation.md)**: Citation information

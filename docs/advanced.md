@@ -8,10 +8,10 @@ Improve docking of compounds containing saturated rings by sampling multiple sta
 easydock -i input.smi -o output.db --program vina --config config.yml -c 4 --ring_sample
 ```
 
-**How it works:**
+How it works:
 
-1. Generate multiple conformers for saturated rings
-2. Dock each conformer independently
+1. Generate multiple representative conformers for saturated rings
+2. Dock each initial conformer independently
 3. Store only the best scoring conformer
 
 !!! warning "Performance Impact"
@@ -25,7 +25,7 @@ easydock -i input.smi -o output.db --program vina --config config.yml -c 4 --rin
 
 Run docking programs through Docker/Singularity/Apptainer containers.
 
-**Example with Gnina in Apptainer:**
+Example with Gnina in Apptainer:
 
 ```yaml
 script_file: apptainer exec -B /path/to/data:/path/to/data container.sif gnina
@@ -73,21 +73,19 @@ easydock -i input.smi -o output.db --program vina --config config.yml \
          --sdf --hostfile $PBS_NODEFILE --dask_report
 ```
 
-### Parameters
+Parameters:
 
 - `--hostfile`: File with server IP addresses
 - `--nworkers`: Number of workers per host (molecules docked in parallel per host)
 - `--nthreads`: Can be any value; actual CPUs taken from config
 - `--dask_report`: Generate HTML performance report
 
-### System Requirements
-
 !!! warning "Configuration Requirements"
     - **File limit**: Increase open file limit to at least 2× total workers
     - **SSH access**: Ensure SSH connectivity with default settings between all nodes
     - **Shared filesystem**: All nodes must access the same database file
 
-**Check file limit:**
+Check file limit:
 ```bash
 ulimit -n
 ```
@@ -103,13 +101,12 @@ make_clean_copy -i original.db -o clean.db
 ```
 
 This preserves:
-
 - Initialized molecules
-- Protonation states
 - Stereoisomers
+- Protonation states
 - Setup parameters
 
-Use the clean copy for docking with different proteins or settings.
+Use the clean copy for docking with different proteins, programs or settings skipping the ligand initialization stage.
 
 ## Boron-Containing Compounds
 
@@ -122,7 +119,7 @@ No special flags needed - this happens automatically as implemented in individua
 
 ## Custom Configuration Arguments
 
-Two ways to pass arguments to external programs in config.yml:
+Two ways to pass arguments to external programs in `config.yml`:
 
 ### Method 1: Individual Config Entries
 
@@ -130,6 +127,9 @@ Two ways to pass arguments to external programs in config.yml:
 exhaustiveness: 8
 n_poses: 5
 ```
+
+!!! warning "Limited set of parameters"
+    This provides access to a limited set of parameters
 
 ### Method 2: In script_file Value
 

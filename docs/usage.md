@@ -17,17 +17,15 @@ Create a database with molecule validation:
 easydock -i input.smi -o output.db -c 4
 ```
 
-**Parameters:**
-
+Parameters:
 - `-i`: Input SMILES file
 - `-o`: Output database file
 - `-c`: Number of CPU cores
 
 This performs:
-
-- Conversion to 3D structures (or uses existing coordoinates if 3D SDF input)
 - Salt removal
-- Validation
+- Generation of one stereoisomer if there are some undefined chiral centers or double bonds (reproducible generation)
+- Conversion to 3D structures (or uses existing coordinates if 3D SDF input)
 
 ### Stereoisomer Enumeration
 
@@ -37,26 +35,26 @@ Enumerate up to 4 stereoisomers for undefined chiral centers and double bonds:
 easydock -i input.smi -o output.db -c 4 -s 4
 ```
 
-Default is 1 stereoisomer (reproducible enumeration). Maximum runtime per molecule is limited to 300 seconds. This avoids excessively long generation for some structures. In those cases it is recommended to enumerate stereoisomers before supplying these molecules to EasyDock.
+Maximum runtime of stereoisomer enumeration is limited to 300 seconds per molecule. This avoids excessively long generation for some structures. In those cases it is recommended to enumerate stereoisomers before supplying these molecules to EasyDock.
 
 ### Protonation Options
 
-**Using MolGpKa:**
+Using MolGpKa:
 ```bash
 easydock -i input.smi -o output.db -c 4 --protonation molgpka
 ```
 
-**Using Uni-pKa container:**
+Using pre-built Uni-pKa container:
 ```bash
 easydock -i input.smi -o output.db -c 4 --protonation /path/to/unipka.sif
 ```
 
-**Using Chemaxon (requires license):**
+Using Chemaxon (requires license):
 ```bash
 easydock -i input.smi -o output.db -c 4 --protonation chemaxon
 ```
 
-**No protonation (use input states):**
+No protonation (use input states):
 ```bash
 easydock -i input.smi -o output.db -c 4
 ```
@@ -65,17 +63,17 @@ easydock -i input.smi -o output.db -c 4
 
 ### Vina Docking
 
-**Complete pipeline (initialization + docking):**
+Complete pipeline (initialization + docking):
 ```bash
 easydock -i input.smi -o output.db --program vina --config config.yml -c 4 --sdf
 ```
 
-**Using pre-initialized database:**
+Using pre-initialized database:
 ```bash
 easydock -o output.db --program vina --config config.yml -c 4 --sdf
 ```
 
-**Vina Configuration (config.yml):**
+Vina Configuration (config.yml):
 ```yaml
 protein: /path/to/protein.pdbqt
 protein_setup: /path/to/grid.txt
@@ -85,7 +83,7 @@ n_poses: 5
 ncpu: 5
 ```
 
-**Grid Box Definition (grid.txt):**
+Grid Box Definition (grid.txt):
 ```
 center_x = 10.0
 center_y = 15.0
@@ -108,7 +106,7 @@ size_z = 25.0
 easydock -i input.smi -o output.db --program gnina --config config.yml -c 4 --sdf
 ```
 
-**Gnina Configuration:**
+Gnina Configuration:
 ```yaml
 script_file: /path/to/gnina
 protein: /path/to/protein.pdbqt
@@ -149,7 +147,7 @@ For Vina-GPU, QVina2-GPU, or QVinaW-GPU:
 easydock -i input.smi -o output.db --program vina-gpu --config config.yml --sdf
 ```
 
-**Configuration:**
+Configuration:
 ```yaml
 script_file: /path/to/AutoDock-Vina-GPU-2-1 --opencl_binary_path /path/to/opencl/
 protein: /path/to/protein.pdbqt
@@ -158,7 +156,7 @@ n_poses: 3
 thread: 8000  # Optional, default is 8000
 ```
 
-!!! tip "GPU Program Variants"
+!!! tip "Program Variants"
     Change `script_file` to use different variants:
     
     - `AutoDock-Vina-GPU-2-1` for Vina-GPU
@@ -171,7 +169,7 @@ thread: 8000  # Optional, default is 8000
 easydock -i input.smi -o output.db --program qvina --config config.yml --sdf
 ```
 
-**Configuration:**
+Configuration:
 ```yaml
 script_file: /path/to/qvina2  # or /path/to/qvinaw
 protein: /path/to/protein.pdbqt
@@ -181,6 +179,13 @@ n_poses: 3
 ncpu: 2
 seed: 0
 ```
+
+!!! tip "Program Variants"
+    Change `script_file` to use different variants:
+    
+    - `qvina2`
+    - `qvina-w`
+    - `vina` - Vina can be used through a binary executable
 
 ## Resuming Interrupted Calculations
 
@@ -203,3 +208,6 @@ easydock -o output.db --program vina --config config.yml -c 4 --sdf
 ```
 
 This creates `output.sdf` with the best scoring pose for each molecule.
+
+!!! note "Feature"
+    The argument `--sdf` automatically extracts only one stereoisomer with the best docking scores among generated ones by EasyDock 

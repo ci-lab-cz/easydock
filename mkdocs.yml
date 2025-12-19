@@ -44,6 +44,7 @@ nav:
   - PLIF analysis: plif.md
   - Python API: python_api.md
   - Customization: customization.md
+  - Citation: citation.md
 
 plugins:
   - search

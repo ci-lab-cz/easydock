@@ -12,17 +12,17 @@ Calculate PLIFs for docked molecules:
 easydock_plif -i output.db -p protein.pdb -c 4
 ```
 
-**Parameters:**
+Parameters:
 
 - `-i`: Database with docked molecules
 - `-p`: Protein PDB file with all hydrogens
 - `-c`: Number of CPU cores
 
-**Output:** PLIFs are stored in the database for later retrieval.
+Output: PLIFs are stored in the database for later retrieval.
 
 ### Specific Poses
 
-By default, only top poses are processed. Specify other poses:
+By default, only top poses are processed. Specify other poses if needed and there were requested in docking setup:
 
 ```bash
 easydock_plif -i output.db -p protein.pdb --poses 1 2 3 -c 4
@@ -44,9 +44,9 @@ Extract calculated PLIFs from database:
 easydock_plif -i output.db -o plif_output.txt
 ```
 
-**Output format:** Tab-separated file with PLIF vectors.
+**Output format:** Tab-separated file with 0 and 1.
 
-### Specific Molecules
+### Retrieve Specific Molecules
 
 ```bash
 easydock_plif -i output.db -o plif_output.txt -d mol_1 mol_2 mol_3
@@ -61,9 +61,9 @@ easydock_plif -i output.db -o similarity.txt \
     --ref_plif ala31.a.hydrophobic asp86.a.cationic
 ```
 
-**PLIF naming format:** `[residue_name][residue_number].[chain].[interaction_type]`
+PLIF naming format: `[residue_name][residue_number].[chain].[interaction_type]`
 
-**Common interaction types:**
+Common interaction types:
 
 - `hydrophobic`: Hydrophobic interaction
 - `hbdonor`: Hydrogen bond donor
@@ -74,33 +74,33 @@ easydock_plif -i output.db -o similarity.txt \
 
 ## Combined Operations
 
-Calculate and compare in one command:
+Calculate PLIFs and compare in one command:
 
 ```bash
 easydock_plif -i output.db -p protein.pdb -o similarity.txt \
-    --ref_plif ala31.a.hydrophobic asp86.a.cationic gly45.a.hbdonor -c 4
+    --ref_plif ala31.a.hydrophobic asp86.a.cationic -c 4
 ```
 
 ## Workflow Example
 
-**1. Get reference PLIF from known ligand:**
+1. Get reference PLIF from known ligand:
 ```bash
 easydock_plif -i reference.sdf -p protein.pdb -o reference_plif.txt -c 4
 ```
 
-**2. Identify key interactions from output:**
+2. Identify key interactions from output:
 ```
 # Example output:
-mol_ref: ala31.a.hydrophobic asp86.a.cationic gly45.a.hbdonor
+mol_ref: ala31.a.hydrophobic asp86.a.cationic
 ```
 
-**3. Calculate similarity for docked molecules:**
+3. Calculate similarity for docked molecules:
 ```bash
 easydock_plif -i output.db -p protein.pdb -o similarity.txt \
-    --ref_plif ala31.a.hydrophobic asp86.a.cationic gly45.a.hbdonor -c 4
+    --ref_plif ala31.a.hydrophobic asp86.a.cationic -c 4
 ```
 
-**4. Extract top scoring by PLIF similarity:**
+4. Extract top scoring by PLIF similarity:
 ```bash
 get_sdf_from_easydock -i output.db -o output.sdf \
     --fields plif_similarity \
@@ -117,23 +117,7 @@ get_sdf_from_easydock -i output.db -o output.sdf \
     - **All previously computed PLIFs are erased** without warning
     - This ensures data consistency
     
-    **Best practice:** Use a protein file only for the first running of the script `easydock_plif`. ON later runs it will use the protein stored in the database be default.
+    **Best practice:** Use a protein file only for the first running of the script `easydock_plif`. On later runs the script will use the protein stored in the database by default.
 
 !!! info "Hydrogen Atoms Required"
     The protein PDB file must include all hydrogen atoms for correct PLIF calculation.
-
-## PLIF Analysis Tips
-
-**Filter by key interactions:**
-```bash
-# Find molecules with specific interaction
-easydock_plif -i output.db -o results.txt -c 4
-grep "asp86.a.cationic" results.txt
-```
-
-**Combine with docking scores:**
-```bash
-get_sdf_from_easydock -i output.db -o results.sdf \
-    --fields docking_score plif_similarity \
-    --add_sql 'docking_score < -8 AND plif_similarity > 0.7'
-```
