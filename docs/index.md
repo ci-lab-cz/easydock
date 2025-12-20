@@ -1,5 +1,9 @@
 # EasyDock Documentation
 
+[![GitHub Repo](https://img.shields.io/badge/GitHub-ci--lab--cz%2Feasydock-blue?logo=github)](https://github.com/ci-lab-cz/easydock)
+[![Stars](https://img.shields.io/github/stars/ci-lab-cz/easydock?style=social)](https://github.com/ci-lab-cz/easydock/stargazers)
+[![Forks](https://img.shields.io/github/forks/ci-lab-cz/easydock?style=social)](https://github.com/ci-lab-cz/easydock/network)
+
 Welcome to EasyDock documentation! EasyDock is a fully automatic pipeline for molecular docking that provides a comprehensive solution for drug discovery workflows.
 
 ## Overview
