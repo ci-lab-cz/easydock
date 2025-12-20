@@ -1,3 +1,7 @@
+<p align="left">
+  <img src="docs/assets/light.svg" alt="EasyDock logo" width="300">
+</p>
+
 # EasyDock - Python module to automate molecular docking
 
 EasyDock automates the entire docking process from molecule preparation to result analysis, supporting multiple docking programs and providing organized result storage.
