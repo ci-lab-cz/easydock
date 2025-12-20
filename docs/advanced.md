@@ -18,9 +18,6 @@ How it works:
     - Increases computational time proportionally to the number of rings
     - May result in much longer simulation times for compounds with multiple saturated rings
 
-!!! bug "Known Issue"
-    Currently doesn't work correctly with Vina/Smina scoring in Gnina due to score direction assumptions. Will be fixed in future releases.
-
 ## Containerized Programs
 
 Run docking programs through Docker/Singularity/Apptainer containers.
