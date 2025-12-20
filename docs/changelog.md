@@ -3,7 +3,7 @@
 - integrate uni-pka protonation as a container  
 - integrate protein-ligand fingerprint detection for docking poses of ligands based on ProLIF  
 - add env.yml to make setup and installation easier  
-- the console script get_sdf_from_dock_db was renamed to get_sdf_from_easydock  
+- the console script `get_sdf_from_dock_db` was renamed to `get_sdf_from_easydock`  
 - documentation was created  
   
 **1.1.0**  
