@@ -90,3 +90,11 @@ results = docking(
 ```
 
 ## Custom Protonation Tools
+
+### Containerized solutions
+
+EasyDock supports singularity/apptainer containers (SIF-files) equipped with protonation tools and all dependencies. The container should provide a command "protonate" which takes two necessary arguments -i/--input and -o/--output taking input and output files in SMILES format: two columns tab-separated with SMILES and molecule id.
+Therefore, the protonation should be invoked by a command:
+```bash
+apptainer run container.sif protonate -i input.smi -o output.smi 
+```
