@@ -2,7 +2,6 @@ import logging
 import os
 import json
 import sqlite3
-import sys
 import tempfile
 import traceback
 from copy import deepcopy
