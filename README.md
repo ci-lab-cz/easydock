@@ -20,7 +20,9 @@ EasyDock automates the entire docking process from molecule preparation to resul
 
 ```bash
 # Create environment
-conda env create -f env.yml
+conda env create -f env.yml -n easydock
+# or use mamba (should be faster) 
+mamba env create -f env.yml -n easydock
 
 # Run docking
 easydock -i input.smi -o output.db --program vina --config config.yml --protonation molgpka -c 4 --sdf
