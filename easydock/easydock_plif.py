@@ -180,7 +180,7 @@ def main():
     parser.add_argument('-o', '--output', metavar='output.txt', required=False, type=str,
                         help='output TXT file with prolif results (optional). Computed results are always stored in '
                              'the DB and can be retrieved later if an output file is specified')
-    parser.add_argument('--ref_plif', metavar='STRING', default=None, required=False, nargs='*',
+    parser.add_argument('--ref_plif', metavar='STRING', default=None, required=False, nargs='+',
                         type=str_lower_type,
                         help='list of desired protein-ligand interactions compatible with ProLIF. If specified the '
                              'fraction of satisfied contacts will be returned instead of a list of protein-ligand '
