@@ -1,4 +1,5 @@
 import logging
+import math
 import traceback
 
 from meeko import (MoleculePreparation,
@@ -92,6 +93,7 @@ def GetConformerRMSFromAtomIds(mol: Chem.Mol, confId1: int, confId2: int, atomId
         ssr /= mol.GetNumAtoms()
 
     return np.sqrt(ssr)
+
 
 def GetConformerRMSMatrixForSaturatedRingMolecule(mol: Chem.Mol, atomIds:list[list[int]]=None, prealigned: bool=False) -> list[float]:
     """ Returns the RMS matrix of the conformers of a molecule based on the alignment and rmsd of saturated ring.
@@ -311,7 +313,7 @@ def mol_embedding_3d(mol: Chem.Mol, ring_sample: bool=False, seed: int=43) -> Ch
             mol = remove_confs_rms(mol,
                                    saturated_rings_with_substituents,
                                    rms=1,
-                                   keep_nconf=sum(calculate_ring_nconf(saturated_ring) for saturated_ring in saturated_ring_list))
+                                   keep_nconf=math.prod(calculate_ring_nconf(saturated_ring) for saturated_ring in saturated_ring_list))
             # AlignMolConformers(mol)  # why we need this?
 
             logging.debug(f'{mol.GetProp("_Name")} has {len(saturated_rings_with_substituents)} saturated rings')
