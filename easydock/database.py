@@ -439,15 +439,16 @@ def select_mols_to_dock(db_conn, table_name='mols', add_sql=None):
             yield mol
 
 
-def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='mols', add_sql='', ncpu=1):
+def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='mols', add_sql='', ncpu=1, pH: float = 7.4):
     '''
-    Protonate SMILES by Chemaxon cxcalc utility to get molecule ionization states at pH 7.4
+    Protonate SMILES by selected backend to get molecule ionization states at a given pH
     :param db_fname:
     :param program: name of the prorgam to use
     :param tautomerize: get a major tautomer at protonation
     :param table_name: table name with molecules to protonate
     :param add_sql: additional SQL query to be appended to the SQL query to retrieve molecules for protonation,
                     e.g. "AND id IN ('MOL1', 'MOL2')" or "AND iteration=(SELECT MAX(iteration) FROM mols)".
+    :param pH: pH value to use during protonation
     :return:
     '''
     with sqlite3.connect(db_fname, check_same_thread=False, timeout=90) as conn:   # danger
@@ -475,11 +476,11 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
 
         if program in ['chemaxon'] or (os.path.isfile(program) and program.endswith('.sif')):  # file-based protocol, files are created by chunks
             if program == 'chemaxon':
-                protonate_func = partial(protonate_chemaxon, tautomerize=tautomerize)
+                protonate_func = partial(protonate_chemaxon, tautomerize=tautomerize, pH=pH)
                 read_func = read_protonate_chemaxon
                 nmols = ncpu * 500
             else:
-                protonate_func = partial(protonate_apptainer, container_fname=program)
+                protonate_func = partial(protonate_apptainer, container_fname=program, pH=pH)
                 read_func = read_smiles
                 nmols = 2000
 
@@ -507,11 +508,11 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
 
         elif program in ['pkasolver', 'molgpka']:  # native python protocol
             if program == 'pkasolver':
-                protonate_func = partial(protonate_pkasolver, ncpu=ncpu, mol_count=mol_count)
+                protonate_func = partial(protonate_pkasolver, ncpu=ncpu, mol_count=mol_count, pH=pH)
             elif program == 'molgpka':
-                protonate_func = partial(protonate_molgpka, ncpu=1)
+                protonate_func = partial(protonate_molgpka, ncpu=1, pH=pH)
             else:
-                raise ValueError(f'There is no implemeneted functions to protonate molecules by {program}')
+                raise ValueError(f'There is no implemented functions to protonate molecules by {program}')
 
             items = []
             data = ((smi, mol_name) for smi, mol_name in cur)

@@ -76,8 +76,8 @@ molgpka_patterns2 = [('[$([NH+,NH2+,NH3+]-[*]=[O,S])]', 'pos'), # 1
 molgpka_patterns2 = [(Chem.MolFromSmarts(p), p_type) for p, p_type in molgpka_patterns2]
 
 
-def protonate_chemaxon(input_fname, output_fname, tautomerize=True):
-    cmd_run = ['cxcalc', '-S', '--ignore-error', 'majormicrospecies', '-H', '7.4', '-K',
+def protonate_chemaxon(input_fname, output_fname, tautomerize=True, pH: float = 7.4):
+    cmd_run = ['cxcalc', '-S', '--ignore-error', 'majormicrospecies', '-H', str(pH), '-K',
                f'{"-M" if tautomerize else ""}', input_fname]
     with open(output_fname, 'w') as file:
         subprocess.run(cmd_run, stdout=file, text=True)
@@ -134,7 +134,7 @@ def read_smiles(fname):
             yield tuple(line.strip().split()[:2])
 
 
-def protonate_pkasolver(items: Iterator[Tuple[str, str]], ncpu: int = 1, mol_count=1):
+def protonate_pkasolver(items: Iterator[Tuple[str, str]], ncpu: int = 1, mol_count=1, pH: float = 7.4):
     import torch
     from pkasolver.query import QueryModel
 
@@ -143,18 +143,17 @@ def protonate_pkasolver(items: Iterator[Tuple[str, str]], ncpu: int = 1, mol_cou
     with contextlib.redirect_stdout(None):
         if torch.cuda.is_available() or ncpu == 1:
             for smi, mol_name in items:
-                yield __protonate_pkasolver((smi, mol_name), model=model)
+                yield __protonate_pkasolver((smi, mol_name), model=model, pH=pH)
         else:
             pool = Pool(ncpu)
-            for smi, mol_name in pool.imap_unordered(partial(__protonate_pkasolver, model=model), items, chunksize=chunksize):
+            for smi, mol_name in pool.imap_unordered(partial(__protonate_pkasolver, model=model, pH=pH), items, chunksize=chunksize):
                 yield smi, mol_name
 
 
-def __protonate_pkasolver(args, model):
+def __protonate_pkasolver(args, model, pH: float = 7.4):
     from pkasolver.query import calculate_microstate_pka_values
     smi, mol_name = args
     mol = Chem.MolFromSmiles(smi, sanitize=True)
-    ph = 7.4
     states = calculate_microstate_pka_values(mol, only_dimorphite=False, query_model=model)
     if not states:
         output_mol = mol
@@ -162,7 +161,7 @@ def __protonate_pkasolver(args, model):
         # select protonated form of the first state with pKa > pH or deprotonated form of the state with the highest pKa
         output_mol = None
         for state in states:
-            if state.pka > ph:
+            if state.pka > pH:
                 output_mol = state.protonated_mol
                 break
         if not output_mol:
@@ -177,7 +176,7 @@ def __protonate_pkasolver(args, model):
     return Chem.MolToSmiles(output_mol), mol_name
 
 
-def protonate_molgpka(items: Iterator[Tuple[str, str]], ncpu: int = 1):
+def protonate_molgpka(items: Iterator[Tuple[str, str]], ncpu: int = 1, pH: float = 7.4):
     # parallel execution of protonation was disabled because runs much slower than a single process protonation
     warnings.filterwarnings('ignore', category=UserWarning)
     from molgpka.predict_pka_mp import load_state_dicts, load_models
@@ -186,7 +185,7 @@ def protonate_molgpka(items: Iterator[Tuple[str, str]], ncpu: int = 1):
     models = load_state_dicts()
     models = load_models(models)
     for q in items:
-        yield __protonate_molgpka(q, models)
+        yield __protonate_molgpka(q, models, pH=pH)
 
 
 def __add_hydrogen_to_atom(editable_mol, atom_idx):
@@ -204,12 +203,11 @@ def __assign_pka_pkb_to_heavy_atoms(mol, acid_dict, base_dict):
     return mol
 
 
-def __protonate_molgpka(args, models):
+def __protonate_molgpka(args, models, pH: float = 7.4):
     from molgpka.predict_pka_mp import predict2
 
     smi, mol_name = args
     mol = Chem.MolFromSmiles(smi, sanitize=True)
-    ph = 7.4
 
     warnings.filterwarnings('ignore', category=UserWarning)
 
@@ -222,7 +220,7 @@ def __protonate_molgpka(args, models):
 
         # assign protonation states
         for atom in editable_mol.GetAtoms():
-            if atom.HasProp('pka') and atom.GetDoubleProp('pka') < ph:
+            if atom.HasProp('pka') and atom.GetDoubleProp('pka') < pH:
                 Hs = atom.GetTotalNumHs()
                 charge = atom.GetFormalCharge()
                 if Hs > 0 and charge >= 0:
@@ -234,7 +232,7 @@ def __protonate_molgpka(args, models):
                     atom.UpdatePropertyCache()
                 else:
                     logging.warning(f'(molgpka) Molecule {mol_name} has issues with assignment of protonation states (deprotonation)')
-            elif atom.HasProp('pkb') and atom.GetDoubleProp('pkb') > ph:
+            elif atom.HasProp('pkb') and atom.GetDoubleProp('pkb') > pH:
                 charge = atom.GetFormalCharge()
                 if charge <= 0:
                     atom.SetFormalCharge(charge + 1)
@@ -312,12 +310,12 @@ def __protonate_molgpka(args, models):
     return changed_smi, mol_name
 
 
-def protonate_apptainer(input_fname: str, output_fname: str, container_fname: str) -> None:
+def protonate_apptainer(input_fname: str, output_fname: str, container_fname: str, pH: float = 7.4) -> None:
 
     bind_path = set()
     bind_path.add(os.path.dirname(expand_path(input_fname)))
     bind_path.add(os.path.dirname(expand_path(output_fname)))
 
     apptainer_exec(container_fname,
-                   ['protonate', '-i', input_fname, '-o', output_fname],
+                   ['protonate', '-i', input_fname, '-o', output_fname, '--pH', str(pH)],
                    list(bind_path))

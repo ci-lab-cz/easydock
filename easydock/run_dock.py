@@ -139,6 +139,8 @@ def main():
                         help=f'choose a protonation program supported by EasyDock ({", ".join(protonation_programs)}). '
                              f'An existing apptainer container (.sif) with implemented protonation script and '
                              f'an installed environment can be passed as well.')
+    init_group.add_argument('--pH', metavar='FLOAT', type=float, required=False, default=7.4,
+                        help='pH value used for protonation.')
     init_group.add_argument('--no_tautomerization', action='store_true', default=False,
                         help='disable tautomerization of molecules during protonation (applicable to chemaxon only).')
     init_group.add_argument('--prefix', metavar='STRING', required=False, type=str, default=None,
@@ -224,7 +226,8 @@ def main():
 
         if args.protonation and not has_started_docking:
             start_protonation = time.time()
-            add_protonation(args.output, program=args.protonation, tautomerize=not args.no_tautomerization, ncpu=args.ncpu)
+            add_protonation(args.output, program=args.protonation, tautomerize=not args.no_tautomerization,
+                            ncpu=args.ncpu, pH=args.pH)
             end_protonation = time.time()
             logging.info('protonation took %.2f seconds' % (end_protonation - start_protonation))
         else:
