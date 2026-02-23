@@ -261,7 +261,7 @@ def main():
 
             # determine which molecules and poses where not processed yet
             if args.ids is None:
-                ids = get_docked_mol_ids(conn)
+                ids = sorted(get_docked_mol_ids(conn))
             elif os.path.isfile(args.ids[0]):
                 with open(args.ids[0]) as f:
                     ids = {line.strip() for line in f}
