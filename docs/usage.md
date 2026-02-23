@@ -54,6 +54,11 @@ Using Chemaxon (requires license):
 easydock -i input.smi -o output.db -c 4 --protonation chemaxon
 ```
 
+Custom pH
+```bash
+easydock -i input.smi -o output.db -c 4 --protonation molgpka --pH 12
+```
+
 No protonation (use input states):
 ```bash
 easydock -i input.smi -o output.db -c 4

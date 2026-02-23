@@ -11,7 +11,8 @@ from easydock.run_dock import docking
 from easydock.vina_dock import mol_dock
 from rdkit import Chem
 
-# Prepare molecules
+# Prepare molecules, exactly the same species as provided will be docked 
+# (protonate structures preliminary if needed)
 smiles = ['CC(=O)O', 'NCC(=O)O', 'NC(C)C(=O)O']
 mols = [Chem.MolFromSmiles(smi) for smi in smiles]
 
@@ -106,3 +107,10 @@ If some structures could not be protonated for any reason, they will be omitted 
 
 !!! note
 A more detailed description of protonation functions and their requirements is provided in `protonation.py` script 
+
+All those protonate_ family functions can take `pH` argument to specify pH (default 7.4)
+
+```python
+for smi. name in protonate_molgpka(data, pH=12):
+    print(smi, name)
+```
