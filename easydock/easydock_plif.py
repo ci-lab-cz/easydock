@@ -95,17 +95,6 @@ def make_plif_summary_to_file(
         os.remove(output_file)
 
     with sqlite3.connect(db_path) as conn:
-
-        contacts = pd.read_sql_query("SELECT DISTINCT contact_name FROM plif_names", conn)['contact_name'].tolist()
-
-        cases = ",\n       ".join(
-            [f"MAX(CASE WHEN n.contact_name = '{c}' THEN 1 ELSE 0 END) AS '{c}'" for c in contacts])
-
-        base_query = f"""
-        SELECT m.id, m.stereo_id, p.pose, {cases} FROM plif_res p 
-        JOIN mols m ON m.rowid = p.mols_rowid 
-        JOIN plif_names n ON n.plif_id = p.plif_id"""
-
         conditions = []
         params = []
 
@@ -119,17 +108,20 @@ def make_plif_summary_to_file(
             conditions.append(f"p.pose IN ({placeholders})")
             params.extend(poses)
 
+        base_query = """
+        SELECT m.id, m.stereo_id, p.pose, n.contact_name
+        FROM plif_res p
+        JOIN mols m ON m.rowid = p.mols_rowid
+        JOIN plif_names n ON n.plif_id = p.plif_id
+        """
         if conditions:
             base_query += " WHERE " + " AND ".join(conditions)
 
-        base_query += "\nGROUP BY m.id, p.pose"
-
-        if ids:
-            case_str = ' '.join(f'WHEN "{mol_id}" THEN {i}' for i, mol_id in enumerate(ids, 1))
-            base_query += f"\nORDER BY CASE m.id {case_str} END, p.pose"
-
-        else:
-            base_query += "\nORDER BY m.id, p.pose"
+        # if ids:
+        #     case_str = ' '.join(f'WHEN "{mol_id}" THEN {i}' for i, mol_id in enumerate(ids, 1))
+        #     long_query += f"\nORDER BY CASE m.id {case_str} END, p.pose"
+        # else:
+        #     long_query += "\nORDER BY m.id, p.pose"
 
         offset = 0
         first_batch = True
@@ -140,24 +132,41 @@ def make_plif_summary_to_file(
             if df_batch.empty:
                 break
 
+            # Long -> wide in Python to avoid SQL pivot with many CASE expressions.
+            df_batch["present"] = 1
+            df_wide = (df_batch.pivot_table(index=["id", "stereo_id", "pose"], columns="contact_name",
+                    values="present", aggfunc="max", fill_value=0,).reset_index())
+
+            df_wide.columns.name = None
+            contact_cols = [c for c in df_wide.columns if c not in ["id", "stereo_id", "pose"]]
+            if contact_cols:
+                df_wide[contact_cols] = df_wide[contact_cols].astype(bool)
+
+            if ids:
+                df_wide['id'] = pd.Categorical(df_wide['id'], categories=ids, ordered=True)
+                df_wide = df_wide.sort_values(['id', 'pose'])
+                df_wide['id'] = df_wide['id'].astype(str)
+            else:
+                df_wide = df_wide.sort_values(['id', 'pose'])
+
             if plif_list is not None:
-                plif_ref_df = pd.DataFrame([{col: (1 if col in plif_list else 0) for col in df_batch.columns}])
+                plif_ref_df = pd.DataFrame([{col: (1 if col in plif_list else 0) for col in df_wide.columns}])
 
                 with pd.option_context("future.no_silent_downcasting", True):
-                    df = pd.concat([plif_ref_df, df_batch], ignore_index=True)
-                    contacts_cols = df.columns[3:]
+                    contacts_cols = df_wide.columns[3:]
+                    df = pd.concat([plif_ref_df, df_wide], ignore_index=True)
                     df[contacts_cols] = df[contacts_cols].fillna(False).astype(bool)
                     b = plf.to_bitvectors(df.iloc[:, 3:])
                     sim = DataStructs.BulkTverskySimilarity(b[0], b[1:], 1, 0)
                     sim = [round(x, 3) for x in sim]
 
-                    df_batch['plif_sim'] = sim
-                    df_batch = df_batch[['id', 'stereo_id', 'pose', 'plif_sim']]
+                    df_wide['plif_sim'] = sim
+                    df_wide = df_wide[['id', 'stereo_id', 'pose', 'plif_sim']]
 
-            df_batch.to_csv(output_file, mode='w' if first_batch else 'a', sep=sep, index=False, header=first_batch)
+            df_wide.to_csv(output_file, mode='w' if first_batch else 'a', sep=sep, index=False, header=first_batch)
             first_batch = False
 
-            if len(df_batch) < batch_size:
+            if len(df_wide) < batch_size:
                 break
 
             offset += batch_size
