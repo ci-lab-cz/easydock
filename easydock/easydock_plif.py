@@ -117,11 +117,11 @@ def make_plif_summary_to_file(
         if conditions:
             base_query += " WHERE " + " AND ".join(conditions)
 
-        # if ids:
-        #     case_str = ' '.join(f'WHEN "{mol_id}" THEN {i}' for i, mol_id in enumerate(ids, 1))
-        #     long_query += f"\nORDER BY CASE m.id {case_str} END, p.pose"
-        # else:
-        #     long_query += "\nORDER BY m.id, p.pose"
+        base_query += " ORDER BY m.id, m.stereo_id, p.pose, n.contact_name"
+
+        contacts = pd.read_sql_query("SELECT DISTINCT contact_name FROM plif_names", conn)['contact_name'].tolist()
+
+        fixed_wide_cols = ["id", "stereo_id", "pose"] + contacts
 
         offset = 0
         first_batch = True
@@ -131,23 +131,17 @@ def make_plif_summary_to_file(
             df_batch = pd.read_sql_query(batch_query, conn, params=params)
             if df_batch.empty:
                 break
-
-            # Long -> wide in Python to avoid SQL pivot with many CASE expressions.
             df_batch["present"] = 1
             df_wide = (df_batch.pivot_table(index=["id", "stereo_id", "pose"], columns="contact_name",
-                    values="present", aggfunc="max", fill_value=0,).reset_index())
+                                            values="present", aggfunc="max", fill_value=0, ).reset_index())
 
             df_wide.columns.name = None
-            contact_cols = [c for c in df_wide.columns if c not in ["id", "stereo_id", "pose"]]
-            if contact_cols:
-                df_wide[contact_cols] = df_wide[contact_cols].astype(bool)
+            df_wide = df_wide.reindex(columns=fixed_wide_cols, fill_value=False)
+            df_wide[contacts] = df_wide[contacts].astype(bool)
 
-            if ids:
-                df_wide['id'] = pd.Categorical(df_wide['id'], categories=ids, ordered=True)
-                df_wide = df_wide.sort_values(['id', 'pose'])
-                df_wide['id'] = df_wide['id'].astype(str)
-            else:
-                df_wide = df_wide.sort_values(['id', 'pose'])
+            df_wide['id'] = pd.Categorical(df_wide['id'], categories=ids, ordered=True)
+            df_wide = df_wide.sort_values(['id', 'pose'])
+            df_wide['id'] = df_wide['id'].astype(str)
 
             if plif_list is not None:
                 plif_ref_df = pd.DataFrame([{col: (1 if col in plif_list else 0) for col in df_wide.columns}])
@@ -155,7 +149,7 @@ def make_plif_summary_to_file(
                 with pd.option_context("future.no_silent_downcasting", True):
                     contacts_cols = df_wide.columns[3:]
                     df = pd.concat([plif_ref_df, df_wide], ignore_index=True)
-                    df[contacts_cols] = df[contacts_cols].fillna(False).astype(bool)
+                    df[contacts] = df[contacts].fillna(False).astype(bool)
                     b = plf.to_bitvectors(df.iloc[:, 3:])
                     sim = DataStructs.BulkTverskySimilarity(b[0], b[1:], 1, 0)
                     sim = [round(x, 3) for x in sim]
@@ -166,7 +160,7 @@ def make_plif_summary_to_file(
             df_wide.to_csv(output_file, mode='w' if first_batch else 'a', sep=sep, index=False, header=first_batch)
             first_batch = False
 
-            if len(df_wide) < batch_size:
+            if len(df_batch) < batch_size:
                 break
 
             offset += batch_size
