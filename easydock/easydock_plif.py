@@ -144,16 +144,18 @@ def make_plif_summary_to_file(
             df_wide['id'] = df_wide['id'].astype(str)
 
             if plif_list is not None:
-                plif_ref_df = pd.DataFrame([{col: (1 if col in plif_list else 0) for col in df_wide.columns}])
+                plif_set = set(plif_list)
+                ref_row = pd.DataFrame([{col: (col in plif_set) for col in contacts}], columns=contacts).astype(bool)
 
+                X = df_wide[contacts].copy()
                 with pd.option_context("future.no_silent_downcasting", True):
-                    contacts_cols = df_wide.columns[3:]
-                    df = pd.concat([plif_ref_df, df_wide], ignore_index=True)
-                    df[contacts] = df[contacts].fillna(False).astype(bool)
-                    b = plf.to_bitvectors(df.iloc[:, 3:])
+                    X = X.fillna(False).astype(bool)
+                    X_bits = pd.concat([ref_row, X], ignore_index=True, copy=False)
+                    b = plf.to_bitvectors(X_bits)
                     sim = DataStructs.BulkTverskySimilarity(b[0], b[1:], 1, 0)
                     sim = [round(x, 3) for x in sim]
 
+                    df_wide = df_wide.copy()
                     df_wide['plif_sim'] = sim
                     df_wide = df_wide[['id', 'stereo_id', 'pose', 'plif_sim']]
 
