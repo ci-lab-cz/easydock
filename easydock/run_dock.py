@@ -12,12 +12,43 @@ from multiprocessing import Pool
 from rdkit import Chem
 from rdkit.Chem.rdMolDescriptors import CalcNumRotatableBonds
 from easydock.database import create_db, restore_setup_from_db, init_db, check_db_status, update_db, save_sdf, select_mols_to_dock, \
-    add_protonation, populate_setup_db
+    add_protonation, populate_setup_db, get_pipeline_statistics
 from easydock.args_validation import protonation_type, protonation_programs, cpu_type, filepath_type
 
 
 class RawTextArgumentDefaultsHelpFormatter(argparse.RawTextHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
     pass
+
+
+def _report_stage_statistics(title: str, lines):
+    logging.info(title)
+    for line in lines:
+        logging.info(line)
+
+    sys.stderr.write(title + '\n')
+    for line in lines:
+        sys.stderr.write(line + '\n')
+    sys.stderr.flush()
+
+
+def report_preparation_statistics(stats):
+    lines = [
+        f'input structures: {stats["input_structures"]}',
+        f'successfully read structures: {stats["successfully_read_structures"]}',
+        f'generated stereoisomers: {stats["generated_stereoisomers"]}',
+        f'input compounds failed stereoisomer generation: {stats["failed_stereoisomer_generation"]}',
+        f'protonated stereoisomers: {stats["protonated_stereoisomers"]}',
+        f'stereoisomers failed protonation: {stats["failed_protonation"]}',
+    ]
+    _report_stage_statistics('Preparation stage statistics:', lines)
+
+
+def report_docking_statistics(stats):
+    lines = [
+        f'docked stereoisomers: {stats["docked_stereoisomers"]}',
+        f'stereoisomers failed to dock: {stats["failed_docking"]}',
+    ]
+    _report_stage_statistics('Docking stage statistics:', lines)
 
 
 def get_supplied_args(parser):
@@ -233,6 +264,9 @@ def main():
         else:
             logging.info('protonation skipped')
 
+        prep_stats = get_pipeline_statistics(args.output)
+        report_preparation_statistics(prep_stats)
+
         if args.config:
             populate_setup_db(args.output, args)
             if args.program == 'vina':
@@ -275,6 +309,9 @@ def main():
 
             if args.sdf:
                 save_sdf(args.output)
+
+            docking_stats = get_pipeline_statistics(args.output)
+            report_docking_statistics(docking_stats)
 
     finally:
 

@@ -17,7 +17,7 @@ from easydock.database import (
     get_docked_mol_ids,
     create_variables_table,
     create_plif_tables,
-    get_variables_for_module,
+    get_variables,
     set_variable,
     insert_db
 )
@@ -228,7 +228,7 @@ def main():
             create_plif_tables(conn)
 
             # read variables used by a module
-            variables = get_variables_for_module(conn, "easydock_plif")
+            variables = get_variables(conn, "easydock_plif")
             plif_protein = variables.get('plif_protein')
 
             if plif_protein is None and args.protein is None:

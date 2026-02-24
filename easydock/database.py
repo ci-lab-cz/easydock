@@ -1,6 +1,8 @@
 import logging
 import os
 import json
+import gzip
+import pickle
 import sqlite3
 import tempfile
 import traceback
@@ -49,7 +51,7 @@ def create_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', '
         cur.execute(f"""CREATE TABLE IF NOT EXISTS mols
                     (
                      id TEXT,
-                     stereo_id TEXT DEFAULT 0,
+                     stereo_id INTEGER DEFAULT 0,
                      smi_input TEXT,
                      smi TEXT {'UNIQUE' if unique_smi else ''},
                      smi_protonated TEXT,
@@ -300,6 +302,62 @@ def init_db(db_fname: str, input_fname: str, ncpu: int, max_stereoisomers=1, pre
         cur.executemany(f'INSERT INTO mols (id, stereo_id, smi, source_mol_block_input, source_mol_block) VALUES(?, ?, ?, ?, ?)', data_mol)
         conn.commit()
 
+        input_structures_total = count_input_structures(input_fname)
+        if input_structures_total is not None:
+            set_variable(conn, 'run_dock', 'input_structures_total', input_structures_total)
+
+
+def count_input_structures(input_fname: str) -> Optional[int]:
+    """
+    Count all records in input file, including structures that may fail RDKit parsing.
+    """
+    def _count_sdf_structures(handle) -> int:
+        count = 0
+        has_data = False
+        for line in handle:
+            if line.strip():
+                has_data = True
+            if line.strip() == '$$$$':
+                count += 1
+                has_data = False
+        if has_data:
+            count += 1
+        return count
+
+    if not input_fname:
+        return None
+
+    fname = os.path.abspath(input_fname)
+    lower_fname = fname.lower()
+
+    try:
+        if lower_fname.endswith('.smi') or lower_fname.endswith('.smiles'):
+            with open(fname) as f:
+                return sum(1 for line in f if line.strip())
+
+        if lower_fname.endswith('.sdf'):
+            with open(fname) as f:
+                return _count_sdf_structures(f)
+
+        if lower_fname.endswith('.sdf.gz'):
+            with gzip.open(fname, 'rt', encoding='utf-8', errors='ignore') as f:
+                return _count_sdf_structures(f)
+
+        if lower_fname.endswith('.pkl'):
+            count = 0
+            with open(fname, 'rb') as f:
+                while True:
+                    try:
+                        pickle.load(f)
+                        count += 1
+                    except EOFError:
+                        break
+            return count
+    except OSError:
+        return None
+
+    return None
+
 
 def check_db_status(db_fname: str, db_col_list: str):
     with sqlite3.connect(db_fname, timeout=90) as conn:
@@ -308,8 +366,134 @@ def check_db_status(db_fname: str, db_col_list: str):
             return True
         else:
             return False
-    
-    
+
+
+def get_variables(conn, module: str, variable_names: List[str] = None):
+    """
+    Return variables for a module as a dictionary.
+    :param conn:
+    :param module:
+    :param variable_names: list of variable names to fetch; if None, return all module variables
+    :return: dict {variable_name: parsed_value}
+    :raises KeyError: if any requested variable name is absent
+    """
+    cur = conn.execute(
+        "SELECT name, value_type, value FROM variables WHERE module = ?",
+        (module,)
+    )
+
+    rows = cur.fetchall()
+    output = dict()
+
+    for name, value_type, value in rows:
+        if variable_names and name not in variable_names:
+            continue
+        if value_type == "int":
+            parsed = int(value)
+        elif value_type == "float":
+            parsed = float(value)
+        elif value_type == "json":
+            parsed = json.loads(value)
+        else:  # str
+            parsed = value
+
+        output[name] = parsed
+
+    if variable_names is not None:
+        missing = [name for name in variable_names if name not in output]
+        if missing:
+            raise KeyError(f"Variables not found in module '{module}': {', '.join(missing)}")
+
+    return output
+
+
+def _get_input_fname_from_setup(conn) -> Optional[str]:
+    try:
+        setup_yaml = conn.execute("SELECT yaml FROM setup").fetchone()[0]
+    except (sqlite3.OperationalError, TypeError, IndexError):
+        return None
+    if not setup_yaml:
+        return None
+    data = yaml.safe_load(setup_yaml)
+    if isinstance(data, dict):
+        return data.get('input')
+    return None
+
+
+def get_pipeline_statistics(db_fname: str) -> Dict[str, Union[bool, int]]:
+    """
+    Return cumulative preparation and docking statistics from DB.
+    """
+    with sqlite3.connect(db_fname, timeout=90) as conn:
+        cur = conn.cursor()
+
+        protonation_enabled = get_protonation_arg_value(conn)
+
+        try:
+            input_structures_total = get_variables(conn, 'run_dock', ['input_structures_total'])['input_structures_total']
+        except (sqlite3.OperationalError, KeyError) as e:
+            logging.warning(f"Failed to read 'run_dock.input_structures_total' from variables table: {e}")
+            input_structures_total = count_input_structures(_get_input_fname_from_setup(conn))
+
+        successfully_read_structures = cur.execute(
+            "SELECT COUNT(rowid) FROM mols WHERE stereo_id = 0"
+        ).fetchone()[0]
+
+        if input_structures_total is None:
+            input_structures_total = successfully_read_structures
+
+        total_generated_stereoisomers = cur.execute(
+            "SELECT COUNT(rowid) FROM mols WHERE smi IS NOT NULL OR source_mol_block IS NOT NULL"
+        ).fetchone()[0]
+
+        failed_stereoisomer_generation = cur.execute(
+            """
+            SELECT COUNT(rowid) FROM mols
+            WHERE stereo_id = 0
+              AND smi IS NULL
+              AND source_mol_block IS NULL
+            """
+        ).fetchone()[0]
+
+        if protonation_enabled:
+            protonated_stereoisomers = cur.execute(
+                "SELECT COUNT(rowid) FROM mols WHERE smi_protonated IS NOT NULL"
+            ).fetchone()[0]
+            failed_protonation = cur.execute(
+                "SELECT COUNT(rowid) FROM mols WHERE smi IS NOT NULL AND smi_protonated IS NULL"
+            ).fetchone()[0]
+        else:
+            protonated_stereoisomers = 0
+            failed_protonation = 0
+
+        if protonation_enabled:
+            dockable_sql = "(smi_protonated IS NOT NULL OR source_mol_block_protonated IS NOT NULL)"
+        else:
+            dockable_sql = "(smi IS NOT NULL OR source_mol_block IS NOT NULL)"
+
+        dockable_stereoisomers = cur.execute(
+            f"SELECT COUNT(rowid) FROM mols WHERE {dockable_sql}"
+        ).fetchone()[0]
+
+        docked_stereoisomers = cur.execute(
+            "SELECT COUNT(rowid) FROM mols WHERE docking_score IS NOT NULL"
+        ).fetchone()[0]
+
+        failed_docking = max(0, dockable_stereoisomers - docked_stereoisomers)
+
+    return {
+        'protonation_enabled': protonation_enabled,
+        'input_structures': input_structures_total,
+        'successfully_read_structures': successfully_read_structures,
+        'generated_stereoisomers': total_generated_stereoisomers,
+        'failed_stereoisomer_generation': failed_stereoisomer_generation,
+        'protonated_stereoisomers': protonated_stereoisomers,
+        'failed_protonation': failed_protonation,
+        'docked_stereoisomers': docked_stereoisomers,
+        'failed_docking': failed_docking
+    }
+
+
 def get_protonation_arg_value(db_conn):
     """
     Returns True if molecules have to be protonated and False otherwise
@@ -435,15 +619,15 @@ def select_mols_to_dock(db_conn, table_name='mols', add_sql=None):
             if mol_is_3d(mol):
                 Chem.AssignStereochemistryFrom3D(mol)
         if mol:
-            mol.SetProp('_Name', mol_id + '_' + stereo_id)
+            mol.SetProp('_Name', f'{mol_id}_{stereo_id}')
             yield mol
 
 
-def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='mols', add_sql='', ncpu=1, pH: float = 7.4):
+def add_protonation(db_fname, program='molgpka', tautomerize=True, table_name='mols', add_sql='', ncpu=1, pH: float = 7.4):
     '''
     Protonate SMILES by selected backend to get molecule ionization states at a given pH
     :param db_fname:
-    :param program: name of the prorgam to use
+    :param program: name of the program to use
     :param tautomerize: get a major tautomer at protonation
     :param table_name: table name with molecules to protonate
     :param add_sql: additional SQL query to be appended to the SQL query to retrieve molecules for protonation,
@@ -754,36 +938,6 @@ def tables_exist(conn, table_names: List[str]) -> Dict[str, bool]:
     found = {row[0] for row in cur.fetchall()}
 
     return {name: (name in found) for name in table_names}
-
-
-def get_variables_for_module(conn, module: str):
-    """
-    Returns a dictionary with variables names and values for a given module
-    :param conn:
-    :param module:
-    :return:
-    """
-    cur = conn.execute(
-        "SELECT name, value_type, value FROM variables WHERE module = ?",
-        (module,)
-    )
-
-    rows = cur.fetchall()
-    output = dict()
-
-    for name, value_type, value in rows:
-        if value_type == "int":
-            parsed = int(value)
-        elif value_type == "float":
-            parsed = float(value)
-        elif value_type == "json":
-            parsed = json.loads(value)
-        else:  # str
-            parsed = value
-
-        output[name] = parsed
-
-    return output
 
 
 def create_plif_tables(conn):
