@@ -12,7 +12,8 @@ from multiprocessing import Pool
 from rdkit import Chem
 from rdkit.Chem.rdMolDescriptors import CalcNumRotatableBonds
 from easydock.database import create_db, restore_setup_from_db, init_db, check_db_status, update_db, save_sdf, select_mols_to_dock, \
-    add_protonation, populate_setup_db, get_pipeline_statistics
+    add_protonation, populate_setup_db
+from easydock.reporting import get_pipeline_statistics, write_stage_error_log, report_error_log_file
 from easydock.args_validation import protonation_type, protonation_programs, cpu_type, filepath_type
 
 
@@ -253,6 +254,16 @@ def main():
             end_init = time.time()
             logging.info('initialization took %.2f seconds' % (end_init - start_init))
 
+            # log failed structures
+            source_fname, source_n = write_stage_error_log(args.output,
+                                                           stage_name='input_parsing',
+                                                           input_fname=args.input,
+                                                           prefix=args.prefix)
+            report_error_log_file('input parsing', source_fname, source_n)
+
+            stereo_fname, stereo_n = write_stage_error_log(args.output, stage_name='stereoisomer_generation')
+            report_error_log_file('stereoisomer generation', stereo_fname, stereo_n)
+
         dask_client = create_dask_client(args.hostfile)
 
         if args.protonation and not has_started_docking:
@@ -261,6 +272,11 @@ def main():
                             ncpu=args.ncpu, pH=args.pH)
             end_protonation = time.time()
             logging.info('protonation took %.2f seconds' % (end_protonation - start_protonation))
+
+            # log failed structures
+            protonation_fname, protonation_n = write_stage_error_log(args.output, stage_name='protonation')
+            report_error_log_file('protonation', protonation_fname, protonation_n)
+
         else:
             logging.info('protonation skipped')
 
@@ -309,6 +325,9 @@ def main():
 
             if args.sdf:
                 save_sdf(args.output)
+
+            docking_fname, docking_n = write_stage_error_log(args.output, stage_name='docking')
+            report_error_log_file('docking', docking_fname, docking_n)
 
             docking_stats = get_pipeline_statistics(args.output)
             report_docking_statistics(docking_stats)

@@ -1,11 +1,13 @@
+import gzip
 import os
+import pickle
 from itertools import islice
 from math import ceil
 import signal
 import functools
 import platform
 import threading
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 
 def take(n, iterable):
@@ -101,3 +103,55 @@ def chunk_into_size_n(smi_l: List[str], n: int):
 
 def expand_path(path):
     return os.path.expanduser(os.path.expandvars(path))
+
+
+def count_input_structures(input_fname: str) -> Optional[int]:
+    """
+    Count all records in input file, including structures that may fail RDKit parsing.
+    """
+    def _count_sdf_structures(handle) -> int:
+        count = 0
+        has_data = False
+        for line in handle:
+            if line.strip():
+                has_data = True
+            if line.strip() == '$$$$':
+                count += 1
+                has_data = False
+        if has_data:
+            count += 1
+        return count
+
+    if not input_fname:
+        return None
+
+    fname = os.path.abspath(input_fname)
+    lower_fname = fname.lower()
+
+    try:
+        if lower_fname.endswith('.smi') or lower_fname.endswith('.smiles'):
+            with open(fname) as f:
+                return sum(1 for line in f if line.strip())
+
+        if lower_fname.endswith('.sdf'):
+            with open(fname) as f:
+                return _count_sdf_structures(f)
+
+        if lower_fname.endswith('.sdf.gz'):
+            with gzip.open(fname, 'rt', encoding='utf-8', errors='ignore') as f:
+                return _count_sdf_structures(f)
+
+        if lower_fname.endswith('.pkl'):
+            count = 0
+            with open(fname, 'rb') as f:
+                while True:
+                    try:
+                        pickle.load(f)
+                        count += 1
+                    except EOFError:
+                        break
+            return count
+    except OSError:
+        return None
+
+    return None
