@@ -85,7 +85,7 @@ def make_plif_summary_to_file(
         ids: Optional[List[str]] = None,
         poses: Optional[List[int]] = None,
         plif_list: Optional[List[str]] = None,
-        batch_size: int = 10000,
+        batch_size: int = 1000,
         sep: str = '\t'
 ):
     """
@@ -95,40 +95,39 @@ def make_plif_summary_to_file(
         os.remove(output_file)
 
     with sqlite3.connect(db_path) as conn:
-        conditions = []
-        params = []
 
-        if ids:
-            placeholders = ','.join(['?'] * len(ids))
-            conditions.append(f"m.id IN ({placeholders})")
-            params.extend(ids)
-
-        if poses:
-            placeholders = ','.join(['?'] * len(poses))
-            conditions.append(f"p.pose IN ({placeholders})")
-            params.extend(poses)
-
-        base_query = """
-        SELECT m.id, m.stereo_id, p.pose, n.contact_name
-        FROM plif_res p
-        JOIN mols m ON m.rowid = p.mols_rowid
-        JOIN plif_names n ON n.plif_id = p.plif_id
-        """
-        if conditions:
-            base_query += " WHERE " + " AND ".join(conditions)
-
-        base_query += " ORDER BY m.id, m.stereo_id, p.pose, n.contact_name"
-
-        contacts = pd.read_sql_query("SELECT DISTINCT contact_name FROM plif_names", conn)['contact_name'].tolist()
-
-        fixed_wide_cols = ["id", "stereo_id", "pose"] + contacts
-
-        offset = 0
         first_batch = True
+        for ids_batch in split_generator_to_chunks(ids, chunk_size=batch_size):
+            conditions = []
+            params = []
 
-        while True:
-            batch_query = f"{base_query} LIMIT {batch_size} OFFSET {offset}"
-            df_batch = pd.read_sql_query(batch_query, conn, params=params)
+            if ids_batch:
+                placeholders = ','.join(['?'] * len(ids_batch))
+                conditions.append(f"m.id IN ({placeholders})")
+                params.extend(ids_batch)
+
+            if poses:
+                placeholders = ','.join(['?'] * len(poses))
+                conditions.append(f"p.pose IN ({placeholders})")
+                params.extend(poses)
+
+            base_query = """
+            SELECT m.id, m.stereo_id, p.pose, n.contact_name
+            FROM plif_res p
+            JOIN mols m ON m.rowid = p.mols_rowid
+            JOIN plif_names n ON n.plif_id = p.plif_id
+            """
+            if conditions:
+                base_query += " WHERE " + " AND ".join(conditions)
+
+            base_query += " ORDER BY m.id, m.stereo_id, p.pose, n.contact_name"
+
+            contacts = pd.read_sql_query("SELECT DISTINCT contact_name FROM plif_names", conn)['contact_name'].tolist()
+
+            fixed_wide_cols = ["id", "stereo_id", "pose"] + contacts
+
+
+            df_batch = pd.read_sql_query(base_query, conn, params=params)
             if df_batch.empty:
                 break
             df_batch["present"] = 1
@@ -139,7 +138,7 @@ def make_plif_summary_to_file(
             df_wide = df_wide.reindex(columns=fixed_wide_cols, fill_value=False)
             df_wide[contacts] = df_wide[contacts].astype(bool)
 
-            df_wide['id'] = pd.Categorical(df_wide['id'], categories=ids, ordered=True)
+            df_wide['id'] = pd.Categorical(df_wide['id'], categories=ids_batch, ordered=True)
             df_wide = df_wide.sort_values(['id', 'pose'])
             df_wide['id'] = df_wide['id'].astype(str)
 
@@ -161,11 +160,6 @@ def make_plif_summary_to_file(
 
             df_wide.to_csv(output_file, mode='w' if first_batch else 'a', sep=sep, index=False, header=first_batch)
             first_batch = False
-
-            if len(df_batch) < batch_size:
-                break
-
-            offset += batch_size
 
 
 def main():
@@ -261,12 +255,12 @@ def main():
 
             # determine which molecules and poses where not processed yet
             if args.ids is None:
-                ids = sorted(get_docked_mol_ids(conn))
+                ids = get_docked_mol_ids(conn)
             elif os.path.isfile(args.ids[0]):
                 with open(args.ids[0]) as f:
-                    ids = {line.strip() for line in f}
+                    ids = [line.strip() for line in f]
             else:
-                ids = set(args.ids)
+                ids = [args.ids]
 
             cur = conn.execute(f"""
                                SELECT m.id
@@ -277,9 +271,8 @@ def main():
                                    HAVING COUNT(DISTINCT p.pose) = {len(poses)}""",
                                poses)
 
-            ids_done = {row[0] for row in cur.fetchall()}
-
-            ids_todo = ids.difference(ids_done)
+            ids_done = [row[0] for row in cur.fetchall()]
+            ids_todo = [x for x in ids if x not in ids_done]
 
             chunk_size = 10 * args.ncpu // len(poses)
 
