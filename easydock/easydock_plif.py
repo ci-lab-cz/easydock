@@ -147,6 +147,7 @@ def make_plif_summary_to_file(
                     df_wide['plif_sim'] = sim
                     df_wide = df_wide[['id', 'stereo_id', 'pose', 'plif_sim']]
 
+            df_wide[contacts] = df_wide[contacts].astype(int)
             df_wide.to_csv(output_file, mode='w' if first_batch else 'a', sep=sep, index=False, header=first_batch)
             first_batch = False
 
