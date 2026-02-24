@@ -95,16 +95,22 @@ def make_plif_summary_to_file(
         os.remove(output_file)
 
     with sqlite3.connect(db_path) as conn:
+        contacts = pd.read_sql_query("SELECT DISTINCT contact_name FROM plif_names", conn)['contact_name'].tolist()
+        fixed_wide_cols = ["id", "stereo_id", "pose"] + contacts
+
+        if plif_list is not None:
+            plif_set = set(plif_list)
+            ref_row = pd.DataFrame([{col: (col in plif_set) for col in contacts}], columns=contacts)
+            b_0 = plf.to_bitvectors(ref_row)
 
         first_batch = True
         for ids_batch in split_generator_to_chunks(ids, chunk_size=batch_size):
             conditions = []
             params = []
 
-            if ids_batch:
-                placeholders = ','.join(['?'] * len(ids_batch))
-                conditions.append(f"m.id IN ({placeholders})")
-                params.extend(ids_batch)
+            placeholders = ','.join(['?'] * len(ids_batch))
+            conditions.append(f"m.id IN ({placeholders})")
+            params.extend(ids_batch)
 
             if poses:
                 placeholders = ','.join(['?'] * len(poses))
@@ -120,41 +126,24 @@ def make_plif_summary_to_file(
             if conditions:
                 base_query += " WHERE " + " AND ".join(conditions)
 
-            base_query += " ORDER BY m.id, m.stereo_id, p.pose, n.contact_name"
-
-            contacts = pd.read_sql_query("SELECT DISTINCT contact_name FROM plif_names", conn)['contact_name'].tolist()
-
-            fixed_wide_cols = ["id", "stereo_id", "pose"] + contacts
-
-
             df_batch = pd.read_sql_query(base_query, conn, params=params)
+
             if df_batch.empty:
                 break
+
             df_batch["present"] = 1
             df_wide = (df_batch.pivot_table(index=["id", "stereo_id", "pose"], columns="contact_name",
                                             values="present", aggfunc="max", fill_value=0, ).reset_index())
-
             df_wide.columns.name = None
-            df_wide = df_wide.reindex(columns=fixed_wide_cols, fill_value=False)
-            df_wide[contacts] = df_wide[contacts].astype(bool)
-
+            df_wide = df_wide.reindex(columns=fixed_wide_cols, fill_value=0)
             df_wide['id'] = pd.Categorical(df_wide['id'], categories=ids_batch, ordered=True)
-            df_wide = df_wide.sort_values(['id', 'pose'])
-            df_wide['id'] = df_wide['id'].astype(str)
 
             if plif_list is not None:
-                plif_set = set(plif_list)
-                ref_row = pd.DataFrame([{col: (col in plif_set) for col in contacts}], columns=contacts).astype(bool)
-
-                X = df_wide[contacts].copy()
                 with pd.option_context("future.no_silent_downcasting", True):
-                    X = X.fillna(False).astype(bool)
-                    X_bits = pd.concat([ref_row, X], ignore_index=True, copy=False)
-                    b = plf.to_bitvectors(X_bits)
-                    sim = DataStructs.BulkTverskySimilarity(b[0], b[1:], 1, 0)
+                    X = df_wide[contacts]
+                    b = plf.to_bitvectors(X)
+                    sim = DataStructs.BulkTverskySimilarity(b_0, b, 1, 0)
                     sim = [round(x, 3) for x in sim]
-
-                    df_wide = df_wide.copy()
                     df_wide['plif_sim'] = sim
                     df_wide = df_wide[['id', 'stereo_id', 'pose', 'plif_sim']]
 
