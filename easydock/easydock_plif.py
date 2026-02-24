@@ -101,7 +101,6 @@ def make_plif_summary_to_file(
         if plif_list is not None:
             plif_set = set(plif_list)
             ref_row = pd.DataFrame([{col: (col in plif_set) for col in contacts}], columns=contacts)
-            b_0 = plf.to_bitvectors(ref_row)
 
         first_batch = True
         for ids_batch in split_generator_to_chunks(ids, chunk_size=batch_size):
@@ -141,8 +140,9 @@ def make_plif_summary_to_file(
             if plif_list is not None:
                 with pd.option_context("future.no_silent_downcasting", True):
                     X = df_wide[contacts]
-                    b = plf.to_bitvectors(X)
-                    sim = DataStructs.BulkTverskySimilarity(b_0, b, 1, 0)
+                    X_bits = pd.concat([ref_row, X], ignore_index=True, copy=False)
+                    b = plf.to_bitvectors(X_bits)
+                    sim = DataStructs.BulkTverskySimilarity(b[0], b[1:], 1, 0)
                     sim = [round(x, 3) for x in sim]
                     df_wide['plif_sim'] = sim
                     df_wide = df_wide[['id', 'stereo_id', 'pose', 'plif_sim']]
