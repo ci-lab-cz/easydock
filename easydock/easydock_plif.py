@@ -111,7 +111,7 @@ def make_plif_summary_to_file(
         contacts = pd.read_sql_query("SELECT DISTINCT contact_name FROM plif_names", conn)['contact_name'].tolist()
 
         if plif_list is not None:
-            contacts += list(set(plif_list))
+            contacts.extend(x for x in set(plif_list) if x not in contacts)
             ref_row = pd.DataFrame([{col: (col in plif_list) for col in contacts}], columns=contacts)
 
         fixed_wide_cols = ["id", "stereo_id", "pose"] + contacts
