@@ -1,6 +1,8 @@
 import logging
 import os
 import json
+import gzip
+import pickle
 import sqlite3
 import tempfile
 import traceback
@@ -13,7 +15,7 @@ import yaml
 
 from easydock import read_input
 from easydock.preparation_for_docking import mol_is_3d
-from easydock.auxiliary import take, mol_name_split, timeout, expand_path
+from easydock.auxiliary import take, mol_name_split, timeout, expand_path, count_input_structures
 from easydock.preparation_for_docking import pdbqt2molblock
 from easydock.protonation import (
     protonate_chemaxon,
@@ -49,7 +51,7 @@ def create_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', '
         cur.execute(f"""CREATE TABLE IF NOT EXISTS mols
                     (
                      id TEXT,
-                     stereo_id TEXT DEFAULT 0,
+                     stereo_id INTEGER DEFAULT 0,
                      smi_input TEXT,
                      smi TEXT {'UNIQUE' if unique_smi else ''},
                      smi_protonated TEXT,
@@ -300,6 +302,10 @@ def init_db(db_fname: str, input_fname: str, ncpu: int, max_stereoisomers=1, pre
         cur.executemany(f'INSERT INTO mols (id, stereo_id, smi, source_mol_block_input, source_mol_block) VALUES(?, ?, ?, ?, ?)', data_mol)
         conn.commit()
 
+        input_structures_total = count_input_structures(input_fname)
+        if input_structures_total is not None:
+            set_variable(conn, 'run_dock', 'input_structures_total', input_structures_total)
+
 
 def check_db_status(db_fname: str, db_col_list: str):
     with sqlite3.connect(db_fname, timeout=90) as conn:
@@ -308,8 +314,73 @@ def check_db_status(db_fname: str, db_col_list: str):
             return True
         else:
             return False
-    
-    
+
+
+def get_variables(conn, module: str, variable_names: List[str] = None):
+    """
+    Return variables for a module as a dictionary.
+    :param conn:
+    :param module:
+    :param variable_names: list of variable names to fetch; if None, return all module variables
+    :return: dict {variable_name: parsed_value}
+    :raises KeyError: if any requested variable name is absent
+    """
+    cur = conn.execute(
+        "SELECT name, value_type, value FROM variables WHERE module = ?",
+        (module,)
+    )
+
+    rows = cur.fetchall()
+    output = dict()
+
+    for name, value_type, value in rows:
+        if variable_names and name not in variable_names:
+            continue
+        if value_type == "int":
+            parsed = int(value)
+        elif value_type == "float":
+            parsed = float(value)
+        elif value_type == "json":
+            parsed = json.loads(value)
+        else:  # str
+            parsed = value
+
+        output[name] = parsed
+
+    if variable_names is not None:
+        missing = [name for name in variable_names if name not in output]
+        if missing:
+            raise KeyError(f"Variables not found in module '{module}': {', '.join(missing)}")
+
+    return output
+
+
+def _get_input_fname_from_setup(conn) -> Optional[str]:
+    try:
+        setup_yaml = conn.execute("SELECT yaml FROM setup").fetchone()[0]
+    except (sqlite3.OperationalError, TypeError, IndexError):
+        return None
+    if not setup_yaml:
+        return None
+    data = yaml.safe_load(setup_yaml)
+    if isinstance(data, dict):
+        return data.get('input')
+    return None
+
+
+# def _normalize_stage_name(stage_name: str) -> str:
+#     aliases = {
+#         'input_parsing': 'input_parsing',
+#         'stereoisomer_generation': 'stereoisomer_generation',
+#         'protonation': 'protonation',
+#         'docking': 'docking',
+#     }
+#     try:
+#         return aliases[stage_name]
+#     except KeyError:
+#         raise ValueError(f'Unknown stage_name: {stage_name}')
+
+
 def get_protonation_arg_value(db_conn):
     """
     Returns True if molecules have to be protonated and False otherwise
@@ -435,19 +506,20 @@ def select_mols_to_dock(db_conn, table_name='mols', add_sql=None):
             if mol_is_3d(mol):
                 Chem.AssignStereochemistryFrom3D(mol)
         if mol:
-            mol.SetProp('_Name', mol_id + '_' + stereo_id)
+            mol.SetProp('_Name', f'{mol_id}_{stereo_id}')
             yield mol
 
 
-def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='mols', add_sql='', ncpu=1):
+def add_protonation(db_fname, program='molgpka', tautomerize=True, table_name='mols', add_sql='', ncpu=1, pH: float = 7.4):
     '''
-    Protonate SMILES by Chemaxon cxcalc utility to get molecule ionization states at pH 7.4
+    Protonate SMILES by selected backend to get molecule ionization states at a given pH
     :param db_fname:
-    :param program: name of the prorgam to use
+    :param program: name of the program to use
     :param tautomerize: get a major tautomer at protonation
     :param table_name: table name with molecules to protonate
     :param add_sql: additional SQL query to be appended to the SQL query to retrieve molecules for protonation,
                     e.g. "AND id IN ('MOL1', 'MOL2')" or "AND iteration=(SELECT MAX(iteration) FROM mols)".
+    :param pH: pH value to use during protonation
     :return:
     '''
     with sqlite3.connect(db_fname, check_same_thread=False, timeout=90) as conn:   # danger
@@ -475,11 +547,11 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
 
         if program in ['chemaxon'] or (os.path.isfile(program) and program.endswith('.sif')):  # file-based protocol, files are created by chunks
             if program == 'chemaxon':
-                protonate_func = partial(protonate_chemaxon, tautomerize=tautomerize)
+                protonate_func = partial(protonate_chemaxon, tautomerize=tautomerize, pH=pH)
                 read_func = read_protonate_chemaxon
                 nmols = ncpu * 500
             else:
-                protonate_func = partial(protonate_apptainer, container_fname=program)
+                protonate_func = partial(protonate_apptainer, container_fname=program, pH=pH)
                 read_func = read_smiles
                 nmols = 2000
 
@@ -507,11 +579,11 @@ def add_protonation(db_fname, program='chemaxon', tautomerize=True, table_name='
 
         elif program in ['pkasolver', 'molgpka']:  # native python protocol
             if program == 'pkasolver':
-                protonate_func = partial(protonate_pkasolver, ncpu=ncpu, mol_count=mol_count)
+                protonate_func = partial(protonate_pkasolver, ncpu=ncpu, mol_count=mol_count, pH=pH)
             elif program == 'molgpka':
-                protonate_func = partial(protonate_molgpka, ncpu=1)
+                protonate_func = partial(protonate_molgpka, ncpu=1, pH=pH)
             else:
-                raise ValueError(f'There is no implemeneted functions to protonate molecules by {program}')
+                raise ValueError(f'There is no implemented functions to protonate molecules by {program}')
 
             items = []
             data = ((smi, mol_name) for smi, mol_name in cur)
@@ -753,36 +825,6 @@ def tables_exist(conn, table_names: List[str]) -> Dict[str, bool]:
     found = {row[0] for row in cur.fetchall()}
 
     return {name: (name in found) for name in table_names}
-
-
-def get_variables_for_module(conn, module: str):
-    """
-    Returns a dictionary with variables names and values for a given module
-    :param conn:
-    :param module:
-    :return:
-    """
-    cur = conn.execute(
-        "SELECT name, value_type, value FROM variables WHERE module = ?",
-        (module,)
-    )
-
-    rows = cur.fetchall()
-    output = dict()
-
-    for name, value_type, value in rows:
-        if value_type == "int":
-            parsed = int(value)
-        elif value_type == "float":
-            parsed = float(value)
-        elif value_type == "json":
-            parsed = json.loads(value)
-        else:  # str
-            parsed = value
-
-        output[name] = parsed
-
-    return output
 
 
 def create_plif_tables(conn):

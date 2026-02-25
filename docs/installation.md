@@ -155,7 +155,7 @@ EasyDock will automatically use the `apptainer:latest` image as a proxy to run S
 
 Install EasyDock in Windows Subsystem for Linux (WSL) to use container features.
 
-### Pre-built Containers
+### Pre-built Containers {#pre-build-containers}
 
 | Container | Download | Description |
 |-----------|----------|-------------|
