@@ -731,8 +731,8 @@ def get_docked_mol_ids(conn):
     :return:
     """
     cur = conn.cursor()
-    res = cur.execute(f"SELECT id FROM mols WHERE docking_score IS NOT NULL")
-    return {row[0] for row in res}
+    res = cur.execute(f"SELECT DISTINCT id FROM mols WHERE docking_score IS NOT NULL ORDER BY id")
+    return [row[0] for row in res]
 
 
 def tables_exist(conn, table_names: List[str]) -> Dict[str, bool]:
