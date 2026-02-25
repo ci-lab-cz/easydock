@@ -97,8 +97,8 @@ def make_plif_summary_to_file(
 
     :param db_path: path to SQLite database
     :param output_file: path to output file
-    :param ids: list of ids to include in output file
-    :param poses: list of poses to include in output file
+    :param ids: list of molecule ids to include in output file
+    :param poses: list of pose ids to include in output file
     :param plif_list: list of reference contact names for similarity scoring. If None, raw contact bits are exported
     :param batch_size: number of molecule ids per SQL batch query
     :param sep: delimiter for output file
