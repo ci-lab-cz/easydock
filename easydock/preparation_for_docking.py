@@ -269,7 +269,7 @@ def mol_embedding_3d(mol: Chem.Mol, ring_sample: bool=False, seed: int=43) -> Ch
             mol.RemoveConformer(cid)
 
         if keep_nconf and mol.GetNumConformers() > keep_nconf and mol.GetNumConformers() > 1:
-            ids = np.in1d(cids, keep_ids)
+            ids = np.isin(cids, keep_ids)
             arr = arr[np.ix_(ids, ids)]   # here other indexing operation should be used, because ids is a boolean array
             cl = AgglomerativeClustering(n_clusters=keep_nconf, linkage='complete', metric='precomputed').fit(arr)
 
