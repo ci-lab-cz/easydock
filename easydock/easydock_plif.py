@@ -89,18 +89,32 @@ def make_plif_summary_to_file(
         sep: str = '\t'
 ):
     """
+    Export ProLIF results from an EasyDock SQLite database to a tabular text file. The function reads
+    stored protein-ligand interaction contacts, filters rows by molecule ids and optional poses,
+    converts contacts to a wide binary matrix.
+    If plif_list is provided, it computes a reference-vs-pose PLIF similarity and writes
+    only id, stereo_id, pose, and plif_sim columns.
 
+    :param db_path: path to SQLite database
+    :param output_file: path to output file
+    :param ids: list of ids to include in output file
+    :param poses: list of poses to include in output file
+    :param plif_list: list of reference contact names for similarity scoring. If None, raw contact bits are exported
+    :param batch_size: number of molecule ids per SQL batch query
+    :param sep: delimiter for output file
     """
+
     if os.path.exists(output_file):
         os.remove(output_file)
 
     with sqlite3.connect(db_path) as conn:
         contacts = pd.read_sql_query("SELECT DISTINCT contact_name FROM plif_names", conn)['contact_name'].tolist()
-        fixed_wide_cols = ["id", "stereo_id", "pose"] + contacts
 
         if plif_list is not None:
-            plif_set = set(plif_list)
-            ref_row = pd.DataFrame([{col: (col in plif_set) for col in contacts}], columns=contacts)
+            contacts += list(set(plif_list))
+            ref_row = pd.DataFrame([{col: (col in plif_list) for col in contacts}], columns=contacts)
+
+        fixed_wide_cols = ["id", "stereo_id", "pose"] + contacts
 
         first_batch = True
         for ids_batch in split_generator_to_chunks(ids, chunk_size=batch_size):
@@ -136,6 +150,7 @@ def make_plif_summary_to_file(
             df_wide.columns.name = None
             df_wide = df_wide.reindex(columns=fixed_wide_cols, fill_value=0)
             df_wide['id'] = pd.Categorical(df_wide['id'], categories=ids_batch, ordered=True)
+            df_wide[contacts] = df_wide[contacts].astype(int)
 
             if plif_list is not None:
                 with pd.option_context("future.no_silent_downcasting", True):
@@ -147,7 +162,6 @@ def make_plif_summary_to_file(
                     df_wide['plif_sim'] = sim
                     df_wide = df_wide[['id', 'stereo_id', 'pose', 'plif_sim']]
 
-            df_wide[contacts] = df_wide[contacts].astype(int)
             df_wide.to_csv(output_file, mode='w' if first_batch else 'a', sep=sep, index=False, header=first_batch)
             first_batch = False
 
