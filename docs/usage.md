@@ -192,6 +192,42 @@ seed: 0
     - `qvina-w`
     - `vina` - Vina can be used through a binary executable
 
+### Persistent Server Backend
+
+Use this backend when a docking model has expensive startup (e.g., loading ML weights in container).
+The docking server is started once per worker process and reused for many molecules.
+
+```bash
+easydock -i input.smi -o output.db --program server --config config.yml -c 4 --sdf
+```
+
+Configuration:
+```yaml
+script_file: apptainer exec -B /path/to/data:/path/to/data /path/to/dock.sif dock-server
+protein: /path/to/protein.pdbqt
+protein_setup: /path/to/grid.txt
+
+# Optional protocol settings
+init_command: init
+dock_command: dock_batch
+result_items_key: results
+score_key: docking_score
+pose_key: pdb_block
+score_mode: min          # min or max
+startup_timeout: 120
+request_timeout: 600
+
+# Optional, otherwise all non-control config values are sent to init automatically
+# init_payload:
+#   model_path: /path/to/model.pt
+```
+
+The server protocol is JSON Lines over stdin/stdout:
+
+1. EasyDock sends `init` once per worker.
+2. EasyDock sends `dock_batch` for each molecule with all generated conformers.
+3. Server returns a list of conformer results (score + pose block).
+
 ## Resuming Interrupted Calculations
 
 Simply run the same command or provide just the database:
