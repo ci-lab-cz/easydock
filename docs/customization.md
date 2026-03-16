@@ -119,6 +119,11 @@ Each request and response is one JSON object per line:
 - `result_items_key`: key containing list of conformer-level outputs (default `results`)
 - `score_key`: key with numeric score in each result item (default `docking_score`)
 - `pose_key`: key with PDBQT pose text in each result item (default `pdb_block`)
+- `mol_block_key`: key with ready-to-store MOL block in each result item (default `mol_block`)
+- `ligand_payload_type`: payload format sent to server (`pdbqt`, `smiles`, `mol_block`; default `pdbqt`)
+- `ligand_payload_key`: payload key for ligand list (default depends on `ligand_payload_type`)
+- `molecule_id_payload_key`: key for molecule id in dock request payload (default `molecule_id`)
+- `ring_sample_payload_key`: key for ring sampling flag in dock request payload (default `ring_sample`)
 - `score_mode`: `min` (default) or `max`
 - `startup_timeout`: server startup timeout in seconds
 - `request_timeout`: per-request timeout in seconds

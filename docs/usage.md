@@ -228,6 +228,38 @@ The server protocol is JSON Lines over stdin/stdout:
 2. EasyDock sends `dock_batch` for each molecule with all generated conformers.
 3. Server returns a list of conformer results (score + pose block).
 
+### CarsiDock via Server Backend
+
+Use the built-in adapter server and run EasyDock in `--program server` mode:
+
+```yaml
+script_file: python -m easydock.carsidock_server
+
+# Server request/response mapping
+ligand_payload_type: smiles
+ligand_payload_key: ligands_smiles
+mol_block_key: mol_block
+
+# Parameters passed to CarsiDock at init
+carsidock_repo: /path/to/CarsiDock      # optional if CarsiDock modules are already importable
+pdb_file: /path/to/protein.pdb
+sdf_file: /path/to/reference_ligand.sdf
+ckpt_path: /path/to/carsidock_230731.ckpt
+device: cuda
+num_threads: 1
+num_conformer: 5
+cuda_convert: false
+```
+
+Then run:
+
+```bash
+easydock -i input.smi -o output.db --program server --config config.yml -c 4 --sdf
+```
+
+Install CarsiDock and its dependencies following the upstream project:
+<https://github.com/carbonsilicon-ai/CarsiDock>
+
 ## Resuming Interrupted Calculations
 
 Simply run the same command or provide just the database:

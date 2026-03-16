@@ -1,167 +1,248 @@
-#!/usr/bin/env python3
-
+import atexit
 import logging
+import threading
 import timeit
-import traceback
-from functools import lru_cache
-from threading import Lock
-from typing import Any, Dict, List, Optional
+from pathlib import Path
 
 import yaml
+from rdkit import Chem
 
-from easydock.auxiliary import expand_path
 from easydock.persistent_client import JsonLineProcessClient
-from easydock.preparation_for_docking import ligand_preparation, pdbqt2molblock
+
+logger = logging.getLogger(__name__)
+
+ligand_preparation = None
+pdbqt2molblock = None
+
+_worker_client = None
+_worker_key = None
+_worker_lock = threading.Lock()
 
 
-_worker_lock = Lock()
-_worker_client = None  # type: Optional[JsonLineProcessClient]
-_worker_key = None  # type: Optional[str]
-
-_control_config_keys = {
-    "script_file",
-    "init_payload",
-    "init_command",
-    "dock_command",
-    "result_items_key",
-    "score_key",
-    "pose_key",
-    "score_mode",
-    "startup_timeout",
-    "request_timeout",
-    "boron_replacement",
-    "server_cwd",
-}
-
-
-def _safe_float(value: Any) -> Optional[float]:
+def _safe_float(value):
     try:
         return float(value)
     except (TypeError, ValueError):
         return None
 
 
-def _normalize_path_values(config: Dict[str, Any]) -> Dict[str, Any]:
-    path_keys = ("script_file", "protein", "protein_setup", "server_cwd")
-    for key in path_keys:
-        value = config.get(key)
-        if isinstance(value, str):
-            config[key] = expand_path(value)
-    return config
+def _normalize_path_values(obj):
+    if isinstance(obj, dict):
+        return {k: _normalize_path_values(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_normalize_path_values(v) for v in obj]
+    if isinstance(obj, Path):
+        return str(obj)
+    return obj
 
 
-@lru_cache(maxsize=64)
-def _parse_config(config_fname: str) -> Dict[str, Any]:
+def _default_ligand_payload_key(payload_type: str) -> str:
+    if payload_type == "pdbqt":
+        return "ligands_pdbqt"
+    if payload_type == "smiles":
+        return "ligands_smiles"
+    if payload_type == "mol_block":
+        return "ligands_mol_block"
+    raise ValueError(f"Unsupported ligand_payload_type: {payload_type}")
+
+
+def _ensure_preparation_functions():
+    global ligand_preparation, pdbqt2molblock
+    if ligand_preparation is None or pdbqt2molblock is None:
+        from easydock.preparation_for_docking import (
+            ligand_preparation as _ligand_preparation,
+            pdbqt2molblock as _pdbqt2molblock,
+        )
+        if ligand_preparation is None:
+            ligand_preparation = _ligand_preparation
+        if pdbqt2molblock is None:
+            pdbqt2molblock = _pdbqt2molblock
+
+    return ligand_preparation, pdbqt2molblock
+
+
+def _parse_config(config_fname):
     with open(config_fname) as f:
         config = yaml.safe_load(f) or {}
 
-    if "script_file" not in config:
-        raise KeyError("Configuration for --program server must contain `script_file`")
+    if not isinstance(config, dict):
+        raise ValueError("Docking server config must be a mapping")
 
-    config = _normalize_path_values(config)
+    if "script_file" not in config:
+        raise ValueError("'script_file' is required in server docking config")
+
+    config["script_file"] = str(config["script_file"])
+    if "server_cwd" in config and config["server_cwd"] is not None:
+        config["server_cwd"] = str(config["server_cwd"])
+
     config.setdefault("init_command", "init")
     config.setdefault("dock_command", "dock_batch")
     config.setdefault("result_items_key", "results")
     config.setdefault("score_key", "docking_score")
     config.setdefault("pose_key", "pdb_block")
+    config.setdefault("mol_block_key", "mol_block")
     config.setdefault("score_mode", "min")
     config.setdefault("startup_timeout", 120)
     config.setdefault("request_timeout", None)
     config.setdefault("boron_replacement", True)
+    config.setdefault("ligand_payload_type", "pdbqt")
 
-    if config["request_timeout"] is not None:
-        config["request_timeout"] = _safe_float(config["request_timeout"])
-    config["startup_timeout"] = _safe_float(config["startup_timeout"]) or 120.0
+    ligand_payload_type = config["ligand_payload_type"]
+    config.setdefault(
+        "ligand_payload_key",
+        _default_ligand_payload_key(ligand_payload_type),
+    )
+
+    control_keys = {
+        "script_file",
+        "server_cwd",
+        "init_command",
+        "dock_command",
+        "result_items_key",
+        "score_key",
+        "pose_key",
+        "mol_block_key",
+        "score_mode",
+        "startup_timeout",
+        "request_timeout",
+        "boron_replacement",
+        "ligand_payload_type",
+        "ligand_payload_key",
+        "init_payload",
+    }
 
     init_payload = config.get("init_payload")
     if not isinstance(init_payload, dict):
         init_payload = {
-            key: value
-            for key, value in config.items()
-            if key not in _control_config_keys
+            k: _normalize_path_values(v)
+            for k, v in config.items()
+            if k not in control_keys
         }
-    config["_resolved_init_payload"] = init_payload
 
-    # Key used to decide whether existing client can be reused in a worker process.
+    config["_resolved_init_payload"] = init_payload
     config["_worker_key"] = yaml.safe_dump(
         {
             "script_file": config["script_file"],
-            "init_payload": config["_resolved_init_payload"],
+            "server_cwd": config.get("server_cwd"),
             "init_command": config["init_command"],
             "dock_command": config["dock_command"],
-            "request_timeout": config["request_timeout"],
-            "server_cwd": config.get("server_cwd"),
+            "request_timeout": config.get("request_timeout"),
+            "init_payload": init_payload,
         },
         sort_keys=True,
     )
     return config
 
 
-def _response_payload(response: Dict[str, Any]) -> Dict[str, Any]:
-    payload = response.get("payload")
-    if isinstance(payload, dict):
-        return payload
-    return response
+def _prepare_ligand_payload(mol, config, ring_sample=False):
+    payload_type = config["ligand_payload_type"]
+
+    if payload_type == "pdbqt":
+        ligand_preparation, _ = _ensure_preparation_functions()
+        ligand_payload = ligand_preparation(
+            mol,
+            boron_replacement=config.get("boron_replacement", True),
+            ring_sample=ring_sample,
+        )
+        return ligand_payload
+
+    if payload_type == "smiles":
+        return [Chem.MolToSmiles(mol, isomericSmiles=True)]
+
+    if payload_type == "mol_block":
+        return [Chem.MolToMolBlock(mol)]
+
+    raise ValueError(f"Unsupported ligand_payload_type: {payload_type}")
 
 
-def _check_response_ok(response: Dict[str, Any], context: str) -> None:
+def _response_payload(response):
+    if isinstance(response, dict):
+        payload = response.get("payload")
+        if isinstance(payload, dict):
+            return payload
+    return {}
+
+
+def _check_response_ok(response, context="request"):
     payload = _response_payload(response)
-    status = payload.get("status", response.get("status", "ok"))
-    if status not in ("ok", "OK", True, None):
-        error_message = payload.get("error", response.get("error", "<no error message>"))
-        raise RuntimeError("{} failed: {}".format(context, error_message))
+    status = payload.get("status", response.get("status") if isinstance(response, dict) else None)
+    if status in (None, True, "ok", "OK"):
+        return
+
+    error = payload.get("error") or (
+        response.get("error") if isinstance(response, dict) else None
+    )
+    if error:
+        raise RuntimeError(f"{context} failed: {error}")
+    raise RuntimeError(f"{context} failed with status={status!r}")
 
 
-def _create_client(config: Dict[str, Any]) -> JsonLineProcessClient:
+def _create_client(config):
     client = JsonLineProcessClient(
         command=config["script_file"],
-        startup_timeout=float(config["startup_timeout"]),
-        request_timeout=config["request_timeout"],
+        startup_timeout=config.get("startup_timeout", 120),
+        request_timeout=config.get("request_timeout"),
         cwd=config.get("server_cwd"),
     )
-    init_response = client.request(
-        config["init_command"],
+
+    response = client.request(
+        command=config["init_command"],
         payload=config["_resolved_init_payload"],
-        timeout=config["request_timeout"],
+        timeout=config.get("request_timeout"),
     )
-    _check_response_ok(init_response, "Docking server initialization")
+    _check_response_ok(response, context="init")
     return client
 
 
-def _get_worker_client(config: Dict[str, Any]) -> JsonLineProcessClient:
+def _get_worker_client(config):
     global _worker_client, _worker_key
+
     with _worker_lock:
-        must_create = (
+        need_new = (
             _worker_client is None
             or not _worker_client.is_alive()
             or _worker_key != config["_worker_key"]
         )
-        if must_create:
+
+        if need_new:
             if _worker_client is not None:
-                _worker_client.close()
+                try:
+                    _worker_client.close()
+                except Exception:
+                    logger.exception("Failed to close previous worker client")
             _worker_client = _create_client(config)
             _worker_key = config["_worker_key"]
+
         return _worker_client
 
 
-def _extract_batch_results(response: Dict[str, Any], config: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _extract_batch_results(response, config):
+    if not isinstance(response, dict):
+        return []
+
+    result_items_key = config["result_items_key"]
     payload = _response_payload(response)
-    items_key = config["result_items_key"]
-    if isinstance(payload.get(items_key), list):
-        return payload[items_key]
-    if isinstance(response.get(items_key), list):
-        return response[items_key]
+
+    if isinstance(payload.get(result_items_key), list):
+        return payload[result_items_key]
+
+    if isinstance(response.get(result_items_key), list):
+        return response[result_items_key]
 
     score_key = config["score_key"]
     pose_key = config["pose_key"]
-    if score_key in payload and pose_key in payload:
+    mol_block_key = config["mol_block_key"]
+
+    if score_key in payload and (pose_key in payload or mol_block_key in payload):
         return [payload]
-    if score_key in response and pose_key in response:
+
+    if score_key in response and (pose_key in response or mol_block_key in response):
         return [response]
+
     return []
 
 
-def _choose_best(items: List[Dict[str, Any]], score_mode: str) -> Optional[Dict[str, Any]]:
+def _choose_best(items, score_mode="min"):
     if not items:
         return None
     if score_mode == "max":
@@ -170,86 +251,108 @@ def _choose_best(items: List[Dict[str, Any]], score_mode: str) -> Optional[Dict[
 
 
 def mol_dock(mol, config, ring_sample=False):
-    """
-    Dock a molecule using a long-lived server process.
-
-    The server is started once per worker process and reused for subsequent molecules.
-    """
-    config = _parse_config(config)
     mol_id = mol.GetProp("_Name")
-    ligand_pdbqt_list = ligand_preparation(
-        mol,
-        boron_replacement=bool(config["boron_replacement"]),
-        ring_sample=ring_sample,
-    )
 
-    if ligand_pdbqt_list is None:
+    try:
+        config = _parse_config(config)
+        ligand_payload = _prepare_ligand_payload(mol, config, ring_sample=ring_sample)
+        if ligand_payload is None:
+            return mol_id, None
+    except Exception as e:
+        logger.warning("Ligand preparation failed for %s: %s", mol_id, e)
         return mol_id, None
 
     start_time = timeit.default_timer()
-    dock_output_conformer_list = []
-    score_key = config["score_key"]
-    pose_key = config["pose_key"]
 
     try:
         client = _get_worker_client(config)
         response = client.request(
-            config["dock_command"],
+            command=config["dock_command"],
             payload={
                 "molecule_id": mol_id,
                 "ring_sample": bool(ring_sample),
-                "ligands_pdbqt": ligand_pdbqt_list,
+                config["ligand_payload_key"]: ligand_payload,
             },
-            timeout=config["request_timeout"],
+            timeout=config.get("request_timeout"),
         )
-        _check_response_ok(response, "Docking request")
-        response_items = _extract_batch_results(response, config)
-    except Exception:
-        logging.warning(
-            "(server) Error caused by docking of %s\n%s",
-            mol_id,
-            traceback.format_exc(),
-        )
+        _check_response_ok(response, context="dock")
+    except Exception as e:
+        logger.warning("Docking request failed for %s: %s", mol_id, e)
         return mol_id, None
 
-    for item in response_items:
+    results = _extract_batch_results(response, config)
+    dock_output_conformer_list = []
+
+    score_key = config["score_key"]
+    pose_key = config["pose_key"]
+    mol_block_key = config["mol_block_key"]
+
+    for item in results:
+        docking_score = _safe_float(item.get(score_key))
+        if docking_score is None:
+            continue
+
+        mol_block = item.get(mol_block_key)
+        pdb_block = item.get(pose_key)
+
+        if isinstance(mol_block, str) and mol_block.strip():
+            direct_output = {
+                "docking_score": docking_score,
+                "mol_block": mol_block,
+            }
+            if isinstance(pdb_block, str):
+                direct_output["pdb_block"] = pdb_block
+            dock_output_conformer_list.append(direct_output)
+            continue
+
+        if not isinstance(pdb_block, str):
+            continue
+        if "MODEL" not in pdb_block:
+            continue
+
         try:
-            score = _safe_float(item.get(score_key))
-            pdbqt_out = item.get(pose_key)
-            if score is None or not isinstance(pdbqt_out, str):
-                continue
-            if "MODEL" not in pdbqt_out:
-                logging.debug("(server) Missing MODEL section in docking output of %s", mol_id)
-                continue
-            mol_block = pdbqt2molblock(pdbqt_out.split("MODEL", 1)[1], mol, mol_id)
-            dock_output_conformer_list.append(
-                {
-                    "docking_score": score,
-                    "pdb_block": pdbqt_out,
-                    "mol_block": mol_block,
-                }
-            )
+            _, _pdbqt2molblock = _ensure_preparation_functions()
+            mol_block = _pdbqt2molblock(pdb_block.split("MODEL", 1)[1], mol, mol_id)
         except Exception:
-            logging.warning(
-                "(server) Failed to parse one conformer for %s\n%s",
-                mol_id,
-                traceback.format_exc(),
-            )
+            logger.exception("Failed to convert pdbqt pose for %s", mol_id)
+            continue
+
+        dock_output_conformer_list.append(
+            {
+                "docking_score": docking_score,
+                "mol_block": mol_block,
+                "pdb_block": pdb_block,
+            }
+        )
 
     dock_time = round(timeit.default_timer() - start_time, 1)
-    logging.debug("(server) %s, docked nconf %s", mol_id, len(dock_output_conformer_list))
-
-    output = _choose_best(dock_output_conformer_list, config["score_mode"])
+    output = _choose_best(dock_output_conformer_list, config.get("score_mode", "min"))
     if output is None:
         return mol_id, None
+
     output["dock_time"] = dock_time
     return mol_id, output
 
 
-def _reset_worker_state_for_tests() -> None:
+def _cleanup_worker_client():
+    global _worker_client
+    if _worker_client is not None:
+        try:
+            _worker_client.close()
+        except Exception:
+            pass
+
+
+atexit.register(_cleanup_worker_client)
+
+
+def _reset_worker_state_for_tests():
     global _worker_client, _worker_key
     with _worker_lock:
         if _worker_client is not None:
-            _worker_client.close()
+            try:
+                _worker_client.close()
+            except Exception:
+                pass
         _worker_client = None
         _worker_key = None

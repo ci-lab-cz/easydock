@@ -119,11 +119,14 @@ def populate_setup_db(db_fname, args, args_to_save=(), config_args_to_save=('pro
                 else:
                     values.append(None)
 
-            config_dict = yaml.safe_load(open(args.config))
+            config_dict = yaml.safe_load(open(args.config)) or {}
+            if not isinstance(config_dict, dict):
+                config_dict = {}
             for v in config_args_to_save:
                 update_sql_line += f', {v} = ?'
-                if config_dict[v] is not None:
-                    values.append(open(expand_path(config_dict[v])).read())
+                config_value = config_dict.get(v)
+                if config_value is not None:
+                    values.append(open(expand_path(config_value)).read())
                 else:
                     values.append(None)
 
