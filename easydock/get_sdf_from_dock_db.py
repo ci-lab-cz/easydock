@@ -8,6 +8,7 @@ import sys
 from rdkit import Chem
 
 from .preparation_for_docking import pdbqt2molblock
+from .database import get_variables, DEFAULT_RAW_FORMAT
 
 
 def main():
@@ -61,9 +62,19 @@ def main():
     else:
         raise ValueError('Wrong extension of output file. Only SDF and SMI are allowed.')
 
-    # add pdb_block field to retrieve poses, only if sdf file should be returned as output
-    if ext == 'sdf' and args.poses and 'pdb_block' not in args.fields:
-        args.fields.append('pdb_block')
+    # add raw_block field to retrieve poses, only if sdf file should be returned as output
+    if ext == 'sdf' and args.poses:
+        try:
+            docking_format = get_variables(conn, 'database', ['raw_format'])['raw_format']
+        except (KeyError, sqlite3.OperationalError):
+            docking_format = DEFAULT_RAW_FORMAT
+        if docking_format != 'pdbqt':
+            raise ValueError(
+                f"Pose extraction is only supported for 'pdbqt' format, "
+                f"but raw_format='{docking_format}' is stored in the database."
+            )
+        if 'raw_block' not in args.fields:
+            args.fields.append('raw_block')
 
     if args.fields:
         sql = f"SELECT {main_field}, {','.join(args.fields)} FROM mols WHERE mol_block IS NOT NULL"
@@ -117,21 +128,21 @@ def main():
                     else:
                         f.write(mol_block)  # write original mol block without pose id
                     for prop_name, prop_value in zip(args.fields, item[1:]):
-                        if prop_name != 'pdb_block':
+                        if prop_name != 'raw_block':
                             f.write(f'>  <{prop_name}>\n')
                             f.write(f'{str(prop_value)}\n\n')
                     f.write('$$$$\n')
                     if poses:
                         poses.remove(1)
                 if poses:
-                    pdb_block_list = item[1:][args.fields.index('pdb_block')].strip().split('ENDMDL')
-                    pdb_block_list = [q for q in pdb_block_list if q]
+                    raw_block_list = item[1:][args.fields.index('raw_block')].strip().split('ENDMDL')
+                    raw_block_list = [q for q in raw_block_list if q]
                     mol = Chem.MolFromMolBlock(mol_block)
                     for i in poses:  # 1-based
                         try:
-                            pose_mol_block = pdbqt2molblock(pdb_block_list[i-1] + 'ENDMDL\n', mol, mol_id + f'_{i}')
+                            pose_mol_block = pdbqt2molblock(raw_block_list[i-1] + 'ENDMDL\n', mol, mol_id + f'_{i}')
                         except IndexError:
-                            logging.warning(f'Pose number {i} is not in the PDB block of {mol_id}. '
+                            logging.warning(f'Pose number {i} is not in the raw block of {mol_id}. '
                                              f'It will be skipped.')
                             continue
                         if pose_mol_block:

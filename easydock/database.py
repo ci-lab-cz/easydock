@@ -32,7 +32,30 @@ from rdkit.Chem.EnumerateStereoisomers import EnumerateStereoisomers, StereoEnum
 from rdkit.Chem.SaltRemover import SaltRemover
 
 
-def create_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', 'protein_setup'), unique_smi=False):
+VALID_RAW_FORMATS = ('pdbqt', 'sdf', 'pdb', 'mol2')
+DEFAULT_RAW_FORMAT = 'pdbqt'
+
+
+def validate_config(config_fname):
+    """
+    Read and validate the config YAML file.
+    :param config_fname: path to YAML config file, or None
+    :return: dict of validated config values
+    :raises ValueError: if any value is invalid
+    """
+
+    with open(config_fname) as f:
+        config = yaml.safe_load(f)
+    raw_format = config.get('raw_format', DEFAULT_RAW_FORMAT) if config is not None else DEFAULT_RAW_FORMAT
+    if raw_format not in VALID_RAW_FORMATS:
+        raise ValueError(
+            f"Invalid raw_format '{raw_format}' in config. "
+            f"Must be one of: {VALID_RAW_FORMATS}"
+        )
+    return {'raw_format': raw_format}
+
+
+def create_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', 'protein_setup'), unique_smi=False, config_dict=None):
     """
     Create empty database structure and the setup table, which is filled with values. To setup table two fields are
     always stored: yaml file with all input args of the docking script and yaml file with docking config
@@ -59,7 +82,7 @@ def create_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', '
                      source_mol_block TEXT,
                      source_mol_block_protonated TEXT,
                      docking_score REAL,
-                     pdb_block TEXT,
+                     raw_block TEXT,
                      mol_block TEXT,
                      dock_time REAL,
                      time TEXT,
@@ -100,6 +123,8 @@ def create_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', '
 
         # create some tables separately to keep backward compatibility
         create_variables_table(conn)
+        raw_format = config_dict['raw_format'] if config_dict is not None else DEFAULT_RAW_FORMAT
+        set_variable(conn, 'database', 'raw_format', raw_format)
         create_plif_tables(conn)
 
 
@@ -145,8 +170,14 @@ def restore_setup_from_db(db_fname, tmpdir=None):
         colnames = [d[0] for d in res.description]
         values = [v for v in res][0]
         values = dict(zip(colnames, values))
+        try:
+            vars_dict = get_variables(conn, 'database', ['raw_format'])
+            raw_format = vars_dict['raw_format']
+        except KeyError:
+            raw_format = DEFAULT_RAW_FORMAT
 
     d = yaml.safe_load(values['yaml'])
+    d['raw_format'] = raw_format
     try:
         c = yaml.safe_load(values['config'])
     except AttributeError:
@@ -739,14 +770,25 @@ def get_mols(conn, mol_ids, field_name='mol_block', poses=None):
                              f'Allowed: mol_block, source_mol_block, smi. Supplied: {field_name}')
 
     cur = conn.cursor()
+    if poses != [1]:
+        try:
+            raw_format = get_variables(conn, 'database', ['raw_format'])['raw_format']
+        except (KeyError, sqlite3.OperationalError):
+            raw_format = DEFAULT_RAW_FORMAT
+        if raw_format != 'pdbqt':
+            raise ValueError(
+                f"Pose extraction is only supported for 'pdbqt' format, "
+                f"but raw_format='{raw_format}' is stored in the database."
+            )
+
     t = ''
     if poses != [1]:
-        t = ', pdb_block'
+        t = ', raw_block'
 
     sql = f'SELECT id, stereo_id, rowid, {field_name} {t} FROM mols WHERE id IN (?) AND {field_name} IS NOT NULL'
 
     mols = []
-    for items in select_from_db(cur, sql, mol_ids):   # mol_block/smi, rowid, pdb_block
+    for items in select_from_db(cur, sql, mol_ids):   # mol_block/smi, rowid, raw_block
         m0 = func(items[3])
         if m0:
             m0.SetIntProp('_easydock_rowid', items[2])
@@ -755,10 +797,10 @@ def get_mols(conn, mol_ids, field_name='mol_block', poses=None):
             if 1 in poses:
                 mols.append(m0)
             if poses != [1]:
-                pdb_block_list = items[4].strip().split('ENDMDL')
+                raw_block_list = items[4].strip().split('ENDMDL')
                 for i in [j for j in poses if j != 1]:
                     try:
-                        pose = pdb_block_list[i - 1]
+                        pose = raw_block_list[i - 1]
                         pose_mol_block = pdbqt2molblock(pose + 'ENDMDL\n', m0)
                         m = Chem.MolFromMolBlock(pose_mol_block)
                         m.SetProp('_Name', f'{items[0]}_{items[1]}')
@@ -766,7 +808,7 @@ def get_mols(conn, mol_ids, field_name='mol_block', poses=None):
                         m.SetIntProp('_easydock_pose', i)
                         mols.append(m)
                     except IndexError:
-                        logging.warning(f'Pose number {i} is not in the PDB block of {m0.GetProp("_Name")}. '
+                        logging.warning(f'Pose number {i} is not in the raw block of {m0.GetProp("_Name")}. '
                                         f'It will be skipped.')
     cur.close()
     return mols
@@ -860,6 +902,28 @@ def create_variables_table(conn):
         );
     """)
     conn.commit()
+
+
+def migrate_pdb_block_to_raw_block(db_fname):
+    """
+    Migrate an existing database from pdb_block to raw_block column name.
+    Also ensures raw_format='pdbqt' is set in the variables table.
+    Safe to run multiple times (idempotent).
+    """
+    with sqlite3.connect(db_fname, timeout=90) as conn:
+        cur = conn.cursor()
+        cur.execute("PRAGMA table_info(mols)")
+        columns = [row[1] for row in cur.fetchall()]
+        if 'pdb_block' in columns and 'raw_block' not in columns:
+            cur.execute("ALTER TABLE mols RENAME COLUMN pdb_block TO raw_block")
+            logging.info(f"Migrated: pdb_block -> raw_block in {db_fname}")
+        create_variables_table(conn)
+        try:
+            get_variables(conn, 'database', ['raw_format'])
+        except KeyError:
+            set_variable(conn, 'database', 'raw_format', DEFAULT_RAW_FORMAT)
+            logging.info(f"Added raw_format='{DEFAULT_RAW_FORMAT}' to variables in {db_fname}")
+
 
 
 def set_variable(conn, module: str, name: str, value):

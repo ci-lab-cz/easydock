@@ -12,7 +12,7 @@ from multiprocessing import Pool
 from rdkit import Chem
 from rdkit.Chem.rdMolDescriptors import CalcNumRotatableBonds
 from easydock.database import create_db, restore_setup_from_db, init_db, check_db_status, update_db, save_sdf, select_mols_to_dock, \
-    add_protonation, populate_setup_db
+    add_protonation, populate_setup_db, validate_config
 from easydock.reporting import get_pipeline_statistics, write_stage_error_log, report_error_log_file
 from easydock.args_validation import protonation_type, protonation_programs, cpu_type, filepath_type
 
@@ -235,7 +235,12 @@ def main():
     try:
 
         if not os.path.isfile(args.output):
-            create_db(args.output, args)
+            config_dict = None
+            if args.config:
+                if not os.path.isfile(args.config):
+                    raise FileNotFoundError(f"Config file not found: {args.config}")
+                config_dict = validate_config(args.config)
+            create_db(args.output, args, config_dict=config_dict)
         else:
             args_dict, tmpfiles = restore_setup_from_db(args.output, args.tmpdir)
             # this will ignore stored values of those args which were supplied via command line
