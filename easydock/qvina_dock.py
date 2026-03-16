@@ -76,7 +76,7 @@ def mol_dock(mol, config, ring_sample=False):
             mol_block = pdbqt2molblock(pdbqt_out.split('MODEL')[1], mol, mol_id)
 
             dock_output = {'docking_score': score,
-                           'pdb_block': pdbqt_out,
+                           'raw_block': pdbqt_out,
                            'mol_block': mol_block}
 
             dock_output_conformer_list.append(dock_output)
