@@ -779,7 +779,7 @@ def get_mols(conn, mol_ids, field_name='mol_block', poses=None):
     if poses != [1]:
         try:
             raw_format = get_variables(conn, 'database', ['raw_format'])['raw_format']
-        except (KeyError, sqlite3.OperationalError):
+        except KeyError:
             raw_format = DEFAULT_RAW_FORMAT
         if raw_format != 'pdbqt':
             raise ValueError(

@@ -66,7 +66,7 @@ def main():
     if ext == 'sdf' and args.poses:
         try:
             docking_format = get_variables(conn, 'database', ['raw_format'])['raw_format']
-        except (KeyError, sqlite3.OperationalError):
+        except KeyError:
             docking_format = DEFAULT_RAW_FORMAT
         if docking_format != 'pdbqt':
             raise ValueError(
