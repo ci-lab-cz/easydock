@@ -235,12 +235,7 @@ def main():
     try:
 
         if not os.path.isfile(args.output):
-            config_dict = None
-            if args.config:
-                if not os.path.isfile(args.config):
-                    raise FileNotFoundError(f"Config file not found: {args.config}")
-                config_dict = validate_config(args.config)
-            create_db(args.output, args, config_dict=config_dict)
+            create_db(args.output, args)
         else:
             args_dict, tmpfiles = restore_setup_from_db(args.output, args.tmpdir)
             # this will ignore stored values of those args which were supplied via command line

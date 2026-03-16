@@ -32,13 +32,15 @@ from rdkit.Chem.EnumerateStereoisomers import EnumerateStereoisomers, StereoEnum
 from rdkit.Chem.SaltRemover import SaltRemover
 
 
-VALID_RAW_FORMATS = ('pdbqt', 'sdf', 'pdb', 'mol2')
+VALID_RAW_FORMATS = ('pdbqt',)
 DEFAULT_RAW_FORMAT = 'pdbqt'
 
 
 def validate_config(config_fname):
     """
-    Read and validate the config YAML file.
+    Read the YAML config file and validate supported fields.
+    Currently, validation is implemented only for the `raw_format` option.
+    Other config fields, if present, are not validated by this function.
     :param config_fname: path to YAML config file, or None
     :return: dict of validated config values
     :raises ValueError: if any value is invalid
@@ -55,7 +57,7 @@ def validate_config(config_fname):
     return {'raw_format': raw_format}
 
 
-def create_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', 'protein_setup'), unique_smi=False, config_dict=None):
+def create_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', 'protein_setup'), unique_smi=False):
     """
     Create empty database structure and the setup table, which is filled with values. To setup table two fields are
     always stored: yaml file with all input args of the docking script and yaml file with docking config
@@ -123,12 +125,11 @@ def create_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', '
 
         # create some tables separately to keep backward compatibility
         create_variables_table(conn)
-        raw_format = config_dict['raw_format'] if config_dict is not None else DEFAULT_RAW_FORMAT
-        set_variable(conn, 'database', 'raw_format', raw_format)
         create_plif_tables(conn)
 
 
 def populate_setup_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', 'protein_setup')):
+    validated_args = validate_config(args.config)
     with sqlite3.connect(db_fname, timeout=90) as conn:
         cur = conn.cursor()
 
@@ -155,6 +156,8 @@ def populate_setup_db(db_fname, args, args_to_save=(), config_args_to_save=('pro
             update_sql_line = update_sql_line + ' WHERE config IS NULL'
             cur.execute(update_sql_line, values)
             conn.commit()
+        raw_format = validated_args['raw_format']
+        set_variable(conn, 'database', 'raw_format', raw_format)
 
 
 def restore_setup_from_db(db_fname, tmpdir=None):
@@ -173,7 +176,7 @@ def restore_setup_from_db(db_fname, tmpdir=None):
         try:
             vars_dict = get_variables(conn, 'database', ['raw_format'])
             raw_format = vars_dict['raw_format']
-        except (KeyError, sqlite3.OperationalError):
+        except KeyError:
             raw_format = DEFAULT_RAW_FORMAT
 
     d = yaml.safe_load(values['yaml'])
@@ -181,6 +184,9 @@ def restore_setup_from_db(db_fname, tmpdir=None):
         c = yaml.safe_load(values['config'])
     except AttributeError:
         c = {}
+
+    #add raw_format to restored config file explicitly to make it compatible
+    # with old databases created with config file without raw_format variable
     c['raw_format'] = raw_format
 
     del values['yaml']
