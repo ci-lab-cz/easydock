@@ -12,7 +12,7 @@ from multiprocessing import Pool
 from rdkit import Chem
 from rdkit.Chem.rdMolDescriptors import CalcNumRotatableBonds
 from easydock.database import create_db, restore_setup_from_db, init_db, check_db_status, update_db, save_sdf, select_mols_to_dock, \
-    add_protonation, populate_setup_db, validate_config
+    add_protonation, populate_setup_db
 from easydock.reporting import get_pipeline_statistics, write_stage_error_log, report_error_log_file
 from easydock.args_validation import protonation_type, protonation_programs, cpu_type, filepath_type
 
