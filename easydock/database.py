@@ -173,15 +173,15 @@ def restore_setup_from_db(db_fname, tmpdir=None):
         try:
             vars_dict = get_variables(conn, 'database', ['raw_format'])
             raw_format = vars_dict['raw_format']
-        except KeyError:
+        except (KeyError, sqlite3.OperationalError):
             raw_format = DEFAULT_RAW_FORMAT
 
     d = yaml.safe_load(values['yaml'])
-    d['raw_format'] = raw_format
     try:
         c = yaml.safe_load(values['config'])
     except AttributeError:
         c = {}
+    c['raw_format'] = raw_format
 
     del values['yaml']
 
