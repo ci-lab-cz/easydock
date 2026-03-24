@@ -79,13 +79,14 @@ def _parse_config(config_fname):
     config.setdefault("dock_command", "dock_batch")
     config.setdefault("result_items_key", "results")
     config.setdefault("score_key", "docking_score")
-    config.setdefault("pose_key", "pdb_block")
+    config.setdefault("pose_key", "raw_block")
     config.setdefault("mol_block_key", "mol_block")
     config.setdefault("score_mode", "min")
     config.setdefault("startup_timeout", 120)
     config.setdefault("request_timeout", None)
     config.setdefault("boron_replacement", True)
     config.setdefault("ligand_payload_type", "pdbqt")
+    config.setdefault("raw_format", "pdbqt")
 
     ligand_payload_type = config["ligand_payload_type"]
     config.setdefault(
@@ -108,6 +109,7 @@ def _parse_config(config_fname):
         "boron_replacement",
         "ligand_payload_type",
         "ligand_payload_key",
+        "raw_format",
         "init_payload",
     }
 
@@ -293,26 +295,39 @@ def mol_dock(mol, config, ring_sample=False):
             continue
 
         mol_block = item.get(mol_block_key)
-        pdb_block = item.get(pose_key)
+        raw_block = item.get(pose_key)
 
         if isinstance(mol_block, str) and mol_block.strip():
             direct_output = {
                 "docking_score": docking_score,
                 "mol_block": mol_block,
             }
-            if isinstance(pdb_block, str):
-                direct_output["pdb_block"] = pdb_block
+            if isinstance(raw_block, str):
+                direct_output["raw_block"] = raw_block
             dock_output_conformer_list.append(direct_output)
             continue
 
-        if not isinstance(pdb_block, str):
+        if not isinstance(raw_block, str) or not raw_block.strip():
             continue
-        if "MODEL" not in pdb_block:
+
+        raw_format = config.get("raw_format", "pdbqt")
+        if raw_format != "pdbqt":
+            # Non-PDBQT format (e.g. SDF from CARSIDock): raw_block is already a mol_block
+            dock_output_conformer_list.append(
+                {
+                    "docking_score": docking_score,
+                    "mol_block": raw_block,
+                    "raw_block": raw_block,
+                }
+            )
+            continue
+
+        if "MODEL" not in raw_block:
             continue
 
         try:
             _, _pdbqt2molblock = _ensure_preparation_functions()
-            mol_block = _pdbqt2molblock(pdb_block.split("MODEL", 1)[1], mol, mol_id)
+            mol_block = _pdbqt2molblock(raw_block.split("MODEL", 1)[1], mol, mol_id)
         except Exception:
             logger.exception("Failed to convert pdbqt pose for %s", mol_id)
             continue
@@ -321,11 +336,21 @@ def mol_dock(mol, config, ring_sample=False):
             {
                 "docking_score": docking_score,
                 "mol_block": mol_block,
-                "pdb_block": pdb_block,
+                "raw_block": raw_block,
             }
         )
 
     dock_time = round(timeit.default_timer() - start_time, 1)
+
+    raw_format = config.get("raw_format", "pdbqt")
+    if raw_format != "pdbqt" and dock_output_conformer_list:
+        combined_sdf = "".join(
+            item["mol_block"].rstrip() + "\n$$$$\n" for item in dock_output_conformer_list
+        )
+        for item in dock_output_conformer_list:
+            if "raw_block" not in item:
+                item["raw_block"] = combined_sdf
+
     output = _choose_best(dock_output_conformer_list, config.get("score_mode", "min"))
     if output is None:
         return mol_id, None

@@ -32,7 +32,7 @@ from rdkit.Chem.EnumerateStereoisomers import EnumerateStereoisomers, StereoEnum
 from rdkit.Chem.SaltRemover import SaltRemover
 
 
-VALID_RAW_FORMATS = ('pdbqt',)
+VALID_RAW_FORMATS = ('pdbqt', 'sdf')
 DEFAULT_RAW_FORMAT = 'pdbqt'
 
 
