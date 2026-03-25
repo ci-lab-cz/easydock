@@ -42,7 +42,6 @@ Result is a dictionary (keys may vary for different docking programs). Below are
 from easydock.gnina_dock import mol_dock
 from easydock.qvina_dock import mol_dock
 from easydock.vinagpu_dock import mol_dock
-from easydock.server_dock import mol_dock
 
 # Same code as above, just import other mol_dock function
 ...
