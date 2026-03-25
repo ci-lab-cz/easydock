@@ -233,9 +233,9 @@ def _extract_batch_results(response, config):
 
 def _extract_molecule_name(response):
     payload = _response_payload(response)
-    name = payload.get("name")
+    name = payload.get("molecule_id")
     if name is None and isinstance(response, dict):
-        name = response.get("name")
+        name = response.get("molecule_id")
     return name if isinstance(name, str) and name.strip() else None
 
 
