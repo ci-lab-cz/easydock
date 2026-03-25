@@ -28,7 +28,8 @@ class _CarsiDockServer:
         self.scoring = None
         self.device = None
         self.lbfgsbsrv = None
-        self.args = None
+        self.num_threads = 1
+        self.num_conformer = 5
 
     def init(self, payload):
         import torch
@@ -52,19 +53,15 @@ class _CarsiDockServer:
         rtms_ckpt_path = _expand_path(payload["rtms_ckpt_path"])
 
         cuda_convert = bool(payload.get("cuda_convert", False))
-        num_threads = int(payload.get("num_threads", 1))
-        num_conformer = int(payload.get("num_conformer", 5))
+        self.num_threads = int(payload.get("num_threads", self.num_threads))
+        self.num_conformer = int(payload.get("num_conformer", self.num_conformer))
 
-        self.args = {
-            "num_threads": num_threads,
-            "num_conformer": num_conformer,
-        }
-
-        self.device = torch.device("cuda")
+        self.device =  torch.device(payload.get("device", "cuda"))
+        #torch.device("cuda")
 
         if cuda_convert:
             import pydock
-            self.lbfgsbsrv = pydock.LBFGSBServer(num_threads, 0)
+            self.lbfgsbsrv = pydock.LBFGSBServer(self.num_threads, 0)
         else:
             self.lbfgsbsrv = None
 
@@ -78,7 +75,7 @@ class _CarsiDockServer:
         self.initialized = True
         return {"status": "ok"}
 
-    def dock_batch(self, payload):
+    def dock(self, payload):
         import torch
         if not self.initialized:
             return {"status": "error", "error": "Server not initialized"}
@@ -86,26 +83,29 @@ class _CarsiDockServer:
         import tempfile
         import os
 
-        smiles_list = payload.get("ligands_smiles")
-        mol_block_list = payload.get("ligands_mol_block")
+        result = []
+
+        smiles_list = payload.get("smiles")
+        mol_block_list = payload.get("mol_block")
 
         if not smiles_list and not mol_block_list:
-            return {"status": "error", "error": "No ligands_smiles or ligands_mol_block provided"}
+            return {"status": "error", "error": "No smiles or mol_block provided"}
 
         ligands = smiles_list or mol_block_list
         use_smiles = smiles_list is not None
 
         molecule_id = payload.get("molecule_id")
-        all_poses = []
-        raw_blocks = []
+
+        nconf = max(self.num_conformer, 5)
 
         for ligand in ligands:
             try:
+                raw_block = None
                 if use_smiles:
-                    init_mol_list = self.read_ligands(smiles=[ligand])[0]
+                    init_mol_list = self.read_ligands(smiles=[ligand], num_use_conf=nconf)[0]
                 else:
                     mol = Chem.MolFromMolBlock(ligand, removeHs=False)
-                    init_mol_list = self.read_ligands(mol_list=[mol])[0]
+                    init_mol_list = self.read_ligands(mol_list=[mol], num_use_conf=nconf)[0]
                 torch.cuda.empty_cache()
                 with tempfile.NamedTemporaryFile(suffix=".sdf", delete=False) as tmp:
                     tmp_path = tmp.name
@@ -118,35 +118,32 @@ class _CarsiDockServer:
                         self.pocket_dict,
                         device=self.device,
                         output_path=tmp_path,
-                        num_threads=self.args["num_threads"],
+                        num_threads=self.num_threads,
                         lbfgsbsrv=self.lbfgsbsrv,
                     )
                     if os.path.exists(tmp_path):
                         with open(tmp_path) as f:
-                            raw_blocks.append(f.read())
+                            raw_block = f.read()
+                            raw_block = '$$$$\n'.join(raw_block.split('$$$$\n', self.num_conformer)[:self.num_conformer])
                 finally:
                     if os.path.exists(tmp_path):
                         os.unlink(tmp_path)
-                all_poses.extend(m for m in outputs["mol_list"] if m is not None)
+
+                best_pose = outputs["mol_list"][0]
+                _, rtms_scores = self.scoring(self.rtms_pocket, [best_pose], self.rtms_model)
+                result.append({
+                    "docking_score": float(rtms_scores[0]),
+                    "mol_block": Chem.MolToMolBlock(best_pose),
+                    "raw_block": raw_block,
+                })
+
             except Exception as e:
                 logger.exception("CarsiDock docking failed for %s", molecule_id)
                 return {"status": "error", "error": str(e)}
 
-        all_poses = [Chem.RemoveHs(m) for m in all_poses]
-        if not all_poses:
-            return {"status": "ok", "results": []}
-
-        best_pose = all_poses[0]
-        best_pose.SetProp('_Name', molecule_id)
-        _, rtms_scores = self.scoring(self.rtms_pocket, [best_pose], self.rtms_model)
-        raw_block = "".join(raw_blocks)
-
-        return {"status": "ok", "results": [{
-            "name": molecule_id,
-            "docking_score": float(rtms_scores[0]),
-            "mol_block": Chem.MolToMolBlock(best_pose),
-            "raw_block": raw_block,
-        }]}
+        return {"status": "ok",
+                "name": molecule_id,
+                "results": result}
 
 
 def _emit_server_response(req_id, payload):
@@ -172,8 +169,8 @@ def run_carsidock_server():
 
             if command == "init":
                 result = server.init(payload)
-            elif command == "dock_batch":
-                result = server.dock_batch(payload)
+            elif command == "dock":
+                result = server.dock(payload)
             else:
                 result = {"status": "error", "error": f"Unknown command: {command}"}
 

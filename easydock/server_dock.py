@@ -36,16 +36,6 @@ def _normalize_path_values(obj):
     return obj
 
 
-def _default_ligand_payload_key(payload_type: str) -> str:
-    if payload_type == "pdbqt":
-        return "ligands_pdbqt"
-    if payload_type == "smiles":
-        return "ligands_smiles"
-    if payload_type == "mol_block":
-        return "ligands_mol_block"
-    raise ValueError(f"Unsupported ligand_payload_type: {payload_type}")
-
-
 def _ensure_preparation_functions():
     global ligand_preparation, pdbqt2molblock
     if ligand_preparation is None or pdbqt2molblock is None:
@@ -76,7 +66,7 @@ def _parse_config(config_fname):
         config["server_cwd"] = str(config["server_cwd"])
 
     config.setdefault("init_command", "init")
-    config.setdefault("dock_command", "dock_batch")
+    config.setdefault("dock_command", "dock")
     config.setdefault("result_items_key", "results")
     config.setdefault("score_key", "docking_score")
     config.setdefault("pose_key", "raw_block")
@@ -84,15 +74,9 @@ def _parse_config(config_fname):
     config.setdefault("score_mode", "min")
     config.setdefault("startup_timeout", 120)
     config.setdefault("request_timeout", None)
-    config.setdefault("boron_replacement", True)
+    config.setdefault("boron_replacement", False)
     config.setdefault("ligand_payload_type", "pdbqt")
     config.setdefault("raw_format", "pdbqt")
-
-    ligand_payload_type = config["ligand_payload_type"]
-    config.setdefault(
-        "ligand_payload_key",
-        _default_ligand_payload_key(ligand_payload_type),
-    )
 
     control_keys = {
         "script_file",
@@ -108,7 +92,6 @@ def _parse_config(config_fname):
         "request_timeout",
         "boron_replacement",
         "ligand_payload_type",
-        "ligand_payload_key",
         "raw_format",
         "init_payload",
     }
@@ -143,7 +126,7 @@ def _prepare_ligand_payload(mol, config, ring_sample=False):
         ligand_preparation, _ = _ensure_preparation_functions()
         ligand_payload = ligand_preparation(
             mol,
-            boron_replacement=config.get("boron_replacement", True),
+            boron_replacement=False,
             ring_sample=ring_sample,
         )
         return ligand_payload
@@ -228,20 +211,39 @@ def _extract_batch_results(response, config):
     if isinstance(payload.get(result_items_key), list):
         return payload[result_items_key]
 
-    if isinstance(response.get(result_items_key), list):
-        return response[result_items_key]
+    logger.warning(
+        f"Received response for 'payload' -> {result_items_key!r} is not a list. This is a break of API.")
 
-    score_key = config["score_key"]
-    pose_key = config["pose_key"]
-    mol_block_key = config["mol_block_key"]
-
-    if score_key in payload and (pose_key in payload or mol_block_key in payload):
-        return [payload]
-
-    if score_key in response and (pose_key in response or mol_block_key in response):
-        return [response]
+    #
+    # if isinstance(response.get(result_items_key), list):
+    #     return response[result_items_key]
+    #
+    # score_key = config["score_key"]
+    # pose_key = config["pose_key"]
+    # mol_block_key = config["mol_block_key"]
+    #
+    # if score_key in payload and (pose_key in payload or mol_block_key in payload):
+    #     return [payload]
+    #
+    # if score_key in response and (pose_key in response or mol_block_key in response):
+    #     return [response]
 
     return []
+
+
+def _extract_molecule_name(response):
+    payload = _response_payload(response)
+    name = payload.get("name")
+    if name is None and isinstance(response, dict):
+        name = response.get("name")
+    return name if isinstance(name, str) and name.strip() else None
+
+
+def _set_mol_block_name(mol_block, name):
+    first_newline = mol_block.find('\n')
+    if first_newline == -1:
+        return mol_block
+    return name + mol_block[first_newline:]
 
 
 def _choose_best(items, score_mode="min"):
@@ -272,8 +274,8 @@ def mol_dock(mol, config, ring_sample=False):
             command=config["dock_command"],
             payload={
                 "molecule_id": mol_id,
-                "ring_sample": bool(ring_sample),
-                config["ligand_payload_key"]: ligand_payload,
+                # "ring_sample": bool(ring_sample),
+                config["ligand_payload_type"]: ligand_payload,
             },
             timeout=config.get("request_timeout"),
         )
@@ -288,6 +290,8 @@ def mol_dock(mol, config, ring_sample=False):
     score_key = config["score_key"]
     pose_key = config["pose_key"]
     mol_block_key = config["mol_block_key"]
+
+    raw_format = config.get("raw_format", "pdbqt")
 
     for item in results:
         docking_score = _safe_float(item.get(score_key))
@@ -310,52 +314,52 @@ def mol_dock(mol, config, ring_sample=False):
         if not isinstance(raw_block, str) or not raw_block.strip():
             continue
 
-        raw_format = config.get("raw_format", "pdbqt")
-        if raw_format != "pdbqt":
-            # Non-PDBQT format (e.g. SDF from CARSIDock): raw_block is already a mol_block
+        # parse raw_block if mol_block is absent
+        if raw_format == "pdbqt":
+
+            if "MODEL" not in raw_block:
+                continue
+
+            try:
+                _, _pdbqt2molblock = _ensure_preparation_functions()
+                mol_block = _pdbqt2molblock(raw_block.split("MODEL", 1)[1], mol, mol_id)
+            except Exception:
+                logger.exception("Failed to convert pdbqt pose for %s", mol_id)
+                continue
+
             dock_output_conformer_list.append(
                 {
                     "docking_score": docking_score,
-                    "mol_block": raw_block,
+                    "mol_block": mol_block,
                     "raw_block": raw_block,
                 }
             )
-            continue
 
-        if "MODEL" not in raw_block:
-            continue
+        elif raw_format == "sdf":
 
-        try:
-            _, _pdbqt2molblock = _ensure_preparation_functions()
-            mol_block = _pdbqt2molblock(raw_block.split("MODEL", 1)[1], mol, mol_id)
-        except Exception:
-            logger.exception("Failed to convert pdbqt pose for %s", mol_id)
-            continue
+            dock_output_conformer_list.append(
+                {
+                    "docking_score": docking_score,
+                    "mol_block": raw_block.split('$$$$\n')[0],
+                    "raw_block": raw_block,
+                }
+            )
 
-        dock_output_conformer_list.append(
-            {
-                "docking_score": docking_score,
-                "mol_block": mol_block,
-                "raw_block": raw_block,
-            }
-        )
+        else:
+            raise NotImplementedError(f'Output raw docking format {raw_format!r} is not implemented.')
+
 
     dock_time = round(timeit.default_timer() - start_time, 1)
 
-    raw_format = config.get("raw_format", "pdbqt")
-    if raw_format != "pdbqt" and dock_output_conformer_list:
-        combined_sdf = "".join(
-            item["mol_block"].rstrip() + "\n$$$$\n" for item in dock_output_conformer_list
-        )
-        for item in dock_output_conformer_list:
-            if "raw_block" not in item:
-                item["raw_block"] = combined_sdf
+    if dock_output_conformer_list:
+        output = _choose_best(dock_output_conformer_list, config.get("score_mode", "min"))
+        mol_name = _extract_molecule_name(response)
+        if mol_name is not None and "mol_block" in output:
+            output["mol_block"] = _set_mol_block_name(output["mol_block"], mol_name)
+        output["dock_time"] = dock_time
+    else:
+        output = None
 
-    output = _choose_best(dock_output_conformer_list, config.get("score_mode", "min"))
-    if output is None:
-        return mol_id, None
-
-    output["dock_time"] = dock_time
     return mol_id, output
 
 
