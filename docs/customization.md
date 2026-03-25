@@ -89,41 +89,6 @@ results = docking(
 )
 ```
 
-## Reusable Persistent Server Backend
-
-EasyDock includes a reusable backend (`--program server`) for tools with expensive model initialization.
-It starts one long-lived server process per worker and reuses it for multiple molecules.
-
-### When to use
-
-- Containerized tools launched with Apptainer/Singularity
-- ML-based docking where loading model weights dominates per-molecule runtime
-- Backends that can expose request/response API over stdin/stdout
-
-### Required protocol (JSON Lines)
-
-Each request and response is one JSON object per line:
-
-```json
-{"id": 1, "command": "init", "payload": {"protein": "/path/protein.pdbqt"}}
-{"id": 1, "status": "ok"}
-{"id": 2, "command": "dock_batch", "payload": {"molecule_id": "mol_1", "ligands_pdbqt": ["..."]}}
-{"id": 2, "status": "ok", "results": [{"docking_score": -8.3, "pdb_block": "MODEL ... ENDMDL"}]}
-```
-
-### Config keys
-
-- `script_file`: command used to start server (supports complex shell commands, including `apptainer exec ...`)
-- `init_command`: init command name (default `init`)
-- `dock_command`: docking command name (default `dock_batch`)
-- `result_items_key`: key containing list of conformer-level outputs (default `results`)
-- `score_key`: key with numeric score in each result item (default `docking_score`)
-- `pose_key`: key with PDBQT pose text in each result item (default `pdb_block`)
-- `score_mode`: `min` (default) or `max`
-- `startup_timeout`: server startup timeout in seconds
-- `request_timeout`: per-request timeout in seconds
-- `init_payload`: optional dict sent during init; if omitted, all non-control config values are sent automatically
-
 ## Custom Protonation Tools
 
 ### Containerized solutions
