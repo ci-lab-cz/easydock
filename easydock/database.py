@@ -6,6 +6,8 @@ import pickle
 import sqlite3
 import tempfile
 import traceback
+import threading
+from collections import deque
 from copy import deepcopy
 from functools import partial
 from multiprocessing import Pool
@@ -34,6 +36,109 @@ from rdkit.Chem.SaltRemover import SaltRemover
 
 VALID_RAW_FORMATS = ('pdbqt', 'sdf')
 DEFAULT_RAW_FORMAT = 'pdbqt'
+
+
+class MolQueue:
+    """
+    Thread-safe iterator that feeds batches of molecules without modifying any row status.
+    Position is tracked via the rowid of the last fetched chunk.
+
+    A large internal buffer (prefetch_size) is maintained to minimise DB round-trips.
+    A new connection is opened and closed on every refill so that the DB remains writable
+    from the main thread at all times (WAL mode allows one concurrent writer + multiple readers).
+
+    :param db_path: path to the SQLite database file
+    :param mode: 'docking' (default) — yields RDKit mol objects;
+                 'protonation' — yields (smi, mol_name) tuples for molecules lacking smi_protonated
+    :param table_name: name of the molecules table
+    :param add_sql: optional SQL fragment appended to the WHERE clause,
+                    e.g. "AND id IN ('MOL1', 'MOL2')" or "AND iteration=(SELECT MAX(iteration) FROM mols)"
+    :param batch_size: items returned per __next__ call (default 1); returns a list when > 1
+    :param prefetch_size: rows fetched from DB per refill; should be >> batch_size (default 500)
+    """
+
+    def __init__(self, db_path: str, mode: str = 'docking', table_name: str = 'mols',
+                 add_sql: Optional[str] = None, batch_size: int = 1, prefetch_size: int = 500):
+        if mode not in ('docking', 'protonation'):
+            raise ValueError(f"mode must be 'docking' or 'protonation', got {mode!r}")
+        self.db_path = db_path
+        self.mode = mode
+        self.table_name = table_name
+        self.add_sql = add_sql
+        self.batch_size = batch_size
+        self.prefetch_size = prefetch_size
+        self._low_water = prefetch_size // 2
+        self._last_rowid = 0
+        self._buffer: deque = deque()
+        self._exhausted = False
+        self._lock = threading.Lock()
+
+        if mode == 'docking':
+            conn = sqlite3.connect(db_path, timeout=60)
+            try:
+                protonation_status = get_protonation_arg_value(conn)
+            finally:
+                conn.close()
+            self._smi_field = 'smi_protonated' if protonation_status else 'smi'
+            self._mol_field = 'source_mol_block_protonated' if protonation_status else 'source_mol_block'
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if len(self._buffer) < self._low_water and not self._exhausted:
+            self._refill()
+        if not self._buffer:
+            raise StopIteration
+        batch = []
+        for _ in range(self.batch_size):
+            if not self._buffer:
+                break
+            batch.append(self._buffer.popleft())
+        return batch if self.batch_size > 1 else batch[0]
+
+    def _refill(self):
+        """Fetch the next prefetch_size chunk from the DB."""
+        if self.mode == 'docking':
+            sql = (f"SELECT rowid, id || '_' || stereo_id, {self._smi_field}, {self._mol_field} "
+                   f"FROM {self.table_name} "
+                   f"WHERE rowid > ? AND docking_score IS NULL AND "
+                   f"      (({self._smi_field} IS NOT NULL AND {self._smi_field} != '') OR "
+                   f"       ({self._mol_field} IS NOT NULL AND {self._mol_field} != ''))")
+        else:  # protonation
+            sql = (f"SELECT rowid, smi, id || '_' || stereo_id "
+                   f"FROM {self.table_name} "
+                   f"WHERE rowid > ? AND smi IS NOT NULL AND docking_score IS NULL AND smi_protonated IS NULL")
+        if isinstance(self.add_sql, str) and self.add_sql:
+            sql += ' ' + self.add_sql
+        sql += f' ORDER BY rowid LIMIT {self.prefetch_size}'
+
+        with self._lock:
+            conn = sqlite3.connect(self.db_path, timeout=60)
+            conn.execute('PRAGMA journal_mode=WAL')
+            try:
+                rows = conn.execute(sql, (self._last_rowid,)).fetchall()
+            finally:
+                conn.close()
+            if not rows:
+                self._exhausted = True
+                return
+            self._last_rowid = rows[-1][0]
+
+        if self.mode == 'docking':
+            for _, mol_name, smi, mol_block in rows:
+                if mol_block is None:
+                    mol = Chem.MolFromSmiles(smi)
+                else:
+                    mol = Chem.MolFromMolBlock(mol_block, removeHs=False)
+                    if mol_is_3d(mol):
+                        Chem.AssignStereochemistryFrom3D(mol)
+                if mol:
+                    mol.SetProp('_Name', mol_name)
+                    self._buffer.append(mol)
+        else:  # protonation
+            for _, smi, mol_name in rows:
+                self._buffer.append((smi, mol_name))
 
 
 def validate_config(config_fname):
@@ -562,28 +667,18 @@ def add_protonation(db_fname, program='molgpka', tautomerize=True, table_name='m
     :param pH: pH value to use during protonation
     :return:
     '''
-    with sqlite3.connect(db_fname, check_same_thread=False, timeout=90) as conn:   # danger
-
-        cur = conn.cursor()
+    with sqlite3.connect(db_fname, timeout=90) as conn:
 
         # get count of molecules required protonation
-        sql = f"""SELECT COUNT(rowid) 
-                  FROM {table_name} 
+        sql = f"""SELECT COUNT(rowid)
+                  FROM {table_name}
                   WHERE smi IS NOT NULL AND docking_score is NULL AND smi_protonated is NULL"""
         sql += add_sql
-        cur.execute(sql)
-        mol_count = cur.fetchone()[0]
+        mol_count = conn.execute(sql).fetchone()[0]
 
         if mol_count == 0:
             logging.info('no molecules to protonate')
             return
-
-        # process SMILES and mol_block together
-        sql = f"""SELECT smi, id || '_' || stereo_id 
-                  FROM {table_name} 
-                  WHERE smi IS NOT NULL AND docking_score is NULL AND smi_protonated is NULL"""
-        sql += add_sql
-        cur.execute(sql)
 
         if program in ['chemaxon'] or (os.path.isfile(program) and program.endswith('.sif')):  # file-based protocol, files are created by chunks
             if program == 'chemaxon':
@@ -595,14 +690,12 @@ def add_protonation(db_fname, program='molgpka', tautomerize=True, table_name='m
                 read_func = read_smiles
                 nmols = 2000
 
-            while True:
+            mols_queue = MolQueue(db_fname, mode='protonation', table_name=table_name, add_sql=add_sql,
+                                  batch_size=nmols, prefetch_size=nmols * 2)
+            for batch in mols_queue:
                 with tempfile.NamedTemporaryFile(suffix='.smi', mode='w', encoding='utf-8') as tmp:
-                    res = cur.fetchmany(nmols)
-                    if not res:
-                        break
-                    else:
-                        for smi, mol_name in res:
-                            tmp.write(f'{smi}\t{mol_name}\n')
+                    for smi, mol_name in batch:
+                        tmp.write(f'{smi}\t{mol_name}\n')
                     tmp.flush()
 
                     # create temp dir, not a file; pass file by name, and it will be created inside a container/program
@@ -610,7 +703,7 @@ def add_protonation(db_fname, program='molgpka', tautomerize=True, table_name='m
                     output = os.path.join(tmpdir, "output.smi")
                     try:
                         protonate_func(tmp.name, output)
-                        items = read_func(output)  #  generator of tuples (smi, mol_name)
+                        items = read_func(output)  # generator of tuples (smi, mol_name)
                         update_db_protonated_smiles(conn, items, table_name)
                     finally:
                         if os.path.exists(output):
@@ -625,9 +718,9 @@ def add_protonation(db_fname, program='molgpka', tautomerize=True, table_name='m
             else:
                 raise ValueError(f'There is no implemented functions to protonate molecules by {program}')
 
+            mols_queue = MolQueue(db_fname, mode='protonation', table_name=table_name, add_sql=add_sql)
             items = []
-            data = ((smi, mol_name) for smi, mol_name in cur)
-            for i, item in enumerate(protonate_func(data), 1):
+            for i, item in enumerate(protonate_func(mols_queue), 1):
                 items.append(item)
                 if i % 100 == 0:
                     update_db_protonated_smiles(conn, items, table_name)
