@@ -6,8 +6,10 @@ import os
 import sqlite3
 import sys
 import time
+import yaml
 from functools import partial
 from multiprocessing import Pool
+from typing import List
 
 from rdkit import Chem
 from rdkit.Chem.rdMolDescriptors import CalcNumRotatableBonds
@@ -68,11 +70,18 @@ def get_supplied_args(parser):
     return tuple(supplied_args)
 
 
-def docking(mols, dock_func, dock_config, priority_func=CalcNumRotatableBonds, ncpu=1, dask_client=None,
+def calc_priority(mols: Chem.Mol | List[Chem.Mol], priority_func) -> float:
+    if isinstance(mols, Chem.Mol):
+        return priority_func(mols)
+    return sum(priority_func(mol) for mol in mols)
+
+
+def docking(mols: MolQueue,
+            dock_func, dock_config, priority_func=CalcNumRotatableBonds, ncpu=1, dask_client=None,
             dask_report_fname=None, ring_sample=False):
     """
 
-    :param mols: iterator of molecules, each molecule must have a title
+    :param mols: iterator of molecules or batches, each molecule must have a title
     :param dock_func: docking function
     :param dock_config: yml-file with docking settings which will be passed to dock_func
     :param priority_func: function which return a numeric value, higher values - higher docking priority
@@ -91,25 +100,33 @@ def docking(mols, dock_func, dock_config, priority_func=CalcNumRotatableBonds, n
         with (performance_report(filename=dask_report_fname) if dask_report_fname is not None else none_context):
             nworkers = len(dask_client.scheduler_info()['workers'])
             futures = []
-            for i, mol in enumerate(mols, 1):
-                futures.append(dask_client.submit(dock_func, mol, priority=priority_func(mol), config=dock_config, ring_sample=ring_sample))
+            for i, mol_batch in enumerate(mols, 1):  # mol_batch - mol or list of mols
+                futures.append(dask_client.submit(dock_func, mol_batch, priority=calc_priority(mol_batch, priority_func), config=dock_config, ring_sample=ring_sample))
                 if i == nworkers * 10:
                     break
             seq = as_completed(futures, with_results=True)
-            for i, (future, (mol_id, res)) in enumerate(seq, 1):
-                yield mol_id, res
+            for i, (future, item) in enumerate(seq, 1):
+                if isinstance(item, tuple) and len(item) == 2:
+                    yield item  # mol_id, res
+                else:  # list
+                    for mol_id, res in item:
+                        yield mol_id, res
                 del future
                 try:
-                    mol = next(mols)
-                    new_future = dask_client.submit(dock_func, mol, priority=priority_func(mol), config=dock_config, ring_sample=ring_sample)
+                    mol_batch = next(mols)  # mol_batch - mol or list of mols
+                    new_future = dask_client.submit(dock_func, mol_batch, priority=calc_priority(mol_batch, priority_func), config=dock_config, ring_sample=ring_sample)
                     seq.add(new_future)
                 except StopIteration:
                     continue
     else:
         pool = Pool(ncpu)
         try:
-            for mol_id, res in pool.imap_unordered(partial(dock_func, config=dock_config, ring_sample=ring_sample), tuple(mols), chunksize=1):
-                yield mol_id, res
+            for item in pool.imap_unordered(partial(dock_func, config=dock_config, ring_sample=ring_sample), mols, chunksize=1):
+                if isinstance(item, tuple) and len(item) == 2:
+                    yield item  # mol_id, res
+                else:  # list
+                    for mol_id, res in item:
+                        yield mol_id, res
         finally:
             pool.close()
             pool.join()
@@ -307,8 +324,14 @@ def main():
             else:
                 dask_report_fname = None
 
+            batch_size = 1
+            if args.program == 'server':
+                with open(args.config) as f:
+                    config = yaml.safe_load(f) or {}
+                    batch_size = config.get('batch_size', 1)
+
             with sqlite3.connect(args.output, timeout=90) as conn:
-                mols = MolQueue(args.output)
+                mols = MolQueue(args.output, batch_size=batch_size)
                 i = 0
                 for i, (mol_id, res) in enumerate(docking(mols,
                                                           dock_func=mol_dock,

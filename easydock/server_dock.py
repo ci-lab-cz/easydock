@@ -3,6 +3,7 @@ import logging
 import threading
 import timeit
 from pathlib import Path
+from typing import List
 
 import yaml
 from rdkit import Chem
@@ -202,33 +203,48 @@ def _get_worker_client(config):
 
 
 def _extract_batch_results(response, config):
+    """Parse response into a list of (molecule_id, result_items) tuples.
+
+    The outer response payload contains a list under result_items_key. Each element
+    of that list is a per-molecule dict with molecule_id, status, error, and its own
+    result_items_key list of "conformer" dicts.
+    Returns a list of (molecule_id, conformer_list) where conformer_list is None on error.
+    """
     if not isinstance(response, dict):
         return []
 
     result_items_key = config["result_items_key"]
     payload = _response_payload(response)
+    per_mol_list = payload.get(result_items_key)
 
-    if isinstance(payload.get(result_items_key), list):
-        return payload[result_items_key]
+    if not isinstance(per_mol_list, list):
+        logger.warning("Received response for 'payload' -> %r is not a list. This is a break of API.", result_items_key)
+        return []
 
-    logger.warning(
-        f"Received response for 'payload' -> {result_items_key!r} is not a list. This is a break of API.")
+    outputs = []
+    for item in per_mol_list:
+        if not isinstance(item, dict):
+            logger.warning("Per-molecule result item is not a dict: %r", item)
+            continue
 
-    #
-    # if isinstance(response.get(result_items_key), list):
-    #     return response[result_items_key]
-    #
-    # score_key = config["score_key"]
-    # pose_key = config["pose_key"]
-    # mol_block_key = config["mol_block_key"]
-    #
-    # if score_key in payload and (pose_key in payload or mol_block_key in payload):
-    #     return [payload]
-    #
-    # if score_key in response and (pose_key in response or mol_block_key in response):
-    #     return [response]
+        mol_id = item.get("molecule_id")
+        status = item.get("status")
+        error = item.get("error")
 
-    return []
+        if error or status not in (None, True, "ok", "OK"):
+            logger.warning("Docking failed for %s: %s", mol_id, error or f"status={status!r}")
+            outputs.append((mol_id, None))
+            continue
+
+        conformers = item.get(result_items_key)
+        if not isinstance(conformers, list):
+            logger.warning("Missing or invalid %r in per-molecule result for %s", result_items_key, mol_id)
+            outputs.append((mol_id, None))
+            continue
+
+        outputs.append((mol_id, conformers))
+
+    return outputs
 
 
 def _extract_molecule_name(response):
@@ -254,113 +270,121 @@ def _choose_best(items, score_mode="min"):
     return min(items, key=lambda x: x["docking_score"])
 
 
-def mol_dock(mol, config, ring_sample=False):
-    mol_id = mol.GetProp("_Name")
+def mol_dock(mols: Chem.Mol | List[Chem.Mol], config, ring_sample=False):
 
-    try:
-        config = _parse_config(config)
-        ligand_payload = _prepare_ligand_payload(mol, config, ring_sample=ring_sample)
-        if ligand_payload is None:
-            return mol_id, None
-    except Exception as e:
-        logger.warning("Ligand preparation failed for %s: %s", mol_id, e)
-        return mol_id, None
+    if isinstance(mols, Chem.Mol):
+        mols = [mols]
+
+    config = _parse_config(config)
+
+    data = []
+    for mol in mols:
+        mol_id = mol.GetProp("_Name")
+        try:
+            ligand_payload = _prepare_ligand_payload(mol, config, ring_sample=ring_sample)
+            data.append((mol_id, ligand_payload))
+        except Exception as e:
+            logger.warning("Ligand preparation failed for %s: %s", mol_id, e)
+            data.append((mol_id, None))
+    if all(payload is None for mol_id, payload in data):
+        return data  # list of (mol_id, None)
+
+    failed_mol_ids = [mol_id for mol_id, ligand_payload in data if ligand_payload is None]
+    data = [item for item in data if item[1] is not None]  # keep only prepared mols
 
     start_time = timeit.default_timer()
 
     try:
         client = _get_worker_client(config)
-        response = client.request(
-            command=config["dock_command"],
-            payload={
+
+        payload = []
+        for mol_id, ligand_payload in data:
+            payload.append({
                 "molecule_id": mol_id,
                 # "ring_sample": bool(ring_sample),
                 config["ligand_payload_type"]: ligand_payload,
-            },
+            })
+
+        response = client.request(
+            command=config["dock_command"],
+            payload=payload,
             timeout=config.get("request_timeout"),
         )
         _check_response_ok(response, context="dock")
     except Exception as e:
-        logger.warning("Docking request failed for %s: %s", mol_id, e)
-        return mol_id, None
+        mol_ids = [mol_id for mol_id, _ in data]
+        logger.warning("Docking request failed for the whole batch of molecules %s: %s",
+                       ', '.join(mol_ids), e)
+        return [(mol_id, None) for mol_id in mol_ids + failed_mol_ids]
 
+    dock_time = round((timeit.default_timer() - start_time) / len(data), 1)  # average time per mol
     results = _extract_batch_results(response, config)
-    dock_output_conformer_list = []
 
     score_key = config["score_key"]
     pose_key = config["pose_key"]
     mol_block_key = config["mol_block_key"]
-
     raw_format = config.get("raw_format", "pdbqt")
+    
+    score_mode = config.get("score_mode", "min")
+    mol_by_id = {mol.GetProp("_Name"): mol for mol in mols}
 
-    for item in results:
-        docking_score = _safe_float(item.get(score_key))
-        if docking_score is None:
+    outputs = [(mol_id, None) for mol_id in failed_mol_ids]
+
+    for mol_id, result_list in results:
+        
+        if result_list is None:
+            outputs.append((mol_id, None))
             continue
 
-        mol_block = item.get(mol_block_key)
-        raw_block = item.get(pose_key)
+        mol = mol_by_id.get(mol_id)
+        dock_output_conformer_list = []
 
-        if isinstance(mol_block, str) and mol_block.strip():
-            direct_output = {
-                "docking_score": docking_score,
-                "mol_block": mol_block,
-            }
-            if isinstance(raw_block, str):
-                direct_output["raw_block"] = raw_block
-            dock_output_conformer_list.append(direct_output)
-            continue
-
-        if not isinstance(raw_block, str) or not raw_block.strip():
-            continue
-
-        # parse raw_block if mol_block is absent
-        if raw_format == "pdbqt":
-
-            if "MODEL" not in raw_block:
+        for item in result_list:
+            docking_score = _safe_float(item.get(score_key))
+            if docking_score is None:
                 continue
 
-            try:
-                _, _pdbqt2molblock = _ensure_preparation_functions()
-                mol_block = _pdbqt2molblock(raw_block.split("MODEL", 1)[1], mol, mol_id)
-            except Exception:
-                logger.exception("Failed to convert pdbqt pose for %s", mol_id)
+            mol_block = item.get(mol_block_key)
+            raw_block = item.get(pose_key)
+
+            if isinstance(mol_block, str) and mol_block.strip():
+                entry = {"docking_score": docking_score, "mol_block": mol_block}
+                if isinstance(raw_block, str):
+                    entry["raw_block"] = raw_block
+                dock_output_conformer_list.append(entry)
                 continue
 
-            dock_output_conformer_list.append(
-                {
-                    "docking_score": docking_score,
-                    "mol_block": mol_block,
-                    "raw_block": raw_block,
-                }
-            )
+            if not isinstance(raw_block, str) or not raw_block.strip():
+                continue
 
-        elif raw_format == "sdf":
+            # parse raw_block if mol_block is absent
+            if raw_format == "pdbqt":
+                if "MODEL" not in raw_block:
+                    continue
+                try:
+                    _, _pdbqt2molblock = _ensure_preparation_functions()
+                    mol_block = _pdbqt2molblock(raw_block.split("MODEL", 1)[1], mol, mol_id)
+                except Exception:
+                    logger.exception("Failed to convert pdbqt pose for %s", mol_id)
+                    continue
+                dock_output_conformer_list.append({"docking_score": docking_score, "mol_block": mol_block, "raw_block": raw_block})
 
-            dock_output_conformer_list.append(
-                {
-                    "docking_score": docking_score,
-                    "mol_block": raw_block.split('$$$$\n')[0],
-                    "raw_block": raw_block,
-                }
-            )
+            elif raw_format == "sdf":
+                dock_output_conformer_list.append({"docking_score": docking_score, "mol_block": raw_block.split('$$$$\n')[0], "raw_block": raw_block})
 
+            else:
+                raise NotImplementedError(f'Output raw docking format {raw_format!r} is not implemented.')
+
+        if dock_output_conformer_list:
+            output = _choose_best(dock_output_conformer_list, score_mode)
+            output["mol_block"] = _set_mol_block_name(output["mol_block"], mol_id)
+            output["dock_time"] = dock_time
         else:
-            raise NotImplementedError(f'Output raw docking format {raw_format!r} is not implemented.')
+            output = None
 
+        outputs.append((mol_id, output))
 
-    dock_time = round(timeit.default_timer() - start_time, 1)
-
-    if dock_output_conformer_list:
-        output = _choose_best(dock_output_conformer_list, config.get("score_mode", "min"))
-        mol_name = _extract_molecule_name(response)
-        if mol_name is not None and "mol_block" in output:
-            output["mol_block"] = _set_mol_block_name(output["mol_block"], mol_name)
-        output["dock_time"] = dock_time
-    else:
-        output = None
-
-    return mol_id, output
+    return outputs
 
 
 def _cleanup_worker_client():
