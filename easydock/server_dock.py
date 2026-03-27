@@ -285,6 +285,7 @@ def mol_dock(mols: Chem.Mol | List[Chem.Mol], config, ring_sample=False):
             data.append((mol_id, ligand_payload))
         except Exception as e:
             logger.warning("Ligand preparation failed for %s: %s", mol_id, e)
+            data.append((mol_id, None))
     if all(payload is None for mol_id, payload in data):
         return data  # list of (mol_id, None)
 
@@ -312,7 +313,7 @@ def mol_dock(mols: Chem.Mol | List[Chem.Mol], config, ring_sample=False):
         _check_response_ok(response, context="dock")
     except Exception as e:
         mol_ids = [mol_id for mol_id, _ in data]
-        logger.warning("Docking request failed for molecules %s: %s",
+        logger.warning("Docking request failed for the whole batch of molecules %s: %s",
                        ', '.join(mol_ids), e)
         return [(mol_id, None) for mol_id in mol_ids + failed_mol_ids]
 
