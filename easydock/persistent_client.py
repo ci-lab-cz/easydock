@@ -112,7 +112,7 @@ class JsonLineProcessClient:
     def request(
         self,
         command: str,
-        payload: Optional[Dict[str, Any]] = None,
+        payload: Optional[List[Dict[str, Any]]] = None,
         timeout: Optional[float] = None,
     ) -> Dict[str, Any]:
         if self._closed:
