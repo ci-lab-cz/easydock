@@ -6,6 +6,7 @@ import os
 import sqlite3
 import sys
 import time
+import yaml
 from functools import partial
 from multiprocessing import Pool
 from typing import List
@@ -323,8 +324,13 @@ def main():
             else:
                 dask_report_fname = None
 
+            batch_size = 1
+            if args.program == 'server':
+                with open(args.config) as f:
+                    config = yaml.safe_load(f) or {}
+                    batch_size = config.get('batch_size', 1)
+
             with sqlite3.connect(args.output, timeout=90) as conn:
-                batch_size = 10 if args.program == 'server' else 1
                 mols = MolQueue(args.output, batch_size=batch_size)
                 i = 0
                 for i, (mol_id, res) in enumerate(docking(mols,
