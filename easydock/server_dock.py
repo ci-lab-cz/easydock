@@ -377,6 +377,7 @@ def mol_dock(mols: Chem.Mol | List[Chem.Mol], config, ring_sample=False):
 
         if dock_output_conformer_list:
             output = _choose_best(dock_output_conformer_list, score_mode)
+            output["mol_block"] = _set_mol_block_name(output["mol_block"], mol_id)
             output["dock_time"] = dock_time
         else:
             output = None
