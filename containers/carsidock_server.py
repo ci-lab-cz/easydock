@@ -106,17 +106,17 @@ class _CarsiDockServer:
                 })
                 continue
 
-            ligands = smiles_list if smiles_list is not None else mol_block_list
+            instances = smiles_list if smiles_list is not None else mol_block_list
             use_smiles = smiles_list is not None
             mol_output = []
 
             try:
-                for ligand in ligands:
+                for instance in instances:  # commonly there will be a only single instance representing a molecule (SMILES or MOL block)
                     raw_block = None
                     if use_smiles:
-                        init_mol_list = self.read_ligands(smiles=[ligand], num_use_conf=nconf)[0]
+                        init_mol_list = self.read_ligands(smiles=[instance], num_use_conf=nconf)[0]
                     else:
-                        mol = Chem.MolFromMolBlock(ligand, removeHs=False)
+                        mol = Chem.MolFromMolBlock(instance, removeHs=False)
                         init_mol_list = self.read_ligands(mol_list=[mol], num_use_conf=nconf)[0]
                     torch.cuda.empty_cache()
                     with tempfile.NamedTemporaryFile(suffix=".sdf", delete=False) as tmp:
