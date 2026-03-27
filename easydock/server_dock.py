@@ -317,7 +317,7 @@ def mol_dock(mols: Chem.Mol | List[Chem.Mol], config, ring_sample=False):
                        ', '.join(mol_ids), e)
         return [(mol_id, None) for mol_id in mol_ids + failed_mol_ids]
 
-    dock_time = round(timeit.default_timer() - start_time, 1)
+    dock_time = round((timeit.default_timer() - start_time) / len(data), 1)  # average time per mol
     results = _extract_batch_results(response, config)
 
     score_key = config["score_key"]
