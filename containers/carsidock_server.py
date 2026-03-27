@@ -83,7 +83,7 @@ class _CarsiDockServer:
         import os
 
         if not isinstance(payload, list):
-            return {"status": "error", "error": "payload must be a list of molecule dicts"}
+            return {"status": "error", "error": f"payload must be a list of molecule dicts. Payload: {payload}"}
 
         nconf = max(self.num_conformer, 5)
         per_mol_results = []
