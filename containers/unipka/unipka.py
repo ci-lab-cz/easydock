@@ -1,7 +1,8 @@
 import datetime
+import heapq
 import os
 import sys
-import tempfile
+import time
 import math
 import argparse
 import logging
@@ -10,7 +11,7 @@ import traceback
 from collections import defaultdict, OrderedDict
 from functools import partial
 from multiprocessing import Pool, cpu_count
-from typing import Dict, List, Tuple, Union, Optional, Callable
+from typing import Dict, Iterator, List, Tuple, Union, Optional, Callable
 from pprint import pprint
 
 import numpy as np
@@ -366,7 +367,7 @@ class ConformerGen(object):
     def transform(self, smiles_list, pool=None):
         logger.info('Start generating conformers...')
         # print(len(smiles_list))
-        if len(smiles_list) > 100 and pool is not None:  # Only parallelize for large batches
+        if len(smiles_list) > 10 and pool is not None:  # Only parallelize for large batches
             logger.info('Pool size is {}'.format(len(smiles_list)))
             sys.stderr.write('Pool size is {}'.format(len(smiles_list)))
             inputs = list(pool.imap(self.single_process, smiles_list, chunksize=1))
@@ -2164,11 +2165,200 @@ def calc_all(items, template_a2b, template_b2a, predictor, pH=7.4):
     return output
 
 
+def _priority_stream(
+    source: Iterator[Tuple[str, str]],
+    patterns: List[Mol],
+    buffer_size: int = 2000,
+) -> Iterator[str]:
+    """
+    Online sliding-window priority reorder. Reads up to buffer_size molecules
+    from source into a max-heap keyed by pattern-match count (hardest first),
+    then yields SMILES one at a time, refilling from source as items are consumed.
+    """
+    heap = []   # (-score, arrival_idx, smi)
+    arrival_idx = 0
+
+    for smi, _name in source:
+        score = count_total_pattern_matches(smi, patterns)
+        heapq.heappush(heap, (-score, arrival_idx, smi))
+        arrival_idx += 1
+        while len(heap) >= buffer_size:
+            _, _, best = heapq.heappop(heap)
+            yield best
+
+    while heap:
+        _, _, best = heapq.heappop(heap)
+        yield best
+
+
+class UnipkaStream:
+    """
+    Streaming pKa prediction pipeline with no batch-level barriers.
+
+    CPU (get_ensemble) and GPU (predictor.predict) stages overlap: pool workers
+    continuously generate ensembles while the GPU fires whenever enough
+    microstates have accumulated (gpu_trigger_microstates) or a timeout expires.
+    Each molecule is yielded as (smi, prot_smi, name) the moment all its
+    microstates have been predicted, without waiting for other molecules.
+
+    :param template_a2b: protonation template DataFrame
+    :param template_b2a: deprotonation template DataFrame
+    :param predictor: FreeEnergyPredictor instance (holds pool for conformer gen)
+    :param patterns: pre-loaded SMARTS patterns for priority scoring
+    :param ncpu: number of worker processes for ensemble generation
+    :param pH: target pH
+    :param priority_buffer_size: lookahead window for priority reordering
+    :param gpu_trigger_microstates: fire GPU when this many microstates accumulated
+    :param gpu_trigger_timeout: fire GPU after this many seconds even if threshold not reached
+    """
+
+    def __init__(
+        self,
+        template_a2b: pd.DataFrame,
+        template_b2a: pd.DataFrame,
+        predictor,
+        patterns: List[Mol],
+        ncpu: int,
+        pH: float = 7.4,
+        priority_buffer_size: int = 2000,
+        gpu_trigger_microstates: int = 512,
+        gpu_trigger_timeout: float = 5.0,
+    ):
+        self._template_a2b = template_a2b
+        self._template_b2a = template_b2a
+        self._predictor = predictor
+        self._patterns = patterns
+        self._ncpu = ncpu
+        self._pH = pH
+        self._priority_buffer_size = priority_buffer_size
+        self._gpu_trigger_microstates = gpu_trigger_microstates
+        self._gpu_trigger_timeout = gpu_trigger_timeout
+
+    def process(
+        self, source: Iterator[Tuple[str, str]]
+    ) -> Iterator[Tuple[str, str, str]]:
+        """
+        Accept an iterator of (smi, name) tuples.
+        Yield (smi, prot_smi, name) as each molecule completes all stages.
+        prot_smi is None if the molecule failed.
+        """
+        # Per-molecule state: smi → dict with tracking info
+        pending: Dict[str, dict] = {}
+        # name registry for deduplication: smi → [name, ...]
+        smi_to_names: Dict[str, List[str]] = defaultdict(list)
+        # reverse index: microstate_smi → parent_smi
+        microstate_to_smi: Dict[str, str] = {}
+        # accumulation buffer for GPU
+        microstate_queue: List[str] = []
+        last_gpu_time = time.monotonic()
+
+        get_ensemble_fn = partial(
+            get_ensemble,
+            template_a2b=self._template_a2b,
+            template_b2a=self._template_b2a,
+        )
+
+        # consume source, registering all (smi, name) pairs including duplicates
+        # but feeding only unique SMILES to the priority stream / ensemble workers
+        def _annotated_source():
+            for smi, name in source:
+                smi_to_names[smi].append(name)
+                yield smi, name
+
+        annotated = _annotated_source()
+        priority_smiles = _priority_stream(
+            annotated, self._patterns, self._priority_buffer_size
+        )
+
+        with Pool(self._ncpu) as pool:
+            for smi, ensemble in pool.imap_unordered(
+                get_ensemble_fn, priority_smiles, chunksize=1
+            ):
+                # register molecule
+                all_microstates = [
+                    ms for mss in ensemble.values() for ms in mss
+                ]
+                if smi in pending:
+                    # already registered (shouldn't happen since priority_stream deduplicates)
+                    pass
+                elif len(all_microstates) == 0:
+                    # empty ensemble — complete immediately
+                    for name in smi_to_names[smi]:
+                        yield smi, None, name
+                else:
+                    pending[smi] = {
+                        'ensemble': ensemble,
+                        'total': len(all_microstates),
+                        'predicted': {},
+                    }
+                    for ms in all_microstates:
+                        microstate_to_smi[ms] = smi
+                    microstate_queue.extend(all_microstates)
+
+                # trigger GPU if threshold or timeout reached
+                now = time.monotonic()
+                if (len(microstate_queue) >= self._gpu_trigger_microstates or
+                        now - last_gpu_time >= self._gpu_trigger_timeout):
+                    yield from self._flush_gpu(
+                        microstate_queue, pending, microstate_to_smi, smi_to_names
+                    )
+                    microstate_queue.clear()
+                    last_gpu_time = time.monotonic()
+
+            # flush remaining microstates after source is exhausted
+            if microstate_queue:
+                yield from self._flush_gpu(
+                    microstate_queue, pending, microstate_to_smi, smi_to_names
+                )
+
+    def _flush_gpu(
+        self,
+        microstate_queue: List[str],
+        pending: dict,
+        microstate_to_smi: Dict[str, str],
+        smi_to_names: Dict[str, List[str]],
+    ) -> Iterator[Tuple[str, str, str]]:
+        """Run predictor on accumulated microstates; yield completed molecules."""
+        if not microstate_queue:
+            return
+
+        gpu_results = self._predictor.predict(list(microstate_queue))
+
+        for ms in microstate_queue:
+            parent = microstate_to_smi.pop(ms, None)
+            if parent is None or parent not in pending:
+                continue
+            energy = gpu_results.get(ms)  # None if not predicted
+            pending[parent]['predicted'][ms] = energy
+
+            mol_state = pending[parent]
+            if len(mol_state['predicted']) == mol_state['total']:
+                # all microstates predicted — compute major form
+                ensemble_free_energy = defaultdict(list)
+                for charge, microstates in mol_state['ensemble'].items():
+                    for m in microstates:
+                        e = mol_state['predicted'].get(m)
+                        if e is not None:
+                            ensemble_free_energy[charge].append((m, e))
+                ensemble_free_energy = dict(ensemble_free_energy)
+
+                try:
+                    _, prot_smi = get_major_form_from_ensemble(
+                        (parent, ensemble_free_energy), self._pH
+                    )
+                except Exception:
+                    prot_smi = None
+
+                for name in smi_to_names[parent]:
+                    yield parent, prot_smi, name
+                del pending[parent]
+
+
 def main():
     """
-    The code is adopted from https://bohrium.dp.tech/notebooks/38543442597.
-    Molecules are processed sequentially. Conformer generation for microspecies is done in parallel.
-    Prediction of free energy is done by torch model and run for all microspecies at once.
+    Streaming pKa prediction using UnipkaStream.
+    Molecules are priority-ordered by pattern count in a sliding-window buffer.
+    CPU ensemble generation and GPU inference overlap continuously — no batch barriers.
     """
     parser = argparse.ArgumentParser(description="Prediction major microspecies by Uni-pKa")
     parser.add_argument('-i', '--input', default=None, help="Input SMILES file (default: stdin)")
@@ -2192,7 +2382,7 @@ def main():
         format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
         level=args.log_level,
-        stream=sys.stdout,
+        stream=sys.stderr,
     )
     logger.setLevel(args.log_level)
 
@@ -2200,53 +2390,47 @@ def main():
         ncpu = cpu_count()
     else:
         ncpu = min(max(1, args.ncpu), cpu_count())
+
     pool = Pool(ncpu)
     predictor = FreeEnergyPredictor(args.model, batch_size=16, pool=pool)
-
     template_a2b, template_b2a = read_template(args.templates)
+    patterns = get_template_patterns(args.templates)
 
-    tmp_input_path = None
-    if args.input is None:
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.smi', delete=False) as tmp:
-            tmp.write(sys.stdin.read())
-            tmp_input_path = tmp.name
-        input_path = tmp_input_path
+    pipeline = UnipkaStream(
+        template_a2b=template_a2b,
+        template_b2a=template_b2a,
+        predictor=predictor,
+        patterns=patterns,
+        ncpu=ncpu,
+        pH=args.pH,
+    )
+
+    if args.input is not None:
+        def source():
+            with open(args.input) as f:
+                for line in f:
+                    parts = line.strip('\n').split('\t')
+                    if len(parts) >= 2:
+                        yield parts[0], parts[1]
     else:
-        input_path = args.input
+        def source():
+            for line in sys.stdin:
+                parts = line.strip('\n').split('\t')
+                if len(parts) >= 2:
+                    yield parts[0], parts[1]
 
-    sorted_input_file = (f"{args.output}.rearranged.tsv" if args.output
-                         else tempfile.mktemp(suffix='.rearranged.tsv'))
-    input_for_processing = make_rearranged_input_file(input_path, args.templates, sorted_input_file)
-
-    fout = open(args.output, "wt") if args.output else sys.stdout
+    fout = open(args.output, 'wt') if args.output else sys.stdout
     try:
-        items = []
-        with open(input_for_processing) as f:
-            for i, line in enumerate(f, 1):
-                parts = line.rstrip("\n").split("\t")
-                if len(parts) < 2:
-                    continue
-                items.append(parts[:2])
-                if i % (ncpu * 100) == 0:
-                    for smi, prot_smi, mol_name in calc_all(items, template_a2b, template_b2a, predictor, args.pH):
-                        if prot_smi:
-                            fout.write(f'{prot_smi}\t{mol_name}\n')
-                            fout.flush()
-                        else:
-                            sys.stderr.write(f'Molecule {mol_name} caused an error\n')
-                    items = []
-            # last batch
-            for smi, prot_smi, mol_name in calc_all(items, template_a2b, template_b2a, predictor, args.pH):
-                if prot_smi:
-                    fout.write(f'{prot_smi}\t{mol_name}\n')
-                    fout.flush()
+        for smi, prot_smi, mol_name in pipeline.process(source()):
+            if prot_smi:
+                fout.write(f'{prot_smi}\t{mol_name}\n')
+                fout.flush()
+            else:
+                sys.stderr.write(f'Molecule {mol_name} caused an error\n')
     finally:
         if args.output:
             fout.close()
-        if os.path.exists(sorted_input_file):
-            os.remove(sorted_input_file)
-        if tmp_input_path and os.path.exists(tmp_input_path):
-            os.remove(tmp_input_path)
+        pool.terminate()
 
 
 if __name__ == '__main__':
