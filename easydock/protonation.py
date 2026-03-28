@@ -1,8 +1,10 @@
 import contextlib
 import logging
 import os
+import platform
 import subprocess
 import tempfile
+import threading
 import traceback
 import warnings
 
@@ -11,8 +13,10 @@ from multiprocessing import Pool
 from typing import Iterator, Tuple
 
 from rdkit import Chem
-from easydock.containers import apptainer_exec
+from easydock.containers import apptainer_available, singularity_available, is_apptainer_container
 from easydock.auxiliary import chunk_into_n, expand_path
+
+# TODO: revise explanation regarding containers
 
 """
 There two types of protonation programs:
@@ -310,12 +314,83 @@ def __protonate_molgpka(args, models, pH: float = 7.4):
     return changed_smi, mol_name
 
 
-def protonate_apptainer(input_fname: str, output_fname: str, container_fname: str, pH: float = 7.4) -> None:
+def _gpu_available() -> bool:
+    """Return True if an NVIDIA GPU is accessible on this node (nvidia-smi exits 0)."""
+    try:
+        subprocess.run(['nvidia-smi'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError, PermissionError):
+        return False
 
-    bind_path = set()
-    bind_path.add(os.path.dirname(expand_path(input_fname)))
-    bind_path.add(os.path.dirname(expand_path(output_fname)))
 
-    apptainer_exec(container_fname,
-                   ['protonate', '-i', input_fname, '-o', output_fname, '--pH', str(pH)],
-                   list(bind_path))
+def protonate_container(items: Iterator[Tuple[str, str]], container: str, pH: float = 7.4,
+                        use_gpu: bool = None) -> Iterator[Tuple[str, str]]:
+    """
+    Launch a container once, stream molecules via stdin/stdout, yield (prot_smi, name).
+
+    :param items: iterator of (smi, mol_name) tuples
+    :param container: path to a .sif file (apptainer/singularity) or a docker image name
+    :param pH: target pH passed to the container's protonate command
+    :param use_gpu: add --gpus all when using docker backend (ignored for apptainer);
+                    None (default) = auto-detect via nvidia-smi
+    """
+    if use_gpu is None:
+        use_gpu = _gpu_available()
+
+    inner_cmd = ['protonate', '--pH', str(pH)]
+
+    if is_apptainer_container(container):
+        sif_path = expand_path(container)
+        system = platform.system()
+        if system == 'Linux':
+            if apptainer_available():
+                cmd = ['apptainer', 'run', sif_path] + inner_cmd
+            elif singularity_available():
+                cmd = ['singularity', 'run', sif_path] + inner_cmd
+            else:
+                raise RuntimeError('Neither apptainer nor singularity are available.')
+        else:
+            raise RuntimeError(f'Unsupported system ({system}) for apptainer protonation')
+    else:
+        # docker image
+        gpu_args = ['--gpus', 'all'] if use_gpu else []
+        cmd = ['docker', 'run', '-i'] + gpu_args + [container] + inner_cmd
+
+    logging.info('protonate_container: running %s', ' '.join(cmd))
+
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, text=True, bufsize=1)
+
+    def _write_input():
+        try:
+            for smi, name in items:
+                proc.stdin.write(f'{smi}\t{name}\n')
+                proc.stdin.flush()
+        finally:
+            proc.stdin.close()
+
+    stderr_lines = []
+
+    def _read_stderr():
+        for line in proc.stderr:
+            stripped = line.rstrip('\n')
+            stderr_lines.append(stripped)
+            logging.debug('container stderr: %s', stripped)
+
+    writer = threading.Thread(target=_write_input, daemon=True)
+    stderr_reader = threading.Thread(target=_read_stderr, daemon=True)
+    writer.start()
+    stderr_reader.start()
+
+    for line in proc.stdout:
+        parts = line.rstrip('\n').split('\t')
+        if len(parts) >= 2:
+            yield parts[0], parts[1]
+
+    writer.join()
+    stderr_reader.join()
+    proc.wait()
+
+    if proc.returncode != 0:
+        tail = '\n'.join(stderr_lines[-20:]) if stderr_lines else '<empty>'
+        logging.warning('Container exited with code %d. STDERR tail:\n%s', proc.returncode, tail)
