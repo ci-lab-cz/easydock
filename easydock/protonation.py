@@ -13,7 +13,7 @@ from multiprocessing import Pool
 from typing import Iterator, Tuple
 
 from rdkit import Chem
-from easydock.containers import apptainer_exec, apptainer_available, singularity_available
+from easydock.containers import apptainer_available, singularity_available, is_apptainer_container
 from easydock.auxiliary import chunk_into_n, expand_path
 
 # TODO: revise explanation regarding containers
@@ -314,23 +314,34 @@ def __protonate_molgpka(args, models, pH: float = 7.4):
     return changed_smi, mol_name
 
 
-def protonate_apptainer(items: Iterator[Tuple[str, str]], container_fname: str, pH: float = 7.4) -> Iterator[Tuple[str, str]]:
-    """Launch apptainer container once, stream molecules via stdin/stdout, yield (prot_smi, name)."""
-    from easydock.auxiliary import expand_path as _expand_path
+def protonate_container(items: Iterator[Tuple[str, str]], container: str, pH: float = 7.4,
+                        use_gpu: bool = True) -> Iterator[Tuple[str, str]]:
+    """
+    Launch a container once, stream molecules via stdin/stdout, yield (prot_smi, name).
 
-    sif_path = _expand_path(container_fname)
+    :param items: iterator of (smi, mol_name) tuples
+    :param container: path to a .sif file (apptainer/singularity) or a docker image name
+    :param pH: target pH passed to the container's protonate command
+    :param use_gpu: add --gpus all when using docker backend (ignored for apptainer)
+    """
     inner_cmd = ['protonate', '--pH', str(pH)]
 
-    system = platform.system()
-    if system == 'Linux':
-        if apptainer_available():
-            cmd = ['apptainer', 'run', sif_path] + inner_cmd
-        elif singularity_available():
-            cmd = ['singularity', 'run', sif_path] + inner_cmd
+    if is_apptainer_container(container):
+        sif_path = expand_path(container)
+        system = platform.system()
+        if system == 'Linux':
+            if apptainer_available():
+                cmd = ['apptainer', 'run', sif_path] + inner_cmd
+            elif singularity_available():
+                cmd = ['singularity', 'run', sif_path] + inner_cmd
+            else:
+                raise RuntimeError('Neither apptainer nor singularity are available.')
         else:
-            raise RuntimeError('Neither apptainer nor singularity are available.')
+            raise RuntimeError(f'Unsupported system ({system}) for apptainer protonation')
     else:
-        raise RuntimeError(f'Unsupported system ({system}) for streaming apptainer protonation')
+        # docker image
+        gpu_args = ['--gpus', 'all'] if use_gpu else []
+        cmd = ['docker', 'run', '-i'] + gpu_args + [container] + inner_cmd
 
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, text=True, bufsize=1)

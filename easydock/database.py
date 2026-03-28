@@ -26,8 +26,9 @@ from easydock.protonation import (
     read_smiles,
     protonate_pkasolver,
     protonate_molgpka,
-    protonate_apptainer
+    protonate_container,
 )
+from easydock.containers import is_apptainer_container, is_docker_image
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem.EnumerateStereoisomers import EnumerateStereoisomers, StereoEnumerationOptions
@@ -704,8 +705,8 @@ def add_protonation(db_fname, program='molgpka', tautomerize=True, table_name='m
                             os.remove(output)
                         os.rmdir(tmpdir)
 
-        elif os.path.isfile(expand_path(program)) and program.endswith('.sif'):  # apptainer streaming protocol
-            protonate_func = partial(protonate_apptainer, container_fname=program, pH=pH)
+        elif is_apptainer_container(expand_path(program)) or is_docker_image(program):  # container streaming protocol
+            protonate_func = partial(protonate_container, container=program, pH=pH)
             mols_queue = MolQueue(db_fname, mode='protonation', table_name=table_name, add_sql=add_sql,
                                   batch_size=1)
             items = []

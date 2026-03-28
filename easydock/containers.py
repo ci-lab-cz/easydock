@@ -177,11 +177,12 @@ def apptainer_exec(sif_path: str,
                         f'{e.stdout}\n')
 
 
-# apptainer_exec('~/imgs/unipka.sif',
-#                ['protonate', '-i', '/home/pavel/python/easydock/test/apptainer/molgpka_test.smi', '-o', '/home/pavel/python/easydock/test/apptainer/molgpka_test_prot.smi'],
-#                ['/home/pavel/python/easydock/test/apptainer'])
+def is_apptainer_container(program: str) -> bool:
+    """Return True if program is a path to an existing .sif file."""
+    return program.endswith('.sif') and os.path.isfile(expand_path(program))
 
-# apptainer_exec('~/imgs/unipka.sif',
-#                # ['protonate', '-i', '/tmp/2.smi', '-o', '/tmp/2out.smi'],
-#                ['ls', '-l', '/tmp/2out.smi', '>', '/tmp/text'],
-#                ['/tmp'])
+
+def is_docker_image(program: str) -> bool:
+    """Return True if program looks like a docker image name (not a file, not a known program name)."""
+    _known_programs = {'chemaxon', 'pkasolver', 'molgpka', 'dimorphite'}
+    return program not in _known_programs and not os.path.isfile(program)
