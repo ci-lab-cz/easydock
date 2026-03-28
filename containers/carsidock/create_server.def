@@ -1,0 +1,44 @@
+Bootstrap: docker
+From: abtion/carsidock:v2
+
+%setup
+    mkdir -p ${APPTAINER_ROOTFS}/apps/all/XALT/3.0.2
+    cp carsidock_server.py ${APPTAINER_ROOTFS}/opt/carsidock_server.py
+    
+
+%post
+    git clone --no-checkout https://github.com/carbonsilicon-ai/CarsiDock.git /carsidock
+    cd /carsidock
+    git checkout 502cb8f
+
+    wget -O /carsidock/checkpoints/rtmscore_model1.pth https://github.com/sc8668/RTMScore/raw/main/trained_models/rtmscore_model1.pth
+    
+    pip install --index-url https://pypi.org/simple gdown
+
+    gdown "https://drive.google.com/uc?id=1OweBn07R4bpoC0gETezKrOoK7xYreO4O" -O /carsidock/checkpoints/carsidock_230731.ckpt
+
+    pip uninstall gdown -y
+
+
+    mv /opt/carsidock_server.py /carsidock/carsidock_server.py
+
+
+# Set default environment (optional)
+%environment
+      export LD_LIBRARY_PATH="/usr/local/lib:/app/openbabel/build/lib:/usr/lib:/lib:$LD_LIBRARY_PATH"
+
+# Define what happens when the container is executed
+%runscript
+    case "$1" in
+        server)
+            shift
+            exec python /carsidock/carsidock_server.py "$@"
+            ;;
+        help)
+            shift
+            echo "Use apptainer run container.sif server <args>"
+            ;;
+        *)
+            exec "$@"
+            ;;
+    esac
