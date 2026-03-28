@@ -2145,18 +2145,11 @@ def calc_all(items, template_a2b, template_b2a, predictor, pH=7.4):
         elif len(item) == 1:
             smi_to_names[item[0]].append(item[0])
 
-    # print(smi_to_names)
-    # print(smi_to_names.keys())
-
     output = []
     with Pool(cpu_count()) as p:
         logger.info('predict_ensemble_free_energy was started...')
         res = predict_ensemble_free_energy([item[0] for item in items], template_a2b, template_b2a, predictor)
         logger.info('predict_ensemble_free_energy was finished...')
-
-        # pprint(res)
-        # print(res.keys())
-
         logger.info('get_major_form_from_ensemble was started...')
         for smi, prot_smi in p.imap(partial(get_major_form_from_ensemble, pH=pH), res.items()):
             for mol_name in smi_to_names[smi]:
