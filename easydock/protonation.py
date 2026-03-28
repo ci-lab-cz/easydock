@@ -1,8 +1,10 @@
 import contextlib
 import logging
 import os
+import platform
 import subprocess
 import tempfile
+import threading
 import traceback
 import warnings
 
@@ -11,8 +13,10 @@ from multiprocessing import Pool
 from typing import Iterator, Tuple
 
 from rdkit import Chem
-from easydock.containers import apptainer_exec
+from easydock.containers import apptainer_exec, apptainer_available, singularity_available
 from easydock.auxiliary import chunk_into_n, expand_path
+
+# TODO: revise explanation regarding containers
 
 """
 There two types of protonation programs:
@@ -310,12 +314,42 @@ def __protonate_molgpka(args, models, pH: float = 7.4):
     return changed_smi, mol_name
 
 
-def protonate_apptainer(input_fname: str, output_fname: str, container_fname: str, pH: float = 7.4) -> None:
+def protonate_apptainer(items: Iterator[Tuple[str, str]], container_fname: str, pH: float = 7.4) -> Iterator[Tuple[str, str]]:
+    """Launch apptainer container once, stream molecules via stdin/stdout, yield (prot_smi, name)."""
+    from easydock.auxiliary import expand_path as _expand_path
 
-    bind_path = set()
-    bind_path.add(os.path.dirname(expand_path(input_fname)))
-    bind_path.add(os.path.dirname(expand_path(output_fname)))
+    sif_path = _expand_path(container_fname)
+    inner_cmd = ['protonate', '--pH', str(pH)]
 
-    apptainer_exec(container_fname,
-                   ['protonate', '-i', input_fname, '-o', output_fname, '--pH', str(pH)],
-                   list(bind_path))
+    system = platform.system()
+    if system == 'Linux':
+        if apptainer_available():
+            cmd = ['apptainer', 'run', sif_path] + inner_cmd
+        elif singularity_available():
+            cmd = ['singularity', 'run', sif_path] + inner_cmd
+        else:
+            raise RuntimeError('Neither apptainer nor singularity are available.')
+    else:
+        raise RuntimeError(f'Unsupported system ({system}) for streaming apptainer protonation')
+
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, text=True, bufsize=1)
+
+    def _write_input():
+        try:
+            for smi, name in items:
+                proc.stdin.write(f'{smi}\t{name}\n')
+                proc.stdin.flush()
+        finally:
+            proc.stdin.close()
+
+    writer = threading.Thread(target=_write_input, daemon=True)
+    writer.start()
+
+    for line in proc.stdout:
+        parts = line.strip('\n').split('\t')
+        if len(parts) >= 2:
+            yield parts[0], parts[1]
+
+    writer.join()
+    proc.wait()

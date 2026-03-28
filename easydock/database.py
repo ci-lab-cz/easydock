@@ -680,15 +680,10 @@ def add_protonation(db_fname, program='molgpka', tautomerize=True, table_name='m
             logging.info('no molecules to protonate')
             return
 
-        if program in ['chemaxon'] or (os.path.isfile(program) and program.endswith('.sif')):  # file-based protocol, files are created by chunks
-            if program == 'chemaxon':
-                protonate_func = partial(protonate_chemaxon, tautomerize=tautomerize, pH=pH)
-                read_func = read_protonate_chemaxon
-                nmols = ncpu * 500
-            else:
-                protonate_func = partial(protonate_apptainer, container_fname=program, pH=pH)
-                read_func = read_smiles
-                nmols = 2000
+        if program == 'chemaxon':  # file-based protocol, files are created by chunks
+            protonate_func = partial(protonate_chemaxon, tautomerize=tautomerize, pH=pH)
+            read_func = read_protonate_chemaxon
+            nmols = ncpu * 500
 
             mols_queue = MolQueue(db_fname, mode='protonation', table_name=table_name, add_sql=add_sql,
                                   batch_size=nmols, prefetch_size=nmols * 2)
@@ -698,7 +693,6 @@ def add_protonation(db_fname, program='molgpka', tautomerize=True, table_name='m
                         tmp.write(f'{smi}\t{mol_name}\n')
                     tmp.flush()
 
-                    # create temp dir, not a file; pass file by name, and it will be created inside a container/program
                     tmpdir = tempfile.mkdtemp()
                     output = os.path.join(tmpdir, "output.smi")
                     try:
@@ -709,6 +703,18 @@ def add_protonation(db_fname, program='molgpka', tautomerize=True, table_name='m
                         if os.path.exists(output):
                             os.remove(output)
                         os.rmdir(tmpdir)
+
+        elif os.path.isfile(expand_path(program)) and program.endswith('.sif'):  # apptainer streaming protocol
+            protonate_func = partial(protonate_apptainer, container_fname=program, pH=pH)
+            mols_queue = MolQueue(db_fname, mode='protonation', table_name=table_name, add_sql=add_sql,
+                                  batch_size=1)
+            items = []
+            for i, item in enumerate(protonate_func(mols_queue), 1):
+                items.append(item)
+                if i % 100 == 0:
+                    update_db_protonated_smiles(conn, items, table_name)
+                    items = []
+            update_db_protonated_smiles(conn, items, table_name)
 
         elif program in ['pkasolver', 'molgpka']:  # native python protocol
             if program == 'pkasolver':

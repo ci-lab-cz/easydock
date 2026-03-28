@@ -1,6 +1,7 @@
 import os
 import argparse
 from multiprocessing import cpu_count
+from auxiliary import expand_path as _expand_path
 
 protonation_programs = ['chemaxon', 'pkasolver', 'molgpka']
 
@@ -8,7 +9,7 @@ def protonation_type(value: str):
     allowed = protonation_programs
     if value in allowed:
         return value
-    elif value.endswith(".sif") and os.path.isfile(value):
+    elif value.endswith(".sif") and os.path.isfile(_expand_path(value)):
         return value
     else:
         raise argparse.ArgumentTypeError(
