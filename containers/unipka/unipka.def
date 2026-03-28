@@ -1,0 +1,29 @@
+Bootstrap: docker
+From: dptechnology/unimol:latest-pytorch1.11.0-cuda11.3
+
+%files
+    unipka.py /unipka/unipka.py
+    simple_smarts_pattern.tsv /unipka/simple_smarts_pattern.tsv
+    smarts_pattern.tsv /unipka/smarts_pattern.tsv
+
+%post
+    wget -q -O /unipka/t_dwar_v_novartis_a_b.pt \
+        https://zenodo.org/records/19288649/files/t_dwar_v_novartis_a_b.pt
+
+#%environment
+#    export PYTHONUNBUFFERED=1
+
+%runscript
+    case "$1" in
+        protonate)
+            shift
+            exec python /unipka/unipka.py "$@"
+            ;;
+        help)
+            shift
+            echo "Use apptainer run container.sif protonate <args>"
+            ;;
+        *)
+            exec "$@"
+            ;;
+    esac

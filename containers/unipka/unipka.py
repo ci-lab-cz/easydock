@@ -2360,8 +2360,8 @@ def main():
                         help="File with protonation/deprotonation templates")
     parser.add_argument('-m', '--model', default='/unipka/t_dwar_v_novartis_a_b.pt',
                         help="Model file")
-    parser.add_argument('--pH', type=float, default=7.4, help="pH value")
-    parser.add_argument('-c', '--ncpu', type=int, default=None, help="number of CPU")
+    parser.add_argument('--pH', type=float, default=7.4, help="pH value (default: 7.4)")
+    parser.add_argument('-c', '--ncpu', type=int, default=None, help="number of CPU (default: all)")
     parser.add_argument(
         '--log-level',
         default=os.environ.get("LOGLEVEL", "INFO"),
