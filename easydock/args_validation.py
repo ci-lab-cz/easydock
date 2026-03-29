@@ -17,7 +17,7 @@ def cpu_type(x):
 
 def filepath_type(x):
     if x:
-        return os.path.abspath(x)
+        return os.path.abspath(_expand_path(x))
     else:
         return x
 
