@@ -36,7 +36,7 @@ def get_poses_from_raw_block(raw_block, docking_format, mol, mol_id, poses):
             if pose_mol_block:
                 results.append((i, pose_mol_block))
     elif docking_format == 'sdf':
-        raw_block_list = [q.strip() for q in raw_block.strip().split('$$$$') if q.strip()]
+        raw_block_list = [q for q in raw_block.strip().split('$$$$\n') if q.strip()]
         for i in poses:
             try:
                 block = raw_block_list[i - 1]
@@ -73,6 +73,9 @@ def main():
                              'from PDB block and a trailing pose id will be added to each molecule name.')
     parser.add_argument('--debug', action='store_true', default=False,
                         help='print the final SQL query before execution.')
+    parser.add_argument('--bust', action='store_true', default=False,
+                        help='return only poses that passed the PoseBusters aggregated check. '
+                             'Results must be pre-computed with easydock_bust.')
 
     args = parser.parse_args()
 
@@ -101,6 +104,16 @@ def main():
     else:
         raise ValueError('Wrong extension of output file. Only SDF and SMI are allowed.')
 
+    if args.bust:
+        try:
+            count = conn.execute('SELECT COUNT(*) FROM bust').fetchone()[0]
+        except sqlite3.OperationalError:
+            sys.stderr.write('ERROR: bust table not found. Run easydock_bust first.\n')
+            sys.exit(1)
+        if count == 0:
+            sys.stderr.write('ERROR: bust table is empty. Run easydock_bust first.\n')
+            sys.exit(1)
+
     # add raw_block field to retrieve poses, only if sdf file should be returned as output
     try:
         docking_format = get_variables(conn, 'database', ['raw_format'])['raw_format']
@@ -120,6 +133,11 @@ def main():
         sql += f" AND {args.add_sql}"
     if tautomers_exist:
         sql += f" AND id NOT IN (SELECT id FROM tautomers)"
+    # SQL-level bust filter only for the default (top-pose-only) case.
+    # When explicit --poses are given, filtering is done in Python to allow
+    # non-top poses to be returned even when pose 1 fails the bust check.
+    if args.bust and (ext == 'smi' or not args.poses):
+        sql += " AND rowid IN (SELECT mols_rowid FROM bust WHERE pose = 1 AND result = 1)"
 
     if tautomers_exist:
         sql += " UNION "
@@ -129,6 +147,10 @@ def main():
             sql += f" SELECT {main_field} FROM tautomers WHERE mol_block is NOT NULL AND duplicate IS NULL"
         if args.ids:
             sql += f" AND id IN ({','.join('?' * len(ids))})"
+        if args.bust and (ext == 'smi' or not args.poses):
+            sql += (" AND id IN (SELECT m.id FROM mols m "
+                    "JOIN bust b ON m.rowid = b.mols_rowid "
+                    "WHERE b.pose = 1 AND b.result = 1)")
 
     if args.first_entry:
         sql += " GROUP BY id HAVING MIN(rowid)"
@@ -156,25 +178,47 @@ def main():
                 if not args.keep_stereo_id:
                     mol_id = mol_id.rsplit('_', 1)[0]
                 poses = list(args.poses)
+                # When explicit poses are requested, do a single bulk bust lookup
+                # for ALL of them (including pose 1) before writing anything.
+                # This allows non-top poses to be returned even when pose 1 fails.
+                bust_dict = {}
+                if args.bust and poses:
+                    rows = conn.execute(
+                        f'SELECT b.pose, b.result FROM bust b '
+                        f'JOIN mols m ON m.rowid = b.mols_rowid '
+                        f'WHERE m.id = ? AND b.pose IN ({",".join("?" * len(poses))})',
+                        (mol_id, *poses)
+                    ).fetchall()
+                    bust_dict = {p: bool(r) for p, r in rows}
+                    for p in poses:
+                        if p not in bust_dict:
+                            logging.warning(f'No bust result for {mol_id} pose {p}, skipping.')
                 if 1 in poses or not poses:
                     if not args.keep_stereo_id:  # replace mol_id in mol_block
                         mol_block = mol_id + '\n' + mol_block.split('\n', 1)[1]
                     if 1 in poses:
-                        q = mol_block.split('\n', 1)
-                        f.write(q[0] + f'{_POSE_SEP}1\n' + q[1])  # add trailing pose id
+                        if not args.bust or bust_dict.get(1, False):
+                            q = mol_block.split('\n', 1)
+                            f.write(q[0] + f'{_POSE_SEP}1\n' + q[1])  # add trailing pose id
+                            for prop_name, prop_value in zip(args.fields, item[1:]):
+                                if prop_name != 'raw_block':
+                                    f.write(f'>  <{prop_name}>\n')
+                                    f.write(f'{str(prop_value)}\n\n')
+                            f.write('$$$$\n')
+                        poses.remove(1)
                     else:
                         f.write(mol_block)  # write original mol block without pose id
-                    for prop_name, prop_value in zip(args.fields, item[1:]):
-                        if prop_name != 'raw_block':
-                            f.write(f'>  <{prop_name}>\n')
-                            f.write(f'{str(prop_value)}\n\n')
-                    f.write('$$$$\n')
-                    if poses:
-                        poses.remove(1)
+                        for prop_name, prop_value in zip(args.fields, item[1:]):
+                            if prop_name != 'raw_block':
+                                f.write(f'>  <{prop_name}>\n')
+                                f.write(f'{str(prop_value)}\n\n')
+                        f.write('$$$$\n')
                 if poses:
                     raw_block = item[1:][args.fields.index('raw_block')]
                     mol = Chem.MolFromMolBlock(mol_block)
-                    for _, pose_mol_block in get_poses_from_raw_block(raw_block, docking_format, mol, mol_id, poses):
+                    for pose_idx, pose_mol_block in get_poses_from_raw_block(raw_block, docking_format, mol, mol_id, poses):
+                        if args.bust and not bust_dict.get(pose_idx, False):
+                            continue
                         f.write(pose_mol_block)
                         f.write('$$$$\n')
             elif ext == 'smi':
