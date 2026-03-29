@@ -46,7 +46,7 @@ class _CarsiDockServer:
         self.docking = docking
         self.scoring = scoring
 
-        pdb_file = _expand_path(payload["pdb_file"])
+        pdb_file = _expand_path(payload["protein"])
         reflig = _expand_path(payload["reflig"])
 
         ckpt_path = '/carsidock/checkpoints/carsidock_230731.ckpt'
