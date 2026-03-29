@@ -71,11 +71,11 @@ def main():
     parser.add_argument('--poses', default=[], type=int, nargs="*",
                         help='list of pose numbers to retrieve, starting from 1. If specified, poses will be retrieved '
                              'from PDB block and a trailing pose id will be added to each molecule name.')
-    parser.add_argument('--debug', action='store_true', default=False,
-                        help='print the final SQL query before execution.')
     parser.add_argument('--bust', action='store_true', default=False,
                         help='return only poses that passed the PoseBusters aggregated check. '
                              'Results must be pre-computed with easydock_bust.')
+    parser.add_argument('--debug', action='store_true', default=False,
+                        help='print the final SQL query before execution.')
 
     args = parser.parse_args()
 
