@@ -5,7 +5,6 @@ import logging
 import os
 import sqlite3
 import sys
-from multiprocessing import Pool
 
 from rdkit import Chem
 
@@ -19,38 +18,6 @@ from easydock.database import (
     insert_db,
 )
 from easydock.get_sdf_from_dock_db import get_poses_from_raw_block
-
-
-_buster = None
-_protein_mol = None
-
-
-def _init_worker(protein_pdb_block):
-    global _buster, _protein_mol
-    from posebusters import PoseBusters
-    _buster = PoseBusters(config='dock_fast')
-    _protein_mol = Chem.MolFromPDBBlock(protein_pdb_block, removeHs=False, sanitize=False)
-
-
-def _bust_mol(args):
-    """
-    Worker function: run PoseBusters checks on a single pose.
-    :param args: (mol_block, rowid, pose, mol_id, stereo_id)
-    :return: (rowid, pose, mol_id, stereo_id, result, df) or None on failure
-    """
-    mol_block, rowid, pose, mol_id, stereo_id = args
-    mol = Chem.MolFromMolBlock(mol_block, removeHs=False)
-    if mol is None:
-        logging.warning(f'Cannot parse mol block for {mol_id} pose {pose}, skipping.')
-        return None
-    try:
-        df = _buster.bust(mol_pred=mol, mol_cond=_protein_mol, full_report=True)
-        bool_cols = df.select_dtypes(include='bool').columns
-        result = bool(df[bool_cols].all(axis=None))
-        return rowid, pose, mol_id, stereo_id, result, df
-    except Exception as e:
-        logging.warning(f'PoseBusters failed for {mol_id} pose {pose}: {e}')
-        return None
 
 
 def create_bust_table(conn):
@@ -237,25 +204,46 @@ def main():
 
             # --- process molecules ---
             if ids_todo:
-                mol_items = iter_mol_items(conn, ids_todo, poses, docking_format)
-                with Pool(processes=args.ncpu,
-                          initializer=_init_worker,
-                          initargs=(bust_protein,)) as pool:
-                    for bust_result in pool.imap(_bust_mol, mol_items, chunksize=4):
-                        if bust_result is None:
-                            continue
-                        rowid, pose, mol_id, stereo_id, result, df = bust_result
+                from posebusters import PoseBusters
+                buster = PoseBusters(config='dock_fast', max_workers=args.ncpu)
+                protein_mol = Chem.MolFromPDBBlock(bust_protein, removeHs=False, sanitize=False)
 
+                chunk_size = (args.ncpu or os.cpu_count() or 1) * 10
+                mol_items = iter_mol_items(conn, ids_todo, poses, docking_format)
+
+                for chunk in split_generator_to_chunks(mol_items, chunk_size=chunk_size):
+                    mols, meta = [], []
+                    for mol_block, rowid, pose, mol_id, stereo_id in chunk:
+                        mol = Chem.MolFromMolBlock(mol_block, removeHs=False)
+                        if mol is None:
+                            logging.warning(f'Cannot parse mol block for {mol_id} pose {pose}, skipping.')
+                            continue
+                        mols.append(mol)
+                        meta.append((rowid, pose, mol_id, stereo_id))
+
+                    if not mols:
+                        continue
+
+                    try:
+                        df = buster.bust(mol_pred=mols, mol_cond=protein_mol, full_report=False)
+                    except Exception as e:
+                        logging.warning(f'PoseBusters failed for a batch: {e}')
+                        continue
+
+                    bool_cols = df.select_dtypes(include='bool').columns
+                    results = df[bool_cols].all(axis=1)
+
+                    if not header_written:
+                        if args.full:
+                            full_cols = list(df.columns)
+                        write_header()
+
+                    for (rowid, pose, mol_id, stereo_id), result, (_, row) in zip(
+                            meta, results, df.iterrows()):
                         insert_db(conn, [rowid, pose, int(result)],
                                   ['mols_rowid', 'pose', 'result'], 'bust')
-
-                        if not header_written:
-                            if args.full:
-                                full_cols = list(df.columns)
-                            write_header()
-
                         write_row(mol_id, stereo_id, pose, result,
-                                  check_vals=df.iloc[0].tolist() if args.full else None)
+                                  check_vals=row.tolist() if args.full else None)
 
         finally:
             if args.output:
