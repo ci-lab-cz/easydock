@@ -11,6 +11,43 @@ from .preparation_for_docking import pdbqt2molblock
 from .database import get_variables, DEFAULT_RAW_FORMAT
 
 
+_POSE_SEP = ':'
+
+def get_poses_from_raw_block(raw_block, docking_format, mol, mol_id, poses):
+    """
+    Extract specific poses from a raw_block string.
+
+    :param raw_block: raw block string (pdbqt or sdf format)
+    :param docking_format: 'pdbqt' or 'sdf'
+    :param mol: RDKit Mol object used as atom-order template (pdbqt only)
+    :param mol_id: molecule name without pose suffix
+    :param poses: 1-based list of pose indices to extract
+    :return: list of (pose_index, mol_block_string) tuples; mol_block_string has no trailing $$$$
+    """
+    results = []
+    if docking_format == 'pdbqt':
+        raw_block_list = [q for q in raw_block.strip().split('ENDMDL') if q]
+        for i in poses:
+            try:
+                pose_mol_block = pdbqt2molblock(raw_block_list[i - 1] + 'ENDMDL\n', mol, mol_id + f'{_POSE_SEP}{i}')
+            except IndexError:
+                logging.warning(f'Pose {i} not found in raw block of {mol_id}. Skipping.')
+                continue
+            if pose_mol_block:
+                results.append((i, pose_mol_block))
+    elif docking_format == 'sdf':
+        raw_block_list = [q.strip() for q in raw_block.strip().split('$$$$') if q.strip()]
+        for i in poses:
+            try:
+                block = raw_block_list[i - 1]
+            except IndexError:
+                logging.warning(f'Pose {i} not found in raw block of {mol_id}. Skipping.')
+                continue
+            name_line, rest = block.split('\n', 1)
+            results.append((i, f'{mol_id}{_POSE_SEP}{i}\n{rest}'))
+    return results
+
+
 def main():
     parser = argparse.ArgumentParser(description='Extract mol blocks of specified mol ids and additional fields into '
                                                  'SDF. Also it is possible to extract SMILES file.',
@@ -34,6 +71,8 @@ def main():
     parser.add_argument('--poses', default=[], type=int, nargs="*",
                         help='list of pose numbers to retrieve, starting from 1. If specified, poses will be retrieved '
                              'from PDB block and a trailing pose id will be added to each molecule name.')
+    parser.add_argument('--debug', action='store_true', default=False,
+                        help='print the final SQL query before execution.')
 
     args = parser.parse_args()
 
@@ -63,16 +102,11 @@ def main():
         raise ValueError('Wrong extension of output file. Only SDF and SMI are allowed.')
 
     # add raw_block field to retrieve poses, only if sdf file should be returned as output
+    try:
+        docking_format = get_variables(conn, 'database', ['raw_format'])['raw_format']
+    except KeyError:
+        docking_format = DEFAULT_RAW_FORMAT
     if ext == 'sdf' and args.poses:
-        try:
-            docking_format = get_variables(conn, 'database', ['raw_format'])['raw_format']
-        except KeyError:
-            docking_format = DEFAULT_RAW_FORMAT
-        if docking_format != 'pdbqt':
-            raise ValueError(
-                f"Pose extraction is only supported for 'pdbqt' format, "
-                f"but raw_format='{docking_format}' is stored in the database."
-            )
         if 'raw_block' not in args.fields:
             args.fields.append('raw_block')
 
@@ -104,12 +138,15 @@ def main():
         case_str = ' '.join(f'WHEN "{mol_id}" THEN {i}' for i, mol_id in enumerate(ids, 1))
         sql += f" ORDER BY CASE mols.id {case_str} END"
 
+    if args.debug:
+        print(sql)
+
     if tautomers_exist:
         res = cur.execute(sql, ids + ids)   # ids should be duplicated to be selected from mols and tautomers tables
     else:
         res = cur.execute(sql, ids)  # ids can be empty if we retrieve all molecules, this works
 
-    with open(args.output, 'wt')as f:
+    with open(args.output, 'wt') as f:
         if ext == 'smi':
             f.write(main_field + '\t' + '\t'.join(args.fields) + '\n')
         for item in res:  # (mol_block, ...)
@@ -124,7 +161,7 @@ def main():
                         mol_block = mol_id + '\n' + mol_block.split('\n', 1)[1]
                     if 1 in poses:
                         q = mol_block.split('\n', 1)
-                        f.write(q[0] + '_1\n' + q[1])  # add trailing pose id
+                        f.write(q[0] + f'{_POSE_SEP}1\n' + q[1])  # add trailing pose id
                     else:
                         f.write(mol_block)  # write original mol block without pose id
                     for prop_name, prop_value in zip(args.fields, item[1:]):
@@ -135,19 +172,11 @@ def main():
                     if poses:
                         poses.remove(1)
                 if poses:
-                    raw_block_list = item[1:][args.fields.index('raw_block')].strip().split('ENDMDL')
-                    raw_block_list = [q for q in raw_block_list if q]
+                    raw_block = item[1:][args.fields.index('raw_block')]
                     mol = Chem.MolFromMolBlock(mol_block)
-                    for i in poses:  # 1-based
-                        try:
-                            pose_mol_block = pdbqt2molblock(raw_block_list[i-1] + 'ENDMDL\n', mol, mol_id + f'_{i}')
-                        except IndexError:
-                            logging.warning(f'Pose number {i} is not in the raw block of {mol_id}. '
-                                             f'It will be skipped.')
-                            continue
-                        if pose_mol_block:
-                            f.write(pose_mol_block)
-                            f.write('$$$$\n')
+                    for _, pose_mol_block in get_poses_from_raw_block(raw_block, docking_format, mol, mol_id, poses):
+                        f.write(pose_mol_block)
+                        f.write('$$$$\n')
             elif ext == 'smi':
                 f.write('\t'.join(map(str, item)) + '\n')
 
