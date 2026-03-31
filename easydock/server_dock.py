@@ -1,5 +1,6 @@
 import atexit
 import logging
+import os
 import threading
 import timeit
 from pathlib import Path
@@ -8,6 +9,7 @@ from typing import List
 import yaml
 from rdkit import Chem
 
+from easydock.containers import build_server_container_cmd
 from easydock.persistent_client import JsonLineProcessClient
 
 logger = logging.getLogger(__name__)
@@ -52,6 +54,23 @@ def _ensure_preparation_functions():
     return ligand_preparation, pdbqt2molblock
 
 
+def _collect_path_dirs(payload):
+    """Recursively collect unique parent dirs of all existing file/dir paths in payload."""
+    dirs = set()
+    items = (payload.values() if isinstance(payload, dict) else
+             payload if isinstance(payload, (list, tuple)) else [payload])
+    for v in items:
+        if isinstance(v, str):
+            p = os.path.abspath(os.path.expanduser(v))
+            if os.path.isfile(p):
+                dirs.add(os.path.dirname(p))
+            elif os.path.isdir(p):
+                dirs.add(p)
+        elif isinstance(v, (dict, list)):
+            dirs.update(_collect_path_dirs(v))
+    return sorted(dirs)
+
+
 def _parse_config(config_fname):
     with open(config_fname) as f:
         config = yaml.safe_load(f) or {}
@@ -94,18 +113,18 @@ def _parse_config(config_fname):
         "boron_replacement",
         "ligand_payload_type",
         "raw_format",
-        "init_payload",
+        "init_server",
     }
 
-    init_payload = config.get("init_payload")
-    if not isinstance(init_payload, dict):
-        init_payload = {
+    init_server = config.get("init_server")
+    if not isinstance(init_server, dict):
+        init_server = {
             k: _normalize_path_values(v)
             for k, v in config.items()
             if k not in control_keys
         }
 
-    config["_resolved_init_payload"] = init_payload
+    config["_resolved_init_server"] = init_server
     config["_worker_key"] = yaml.safe_dump(
         {
             "script_file": config["script_file"],
@@ -113,10 +132,14 @@ def _parse_config(config_fname):
             "init_command": config["init_command"],
             "dock_command": config["dock_command"],
             "request_timeout": config.get("request_timeout"),
-            "init_payload": init_payload,
+            "init_server": init_server,
         },
         sort_keys=True,
     )
+
+    bind_dirs = _collect_path_dirs(init_server)
+    config["_launch_command"] = build_server_container_cmd(config["script_file"], bind_dirs)
+
     return config
 
 
@@ -165,7 +188,7 @@ def _check_response_ok(response, context="request"):
 
 def _create_client(config):
     client = JsonLineProcessClient(
-        command=config["script_file"],
+        command=config["_launch_command"],
         startup_timeout=config.get("startup_timeout", 120),
         request_timeout=config.get("request_timeout"),
         cwd=config.get("server_cwd"),
@@ -173,7 +196,7 @@ def _create_client(config):
 
     response = client.request(
         command=config["init_command"],
-        payload=config["_resolved_init_payload"],
+        payload=config["_resolved_init_server"],
         timeout=config.get("request_timeout"),
     )
     _check_response_ok(response, context="init")

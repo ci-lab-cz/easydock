@@ -1,6 +1,7 @@
 import logging
 import os
 import platform
+import shlex
 import subprocess
 import sys
 import traceback
@@ -186,3 +187,116 @@ def is_docker_image(program: str) -> bool:
     """Return True if program looks like a docker image name (not a file, not a known program name)."""
     _known_programs = {'chemaxon', 'pkasolver', 'molgpka', 'dimorphite'}
     return program not in _known_programs and not os.path.isfile(program)
+
+
+def gpu_available() -> bool:
+    """Return True if an NVIDIA GPU is accessible via nvidia-smi."""
+    try:
+        subprocess.run(['nvidia-smi'], stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, check=True)
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+
+
+def validate_sif_container(sif_path: str) -> None:
+    """Raise RuntimeError if sif_path is not a valid SIF container."""
+    sif_path = expand_path(sif_path)
+    if not os.path.isfile(sif_path):
+        raise RuntimeError(f'SIF file not found: {sif_path}')
+    runner = ('apptainer' if apptainer_available() else
+              'singularity' if singularity_available() else None)
+    if runner is None:
+        return  # cannot verify without a runner; trust the .sif extension
+    try:
+        subprocess.run([runner, 'inspect', sif_path],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    except subprocess.CalledProcessError:
+        raise RuntimeError(f'{sif_path!r} exists but is not a valid SIF container.')
+
+
+def validate_docker_image(image: str) -> None:
+    """Raise RuntimeError if the docker image is not available locally."""
+    if not docker_available():
+        raise RuntimeError('Docker is not available.')
+    if not docker_available(image):
+        raise RuntimeError(f'Docker image {image!r} not found locally. Pull it first.')
+
+
+def _build_apptainer_server_cmd(sif_path: str, server_args: List[str],
+                                 bind_dirs: List[str]) -> List[str]:
+    validate_sif_container(sif_path)
+    gpu_arg = ['--nv'] if gpu_available() else []
+    bind_arg = ['--bind', ','.join(expand_path(d) for d in bind_dirs)] if bind_dirs else []
+
+    system = platform.system()
+    if system == 'Linux':
+        if apptainer_available():
+            runner = 'apptainer'
+        elif singularity_available():
+            runner = 'singularity'
+        else:
+            raise RuntimeError('Neither apptainer nor singularity are available.')
+        return [runner, 'run'] + gpu_arg + bind_arg + [sif_path, 'server'] + server_args
+
+    elif system == 'Darwin':
+        docker_image = 'apptainer:latest'
+        if not docker_available(docker_image):
+            raise RuntimeError('Docker or apptainer:latest image not available.')
+        docker_binds = []
+        for d in bind_dirs:
+            d = expand_path(d)
+            docker_binds += ['-v', f'{d}:{d}']
+        sif_dir = os.path.dirname(sif_path)
+        if sif_dir:
+            docker_binds += ['-v', f'{sif_dir}:{sif_dir}']
+        inner = ['run', '--no-mount=bind-paths'] + gpu_arg + bind_arg + [sif_path, 'server'] + server_args
+        return (['docker', 'run', '-i', '--rm', '--platform', 'linux/amd64', '--privileged']
+                + docker_binds + [docker_image] + inner)
+
+    raise RuntimeError(f'Unsupported system ({system}) for containerized server.')
+
+
+def _build_docker_server_cmd(image: str, server_args: List[str],
+                              bind_dirs: List[str]) -> List[str]:
+    validate_docker_image(image)
+    volume_args = []
+    for d in bind_dirs:
+        d = expand_path(d)
+        volume_args += ['-v', f'{d}:{d}']
+    gpu_arg = ['--gpus', 'all'] if gpu_available() else []
+    return ['docker', 'run', '-i', '--rm'] + gpu_arg + volume_args + [image, 'server'] + server_args
+
+
+def build_server_container_cmd(cmd_str: str, bind_dirs: List[str]) -> List[str]:
+    """
+    Parse script_file and return a ready-to-use command list for subprocess.Popen.
+
+    Bare form  — first token is a .sif path or a docker image name:
+        auto-builds: <runner> run [--nv/--gpus all] [--bind ...] <ref> server [extra_args]
+        Bind mounts are auto-injected from bind_dirs; GPU is auto-detected.
+    Full form  — first token is apptainer/singularity/docker:
+        returned as-is (bind mounts and GPU flags are the user's responsibility).
+    Other      — returned unchanged (regular program).
+    """
+    parts = shlex.split(cmd_str)
+    if not parts:
+        return parts
+
+    first = parts[0]
+
+    # Full form: user-written container command — used as-is
+    if first in ('apptainer', 'singularity', 'docker'):
+        return parts
+
+    # Bare form: .sif path (possibly with trailing server args)
+    sif_path = expand_path(first)
+    if first.endswith('.sif') and os.path.isfile(sif_path):
+        return _build_apptainer_server_cmd(sif_path, parts[1:], bind_dirs)
+
+    # Bare form: docker image name (not an existing file/dir)
+    if not os.path.isfile(first) and not os.path.isdir(first):
+        return _build_docker_server_cmd(first, parts[1:], bind_dirs)
+
+    # Regular program
+    return parts
