@@ -220,9 +220,7 @@ def restore_setup_from_db(db_fname, tmpdir=None):
     Returns (args_dict, tmpfiles). Thin wrapper around session.restore_session.
     """
     from easydock.session import restore_session
-    with sqlite3.connect(db_fname, timeout=90) as conn:
-        return restore_session(conn, allowed_override_args=(), supplied_args=(),
-                               tmpdir=tmpdir)
+    return restore_session(db_fname, tmpdir=tmpdir)
 
 
 @timeout(seconds=300, default=None)

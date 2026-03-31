@@ -255,13 +255,12 @@ def main():
         if not os.path.isfile(args.output):
             create_db(args.output, args)
         else:
-            with sqlite3.connect(args.output, timeout=90) as conn:
-                args_dict, tmpfiles = restore_session(
-                    conn,
-                    allowed_override_args=set(allowed_args),
-                    supplied_args=supplied_args,
-                    tmpdir=args.tmpdir,
-                )
+            args_dict, tmpfiles = restore_session(
+                args.output,
+                allowed_override_args=set(allowed_args),
+                supplied_args=supplied_args,
+                tmpdir=args.tmpdir,
+            )
             args.__dict__.update(args_dict)
 
         has_started_protonation = check_db_status(args.output, ['smi_protonated', 'source_mol_block_protonated']) and args.protonation

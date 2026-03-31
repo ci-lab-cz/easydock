@@ -18,7 +18,9 @@ import json
 import logging
 import os
 import sqlite3
+import sys
 import tempfile
+import threading
 
 import yaml
 
@@ -150,25 +152,56 @@ def save_session_config(conn, config_path):
             _upsert(conn, f'file:{dotted_path}', file_content)
 
 
-def restore_session(conn, allowed_override_args=(), supplied_args=(), tmpdir=None):
+def _prompt_with_timeout(prompt, timeout_seconds=120):
+    """
+    Print prompt to stderr and wait for one line of stdin input.
+    Returns the stripped response, or None if timeout expires.
+    """
+    result = [None]
+    answered = threading.Event()
+
+    def _read():
+        try:
+            result[0] = sys.stdin.readline().strip()
+        except OSError:
+            pass
+        answered.set()
+
+    sys.stderr.write(prompt)
+    sys.stderr.flush()
+    t = threading.Thread(target=_read, daemon=True)
+    t.start()
+    answered.wait(timeout=timeout_seconds)
+    return result[0]
+
+
+def restore_session(db_fname, allowed_override_args=(), supplied_args=(), tmpdir=None):
     """
     Restore args dict and recreate temp files from the setup table.
 
-    :param conn: open SQLite connection
+    :param db_fname: path to the SQLite database
     :param allowed_override_args: set/list of arg names that CLI values may override
     :param supplied_args: set/list of arg names actually typed on the CLI
                           (from get_supplied_args); only these can override stored values
     :param tmpdir: directory for temp files; uses system default if None
     :return: (args_dict, tmpfiles) where tmpfiles is a list of paths to delete on exit
     """
-    ver = conn.execute('PRAGMA user_version').fetchone()[0]
-    if ver < DB_USER_VERSION:
-        raise RuntimeError(
-            f'Database user_version={ver} is older than the required {DB_USER_VERSION}. '
-            'Run easydock_migrate to upgrade it.'
-        )
+    with sqlite3.connect(db_fname, timeout=90) as conn:
+        ver = conn.execute('PRAGMA user_version').fetchone()[0]
+        if ver < DB_USER_VERSION:
+            answer = _prompt_with_timeout(
+                f'Database {db_fname!r} uses schema version {ver} '
+                f'(current: {DB_USER_VERSION}).\n'
+                'Upgrade now? [y/N] (auto-abort in 2 minutes): ',
+                timeout_seconds=120,
+            )
+            if answer is None:
+                raise SystemExit('No response received within 2 minutes. Aborting.')
+            if answer.lower() not in ('y', 'yes'):
+                raise SystemExit('Upgrade declined. Aborting.')
+            migrate_setup_table(db_fname)
 
-    rows = dict(conn.execute('SELECT key, content FROM setup').fetchall())
+        rows = dict(conn.execute('SELECT key, content FROM setup').fetchall())
 
     if 'args' not in rows:
         raise RuntimeError("'args' key not found in setup table — database may be corrupted.")
