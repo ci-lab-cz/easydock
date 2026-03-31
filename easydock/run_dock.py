@@ -13,8 +13,9 @@ from typing import List
 
 from rdkit import Chem
 from rdkit.Chem.rdMolDescriptors import CalcNumRotatableBonds
-from easydock.database import create_db, restore_setup_from_db, init_db, check_db_status, update_db, save_sdf, \
+from easydock.database import create_db, init_db, check_db_status, update_db, save_sdf, \
     add_protonation, populate_setup_db, MolQueue
+from easydock.session import restore_session
 from easydock.reporting import get_pipeline_statistics, write_stage_error_log, report_error_log_file
 from easydock.args_validation import protonation_type, protonation_programs, cpu_type, filepath_type
 
@@ -254,11 +255,13 @@ def main():
         if not os.path.isfile(args.output):
             create_db(args.output, args)
         else:
-            args_dict, tmpfiles = restore_setup_from_db(args.output, args.tmpdir)
-            # this will ignore stored values of those args which were supplied via command line
-            # command line args have precedence over stored ones
-            for arg in supplied_args:
-                del args_dict[arg]
+            with sqlite3.connect(args.output, timeout=90) as conn:
+                args_dict, tmpfiles = restore_session(
+                    conn,
+                    allowed_override_args=set(allowed_args),
+                    supplied_args=supplied_args,
+                    tmpdir=args.tmpdir,
+                )
             args.__dict__.update(args_dict)
 
         has_started_protonation = check_db_status(args.output, ['smi_protonated', 'source_mol_block_protonated']) and args.protonation

@@ -11,20 +11,17 @@ def create_clean_db_copy(db_fname, new_db_fname):
     shutil.copyfile(db_fname, new_db_fname)
     with sqlite3.connect(new_db_fname) as conn:
         cur = conn.cursor()
-        cur.execute(f"""UPDATE mols SET docking_score = NULL,
-                                        pdb_block = NULL,
-                                        mol_block = NULL,
-                                        dock_time = NULL,
-                                        time = NULL   """)
+        cur.execute("""UPDATE mols SET docking_score = NULL,
+                                       raw_block = NULL,
+                                       mol_block = NULL,
+                                       dock_time = NULL,
+                                       time = NULL""")
         conn.commit()
 
-        res = cur.execute('SELECT * FROM setup')
-        remove_colnames = [d[0] for d in res.description if d[0] != 'yaml']
-        sql = 'UPDATE setup SET ' +  ','.join(f'{item} = NULL' for item in remove_colnames)
-
-        cur.execute(sql)
+        # Keep 'args' (CLI args); remove 'config' and all 'file:*' keys
+        cur.execute("DELETE FROM setup WHERE key != 'args'")
         conn.commit()
-        cur.execute(f'VACUUM')
+        cur.execute('VACUUM')
         conn.commit()
 
 
