@@ -1,7 +1,7 @@
 import os
 import argparse
 from multiprocessing import cpu_count
-from auxiliary import expand_path as _expand_path
+from easydock.auxiliary import expand_path as _expand_path
 
 protonation_programs = ['chemaxon', 'pkasolver', 'molgpka']
 
