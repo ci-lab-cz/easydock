@@ -7,6 +7,13 @@ from rdkit import Chem
 
 logger = logging.getLogger(__name__)
 
+INFO = {
+    'batch_size': 10,
+    'ligand_in_format': 'smiles',
+    'ligand_out_format': 'sdf',
+    'score_mode': 'max',
+}
+
 
 def _expand_path(path_value):
     if path_value is None:
@@ -96,10 +103,9 @@ class _CarsiDockServer:
 
             try:
                 raw_block = None
-                if isinstance(instance, str) and '\n' not in instance:
-                    # treat as SMILES
+                if INFO['ligand_in_format'] == 'smiles':
                     init_mol_list = self.read_ligands(smiles=[instance], num_use_conf=nconf)[0]
-                else:
+                elif INFO['ligand_in_format'] == 'mol':
                     mol = Chem.MolFromMolBlock(instance, removeHs=False)
                     init_mol_list = self.read_ligands(mol_list=[mol], num_use_conf=nconf)[0]
                 torch.cuda.empty_cache()
@@ -161,7 +167,9 @@ def run_carsidock_server():
             command = request.get("command")
             payload = request.get("payload") or {}
 
-            if command == "init":
+            if command == "info":
+                result = INFO.copy()
+            elif command == "init":
                 result = server.init(payload)
             elif command == "dock":
                 result = server.dock(payload)

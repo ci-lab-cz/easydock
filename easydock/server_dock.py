@@ -91,6 +91,7 @@ def _parse_config(config_fname):
     config.setdefault("boron_replacement", False)
     config.setdefault("ligand_in_format", "pdbqt")
     config.setdefault("ligand_out_format", "pdbqt")
+    config.setdefault("info_server", {})
 
     control_keys = {
         "script_file",
@@ -101,6 +102,7 @@ def _parse_config(config_fname):
         "boron_replacement",
         "ligand_in_format",
         "ligand_out_format",
+        "info_server",
         "init_server",
     }
 
@@ -138,8 +140,6 @@ def _prepare_ligand_payload(mol, config, ring_sample=False):
     :param ring_sample:
     :return:
     """
-
-
     payload_type = config["ligand_in_format"]
 
     if payload_type == "pdbqt":
@@ -180,6 +180,29 @@ def _check_response_ok(response, context="request"):
     if error:
         raise RuntimeError(f"{context} failed: {error}")
     raise RuntimeError(f"{context} failed with status={status!r}")
+
+
+def server_info(config):
+    """Start the server subprocess, query its INFO dict, then close.
+
+    Returns a dict with server-specific defaults such as batch_size,
+    ligand_in_format, ligand_out_format, score_mode, etc.
+    Can be called independently from init/dock.
+    """
+    config = _parse_config(config)
+    client = JsonLineProcessClient(
+        command=config["_launch_command"],
+        startup_timeout=config.get("startup_timeout", 120),
+        cwd=config.get("server_cwd"),
+    )
+    try:
+        response = client.request(command="info", payload={})
+        _check_response_ok(response, context="info")
+        info = _response_payload(response)
+        info.update(config["info_server"])
+        return info
+    finally:
+        client.close()
 
 
 def _create_client(config):

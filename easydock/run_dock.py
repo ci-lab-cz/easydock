@@ -18,6 +18,7 @@ from easydock.database import create_db, init_db, check_db_status, update_db, sa
 from easydock.session import restore_session
 from easydock.reporting import get_pipeline_statistics, write_stage_error_log, report_error_log_file
 from easydock.args_validation import protonation_type, protonation_programs, cpu_type, filepath_type
+from easydock.server_dock import server_info
 
 
 class RawTextArgumentDefaultsHelpFormatter(argparse.RawTextHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
@@ -328,9 +329,7 @@ def main():
 
             batch_size = 1
             if args.program == 'server':
-                with open(args.config) as f:
-                    config = yaml.safe_load(f) or {}
-                    batch_size = config.get('batch_size', 1)
+                batch_size = server_info(args.config).get('batch_size', 1)
 
             with sqlite3.connect(args.output, timeout=90) as conn:
                 mols = MolQueue(args.output, batch_size=batch_size)
