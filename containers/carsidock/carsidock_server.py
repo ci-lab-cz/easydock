@@ -82,89 +82,62 @@ class _CarsiDockServer:
         import tempfile
         import os
 
-        if not isinstance(payload, list):
-            return {"status": "error", "error": f"payload must be a list of molecule dicts. Payload: {payload}"}
+        if not isinstance(payload, dict):
+            return {"status": "error", "error": f"payload must be a dict of {{molecule_name: representation}}. Got: {type(payload)}"}
 
         nconf = max(self.num_conformer, 5)
-        per_mol_results = []
+        results = {}
 
-        for mol_entry in payload:
-            if not isinstance(mol_entry, dict):
-                logger.warning("Skipping non-dict entry in payload: %r", mol_entry)
+        for molecule_id, instance in payload.items():
+            if not instance:
+                logger.warning("Empty instance for %s", molecule_id)
+                results[molecule_id] = None
                 continue
-
-            molecule_id = mol_entry.get("molecule_id")
-            smiles_list = mol_entry.get("smiles")
-            mol_block_list = mol_entry.get("mol_block")
-
-            if not smiles_list and not mol_block_list:
-                per_mol_results.append({
-                    "molecule_id": molecule_id,
-                    "status": "error",
-                    "error": "No smiles or mol_block provided",
-                    "results": [],
-                })
-                continue
-
-            instances = smiles_list if smiles_list is not None else mol_block_list
-            use_smiles = smiles_list is not None
-            mol_output = []
 
             try:
-                for instance in instances:  # commonly there will be a only single instance representing a molecule (SMILES or MOL block)
-                    raw_block = None
-                    if use_smiles:
-                        init_mol_list = self.read_ligands(smiles=[instance], num_use_conf=nconf)[0]
-                    else:
-                        mol = Chem.MolFromMolBlock(instance, removeHs=False)
-                        init_mol_list = self.read_ligands(mol_list=[mol], num_use_conf=nconf)[0]
-                    torch.cuda.empty_cache()
-                    with tempfile.NamedTemporaryFile(suffix=".sdf", delete=False) as tmp:
-                        tmp_path = tmp.name
-                    try:
-                        outputs = self.docking(
-                            self.model,
-                            self.pocket,
-                            init_mol_list,
-                            self.ligand_dict,
-                            self.pocket_dict,
-                            device=self.device,
-                            output_path=tmp_path,
-                            num_threads=self.num_threads,
-                            lbfgsbsrv=self.lbfgsbsrv,
-                        )
-                        if os.path.exists(tmp_path):
-                            with open(tmp_path) as f:
-                                raw_block = f.read()
-                                raw_block = '$$$$\n'.join(raw_block.split('$$$$\n', self.num_conformer)[:self.num_conformer])
-                    finally:
-                        if os.path.exists(tmp_path):
-                            os.unlink(tmp_path)
+                raw_block = None
+                if isinstance(instance, str) and '\n' not in instance:
+                    # treat as SMILES
+                    init_mol_list = self.read_ligands(smiles=[instance], num_use_conf=nconf)[0]
+                else:
+                    mol = Chem.MolFromMolBlock(instance, removeHs=False)
+                    init_mol_list = self.read_ligands(mol_list=[mol], num_use_conf=nconf)[0]
+                torch.cuda.empty_cache()
+                with tempfile.NamedTemporaryFile(suffix=".sdf", delete=False) as tmp:
+                    tmp_path = tmp.name
+                try:
+                    outputs = self.docking(
+                        self.model,
+                        self.pocket,
+                        init_mol_list,
+                        self.ligand_dict,
+                        self.pocket_dict,
+                        device=self.device,
+                        output_path=tmp_path,
+                        num_threads=self.num_threads,
+                        lbfgsbsrv=self.lbfgsbsrv,
+                    )
+                    if os.path.exists(tmp_path):
+                        with open(tmp_path) as f:
+                            raw_block = f.read()
+                            raw_block = '$$$$\n'.join(raw_block.split('$$$$\n', self.num_conformer)[:self.num_conformer])
+                finally:
+                    if os.path.exists(tmp_path):
+                        os.unlink(tmp_path)
 
-                    best_pose = outputs["mol_list"][0]
-                    _, rtms_scores = self.scoring(self.rtms_pocket, [best_pose], self.rtms_model)
-                    mol_output.append({
-                        "docking_score": float(rtms_scores[0]),
-                        "mol_block": Chem.MolToMolBlock(best_pose),
-                        "raw_block": raw_block,
-                    })
-
-                per_mol_results.append({
-                    "molecule_id": molecule_id,
-                    "status": "ok",
-                    "results": mol_output,
-                })
+                best_pose = outputs["mol_list"][0]
+                _, rtms_scores = self.scoring(self.rtms_pocket, [best_pose], self.rtms_model)
+                results[molecule_id] = {
+                    "docking_score": float(rtms_scores[0]),
+                    "mol_block": Chem.MolToMolBlock(best_pose),
+                    "raw_block": raw_block,
+                }
 
             except Exception as e:
                 logger.exception("CarsiDock docking failed for %s", molecule_id)
-                per_mol_results.append({
-                    "molecule_id": molecule_id,
-                    "status": "error",
-                    "error": str(e),
-                    "results": [],
-                })
+                results[molecule_id] = None
 
-        return {"status": "ok", "results": per_mol_results}
+        return {"status": "ok", "results": results}
 
 
 def _emit_server_response(req_id, payload):

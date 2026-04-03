@@ -222,55 +222,15 @@ def _get_worker_client(config):
 
 
 def _extract_batch_results(response):
-    """Parse response into a list of (molecule_id, result_items) tuples.
-
-    The outer response payload contains a list under "results". Each element
-    of that list is a per-molecule dict with molecule_id, status, error, and its own
-    "results" list of "conformer" dicts.
-    Returns a list of (molecule_id, conformer_list) where conformer_list is None on error.
-    """
+    """Parse dock response into {instance_name: pose_dict_or_None}."""
     if not isinstance(response, dict):
-        return []
-
+        return {}
     payload = _response_payload(response)
-    per_mol_list = payload.get("results")
-
-    if not isinstance(per_mol_list, list):
-        logger.warning("Received response for 'payload' -> 'results' is not a list. This is a break of API.")
-        return []
-
-    outputs = []
-    for item in per_mol_list:
-        if not isinstance(item, dict):
-            logger.warning("Per-molecule result item is not a dict: %r", item)
-            continue
-
-        mol_id = item.get("molecule_id")
-        status = item.get("status")
-        error = item.get("error")
-
-        if error or status not in (None, True, "ok", "OK"):
-            logger.warning("Docking failed for %s: %s", mol_id, error or f"status={status!r}")
-            outputs.append((mol_id, None))
-            continue
-
-        conformers = item.get("results")
-        if not isinstance(conformers, list):
-            logger.warning("Missing or invalid 'results' in per-molecule result for %s", mol_id)
-            outputs.append((mol_id, None))
-            continue
-
-        outputs.append((mol_id, conformers))
-
-    return outputs
-
-
-def _extract_molecule_name(response):
-    payload = _response_payload(response)
-    name = payload.get("molecule_id")
-    if name is None and isinstance(response, dict):
-        name = response.get("molecule_id")
-    return name if isinstance(name, str) and name.strip() else None
+    results = payload.get("results")
+    if not isinstance(results, dict):
+        logger.warning("Dock response 'results' is not a dict. This is a break of API.")
+        return {}
+    return results
 
 
 def _set_mol_block_name(mol_block, name):
@@ -305,24 +265,30 @@ def mol_dock(mols: Chem.Mol | List[Chem.Mol], config, ring_sample=False):
             logger.warning("Ligand preparation failed for %s: %s", mol_id, e)
             data.append((mol_id, None))
     if all(payload is None for mol_id, payload in data):
-        return data  # list of (mol_id, None)
+        return [(mol_id, None) for mol_id, _ in data]
 
-    failed_mol_ids = [mol_id for mol_id, ligand_payload in data if ligand_payload is None]
+    failed_mol_ids = [mol_id for mol_id, payload in data if payload is None]
     data = [item for item in data if item[1] is not None]  # keep only prepared mols
+
+    # Build flat instance dict {instance_name: single_repr} and track mapping back.
+    # When preparation yields multiple instances (e.g. ring conformers), each is
+    # sent as a distinct molecule with a unique name; results are merged client-side.
+    payload = {}           # {instance_name: single_repr}
+    instance_to_mol = {}   # {instance_name: original_mol_id}
+    for mol_id, ligand_payload in data:
+        if len(ligand_payload) == 1:
+            payload[mol_id] = ligand_payload[0]
+            instance_to_mol[mol_id] = mol_id
+        else:
+            for i, inst in enumerate(ligand_payload):
+                instance_name = f"{mol_id}__{i}"
+                payload[instance_name] = inst
+                instance_to_mol[instance_name] = mol_id
 
     start_time = timeit.default_timer()
 
     try:
         client = _get_worker_client(config)
-
-        payload = []
-        for mol_id, ligand_payload in data:
-            payload.append({
-                "molecule_id": mol_id,
-                # "ring_sample": bool(ring_sample),
-                config["ligand_in_format"]: ligand_payload,
-            })
-
         response = client.request(
             command="dock",
             payload=payload,
@@ -335,47 +301,37 @@ def mol_dock(mols: Chem.Mol | List[Chem.Mol], config, ring_sample=False):
                        ', '.join(mol_ids), e)
         return [(mol_id, None) for mol_id in mol_ids + failed_mol_ids]
 
-    dock_time = round((timeit.default_timer() - start_time) / len(data), 1)  # average time per mol
-    results = _extract_batch_results(response)
+    dock_time = round((timeit.default_timer() - start_time) / len(data), 1)  # average per original mol
+    raw_results = _extract_batch_results(response)  # {instance_name: pose_dict_or_None}
 
-    score_key = "docking_score"
-    pose_key = "raw_block"
-    mol_block_key = "mol_block"
     out_format = config.get("ligand_out_format", "pdbqt")
-    
     score_mode = config.get("score_mode", "min")
     mol_by_id = {mol.GetProp("_Name"): mol for mol in mols}
 
-    outputs = [(mol_id, None) for mol_id in failed_mol_ids]
-
-    for mol_id, result_list in results:
-        
-        if result_list is None:
-            outputs.append((mol_id, None))
+    # Process each instance result and group instances by original mol_id
+    mol_instances = {mol_id: [] for mol_id, _ in data}
+    for instance_name, result in raw_results.items():
+        mol_id = instance_to_mol.get(instance_name)
+        if mol_id is None:
+            logger.warning("Unexpected instance name in response: %r", instance_name)
+            continue
+        if result is None:
+            logger.warning("Docking failed for instance %s", instance_name)
             continue
 
-        mol = mol_by_id.get(mol_id)
-        dock_output_conformer_list = []
+        docking_score = _safe_float(result.get("docking_score"))
+        if docking_score is None:
+            continue
 
-        for item in result_list:
-            docking_score = _safe_float(item.get(score_key))
-            if docking_score is None:
-                continue
+        mol_block = result.get("mol_block")
+        raw_block = result.get("raw_block")
 
-            mol_block = item.get(mol_block_key)
-            raw_block = item.get(pose_key)
-
-            if isinstance(mol_block, str) and mol_block.strip():
-                entry = {"docking_score": docking_score, "mol_block": mol_block}
-                if isinstance(raw_block, str):
-                    entry["raw_block"] = raw_block
-                dock_output_conformer_list.append(entry)
-                continue
-
-            if not isinstance(raw_block, str) or not raw_block.strip():
-                continue
-
-            # parse raw_block if mol_block is absent
+        if isinstance(mol_block, str) and mol_block.strip():
+            entry = {"docking_score": docking_score, "mol_block": mol_block}
+            if isinstance(raw_block, str):
+                entry["raw_block"] = raw_block
+        elif isinstance(raw_block, str) and raw_block.strip():
+            mol = mol_by_id.get(mol_id)
             if out_format == "pdbqt":
                 if "MODEL" not in raw_block:
                     continue
@@ -385,21 +341,26 @@ def mol_dock(mols: Chem.Mol | List[Chem.Mol], config, ring_sample=False):
                 except Exception:
                     logger.exception("Failed to convert pdbqt pose for %s", mol_id)
                     continue
-                dock_output_conformer_list.append({"docking_score": docking_score, "mol_block": mol_block, "raw_block": raw_block})
-
+                entry = {"docking_score": docking_score, "mol_block": mol_block, "raw_block": raw_block}
             elif out_format == "sdf":
-                dock_output_conformer_list.append({"docking_score": docking_score, "mol_block": raw_block.split('$$$$\n')[0], "raw_block": raw_block})
-
+                entry = {"docking_score": docking_score, "mol_block": raw_block.split('$$$$\n')[0], "raw_block": raw_block}
             else:
                 raise NotImplementedError(f'Output raw docking format {out_format!r} is not implemented.')
+        else:
+            continue
 
-        if dock_output_conformer_list:
-            output = _choose_best(dock_output_conformer_list, score_mode)
-            output["mol_block"] = _set_mol_block_name(output["mol_block"], mol_id)
-            output["dock_time"] = dock_time
+        mol_instances[mol_id].append(entry)
+
+    outputs = [(mol_id, None) for mol_id in failed_mol_ids]
+    for mol_id, _ in data:
+        instances = mol_instances[mol_id]
+        if instances:
+            output = _choose_best(instances, score_mode)
+            if output is not None:
+                output["mol_block"] = _set_mol_block_name(output["mol_block"], mol_id)
+                output["dock_time"] = dock_time
         else:
             output = None
-
         outputs.append((mol_id, output))
 
     return outputs

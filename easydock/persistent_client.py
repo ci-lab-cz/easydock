@@ -7,7 +7,7 @@ import subprocess
 import threading
 import time
 from itertools import count
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any, Dict, Optional, Sequence, Union
 
 
 class JsonLineProcessClient:
@@ -112,7 +112,7 @@ class JsonLineProcessClient:
     def request(
         self,
         command: str,
-        payload: Optional[List[Dict[str, Any]]] = None,
+        payload: Optional[Dict[str, Any]] = None,
         timeout: Optional[float] = None,
     ) -> Dict[str, Any]:
         if self._closed:
