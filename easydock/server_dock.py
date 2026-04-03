@@ -85,34 +85,22 @@ def _parse_config(config_fname):
     if "server_cwd" in config and config["server_cwd"] is not None:
         config["server_cwd"] = str(config["server_cwd"])
 
-    config.setdefault("init_command", "init")
-    config.setdefault("dock_command", "dock")
-    config.setdefault("result_items_key", "results")
-    config.setdefault("score_key", "docking_score")
-    config.setdefault("pose_key", "raw_block")
-    config.setdefault("mol_block_key", "mol_block")
     config.setdefault("score_mode", "min")
     config.setdefault("startup_timeout", 120)
     config.setdefault("request_timeout", None)
     config.setdefault("boron_replacement", False)
-    config.setdefault("ligand_payload_type", "pdbqt")
-    config.setdefault("raw_format", "pdbqt")
+    config.setdefault("ligand_in_format", "pdbqt")
+    config.setdefault("ligand_out_format", "pdbqt")
 
     control_keys = {
         "script_file",
         "server_cwd",
-        "init_command",
-        "dock_command",
-        "result_items_key",
-        "score_key",
-        "pose_key",
-        "mol_block_key",
         "score_mode",
         "startup_timeout",
         "request_timeout",
         "boron_replacement",
-        "ligand_payload_type",
-        "raw_format",
+        "ligand_in_format",
+        "ligand_out_format",
         "init_server",
     }
 
@@ -129,8 +117,6 @@ def _parse_config(config_fname):
         {
             "script_file": config["script_file"],
             "server_cwd": config.get("server_cwd"),
-            "init_command": config["init_command"],
-            "dock_command": config["dock_command"],
             "request_timeout": config.get("request_timeout"),
             "init_server": init_server,
         },
@@ -144,7 +130,17 @@ def _parse_config(config_fname):
 
 
 def _prepare_ligand_payload(mol, config, ring_sample=False):
-    payload_type = config["ligand_payload_type"]
+    """
+    Return a list of instances in a specific format. Commonly there will be a single instance per molecule.
+    Instances can be conformers if ring_sample is True
+    :param mol:
+    :param config:
+    :param ring_sample:
+    :return:
+    """
+
+
+    payload_type = config["ligand_in_format"]
 
     if payload_type == "pdbqt":
         ligand_preparation, _ = _ensure_preparation_functions()
@@ -158,10 +154,10 @@ def _prepare_ligand_payload(mol, config, ring_sample=False):
     if payload_type == "smiles":
         return [Chem.MolToSmiles(mol, isomericSmiles=True)]
 
-    if payload_type == "mol_block":
+    if payload_type == "mol":
         return [Chem.MolToMolBlock(mol)]
 
-    raise ValueError(f"Unsupported ligand_payload_type: {payload_type}")
+    raise ValueError(f"Unsupported ligand_in_format: {payload_type}")
 
 
 def _response_payload(response):
@@ -195,7 +191,7 @@ def _create_client(config):
     )
 
     response = client.request(
-        command=config["init_command"],
+        command="init",
         payload=config["_resolved_init_server"],
         timeout=config.get("request_timeout"),
     )
@@ -225,23 +221,22 @@ def _get_worker_client(config):
         return _worker_client
 
 
-def _extract_batch_results(response, config):
+def _extract_batch_results(response):
     """Parse response into a list of (molecule_id, result_items) tuples.
 
-    The outer response payload contains a list under result_items_key. Each element
+    The outer response payload contains a list under "results". Each element
     of that list is a per-molecule dict with molecule_id, status, error, and its own
-    result_items_key list of "conformer" dicts.
+    "results" list of "conformer" dicts.
     Returns a list of (molecule_id, conformer_list) where conformer_list is None on error.
     """
     if not isinstance(response, dict):
         return []
 
-    result_items_key = config["result_items_key"]
     payload = _response_payload(response)
-    per_mol_list = payload.get(result_items_key)
+    per_mol_list = payload.get("results")
 
     if not isinstance(per_mol_list, list):
-        logger.warning("Received response for 'payload' -> %r is not a list. This is a break of API.", result_items_key)
+        logger.warning("Received response for 'payload' -> 'results' is not a list. This is a break of API.")
         return []
 
     outputs = []
@@ -259,9 +254,9 @@ def _extract_batch_results(response, config):
             outputs.append((mol_id, None))
             continue
 
-        conformers = item.get(result_items_key)
+        conformers = item.get("results")
         if not isinstance(conformers, list):
-            logger.warning("Missing or invalid %r in per-molecule result for %s", result_items_key, mol_id)
+            logger.warning("Missing or invalid 'results' in per-molecule result for %s", mol_id)
             outputs.append((mol_id, None))
             continue
 
@@ -325,11 +320,11 @@ def mol_dock(mols: Chem.Mol | List[Chem.Mol], config, ring_sample=False):
             payload.append({
                 "molecule_id": mol_id,
                 # "ring_sample": bool(ring_sample),
-                config["ligand_payload_type"]: ligand_payload,
+                config["ligand_in_format"]: ligand_payload,
             })
 
         response = client.request(
-            command=config["dock_command"],
+            command="dock",
             payload=payload,
             timeout=config.get("request_timeout"),
         )
@@ -341,12 +336,12 @@ def mol_dock(mols: Chem.Mol | List[Chem.Mol], config, ring_sample=False):
         return [(mol_id, None) for mol_id in mol_ids + failed_mol_ids]
 
     dock_time = round((timeit.default_timer() - start_time) / len(data), 1)  # average time per mol
-    results = _extract_batch_results(response, config)
+    results = _extract_batch_results(response)
 
-    score_key = config["score_key"]
-    pose_key = config["pose_key"]
-    mol_block_key = config["mol_block_key"]
-    raw_format = config.get("raw_format", "pdbqt")
+    score_key = "docking_score"
+    pose_key = "raw_block"
+    mol_block_key = "mol_block"
+    out_format = config.get("ligand_out_format", "pdbqt")
     
     score_mode = config.get("score_mode", "min")
     mol_by_id = {mol.GetProp("_Name"): mol for mol in mols}
@@ -381,7 +376,7 @@ def mol_dock(mols: Chem.Mol | List[Chem.Mol], config, ring_sample=False):
                 continue
 
             # parse raw_block if mol_block is absent
-            if raw_format == "pdbqt":
+            if out_format == "pdbqt":
                 if "MODEL" not in raw_block:
                     continue
                 try:
@@ -392,11 +387,11 @@ def mol_dock(mols: Chem.Mol | List[Chem.Mol], config, ring_sample=False):
                     continue
                 dock_output_conformer_list.append({"docking_score": docking_score, "mol_block": mol_block, "raw_block": raw_block})
 
-            elif raw_format == "sdf":
+            elif out_format == "sdf":
                 dock_output_conformer_list.append({"docking_score": docking_score, "mol_block": raw_block.split('$$$$\n')[0], "raw_block": raw_block})
 
             else:
-                raise NotImplementedError(f'Output raw docking format {raw_format!r} is not implemented.')
+                raise NotImplementedError(f'Output raw docking format {out_format!r} is not implemented.')
 
         if dock_output_conformer_list:
             output = _choose_best(dock_output_conformer_list, score_mode)
