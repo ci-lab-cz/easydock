@@ -87,8 +87,10 @@ class JsonLineProcessClient:
     def _read_stderr(self) -> None:
         assert self._proc.stderr is not None
         for line in self._proc.stderr:
+            stripped = line.rstrip("\n")
+            logging.debug("docking server: %s", stripped)
             with self._stderr_lock:
-                self._stderr_lines.append(line.rstrip("\n"))
+                self._stderr_lines.append(stripped)
                 if len(self._stderr_lines) > self._stderr_tail_lines:
                     self._stderr_lines = self._stderr_lines[-self._stderr_tail_lines:]
 
