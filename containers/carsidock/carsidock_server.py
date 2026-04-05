@@ -39,44 +39,54 @@ class _CarsiDockServer:
         self.num_conformer = 5
 
     def init(self, payload):
-        import torch
+        pdb_file = _expand_path(payload.get("protein"))
+        reflig = _expand_path(payload.get("reflig"))
 
-        sys.path.insert(0, '/carsidock')
-
-        from src.utils.utils import get_carsidock_model, get_abs_path
-        from src.utils.docking_inference_utils import read_ligands, docking
-        from src.utils.docking_utils import extract_carsidock_pocket, extract_pocket
-        from RTMScore.utils import scoring, get_rtmscore_model
-        from run_screening import get_heavy_atom_positions
-
-        self.read_ligands = read_ligands
-        self.docking = docking
-        self.scoring = scoring
-
-        pdb_file = _expand_path(payload["protein"])
-        reflig = _expand_path(payload["reflig"])
-
-        ckpt_path = '/carsidock/checkpoints/carsidock_230731.ckpt'
-        rtms_ckpt_path = '/carsidock/checkpoints/rtmscore_model1.pth'
+        if not pdb_file:
+            return {"status": "error", "error": "'protein' is required in init_server"}
+        if not reflig:
+            return {"status": "error", "error": "'reflig' is required in init_server"}
 
         cuda_convert = bool(payload.get("cuda_convert", True))
         self.num_threads = int(payload.get("num_threads", self.num_threads))
         self.num_conformer = int(payload.get("num_conformer", self.num_conformer))
 
-        self.device =  torch.device(payload.get("device", "cuda"))
+        try:
+            import torch
 
-        if cuda_convert:
-            import pydock
-            self.lbfgsbsrv = pydock.LBFGSBServer(self.num_threads, 0)
-        else:
-            self.lbfgsbsrv = None
+            sys.path.insert(0, '/carsidock')
 
-        self.model, self.ligand_dict, self.pocket_dict = get_carsidock_model(ckpt_path, self.device)
-        self.rtms_model = get_rtmscore_model(rtms_ckpt_path)
+            from src.utils.utils import get_carsidock_model, get_abs_path
+            from src.utils.docking_inference_utils import read_ligands, docking
+            from src.utils.docking_utils import extract_carsidock_pocket, extract_pocket
+            from RTMScore.utils import scoring, get_rtmscore_model
+            from run_screening import get_heavy_atom_positions
 
-        positions = get_heavy_atom_positions(reflig)
-        self.pocket, _ = extract_carsidock_pocket(pdb_file, reflig)
-        self.rtms_pocket = extract_pocket(pdb_file, positions, distance=10, del_water=True)
+            self.read_ligands = read_ligands
+            self.docking = docking
+            self.scoring = scoring
+
+            self.device = torch.device(payload.get("device", "cuda"))
+
+            if cuda_convert:
+                import pydock
+                self.lbfgsbsrv = pydock.LBFGSBServer(self.num_threads, 0)
+            else:
+                self.lbfgsbsrv = None
+
+            ckpt_path = '/carsidock/checkpoints/carsidock_230731.ckpt'
+            rtms_ckpt_path = '/carsidock/checkpoints/rtmscore_model1.pth'
+
+            self.model, self.ligand_dict, self.pocket_dict = get_carsidock_model(ckpt_path, self.device)
+            self.rtms_model = get_rtmscore_model(rtms_ckpt_path)
+
+            positions = get_heavy_atom_positions(reflig)
+            self.pocket, _ = extract_carsidock_pocket(pdb_file, reflig)
+            self.rtms_pocket = extract_pocket(pdb_file, positions, distance=10, del_water=True)
+
+        except Exception as e:
+            logger.exception("CarsiDock initialization failed")
+            return {"status": "error", "error": str(e)}
 
         self.initialized = True
         return {"status": "ok"}
