@@ -285,9 +285,9 @@ def build_server_container_cmd(cmd_str: str, bind_dirs: List[str]) -> List[str]:
 
     first = parts[0]
 
-    # Full form: user-written container command — used as-is
+    # Full form: user-written container command — expand ~ and $VARS but otherwise used as-is
     if first in ('apptainer', 'singularity', 'docker'):
-        return parts
+        return [expand_path(p) for p in parts]
 
     # Bare form: .sif path (possibly with trailing server args)
     sif_path = expand_path(first)
