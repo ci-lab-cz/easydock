@@ -163,19 +163,15 @@ def validate_config(config_fname):
     return {'raw_format': raw_format}
 
 
-def create_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', 'protein_setup'), unique_smi=False):
+def create_db(db_fname, args, unique_smi=False):
     """
-    Create empty database structure and the setup table, which is filled with values. To setup table two fields are
-    always stored: yaml file with all input args of the docking script and yaml file with docking config
+    Create empty database structure, the setup table, and save all input args.
+
     :param db_fname: file name of output DB
     :param args: argparse namespace
-    :param args_to_save: list of arg names which values are file names which content should be stored as separate
-                         fields in setup table
-    :param config_args_to_save: list of arg names from config file which values are file names which content should be
-                                stored as separate fields in setup table
     :param unique_smi: whether to create a table with UNIQUE constraint on smi field
-    :return:
     """
+    from easydock.session import create_setup_table, save_session_args, DB_USER_VERSION
     os.makedirs(os.path.dirname(os.path.abspath(db_fname)), exist_ok=True)
     with sqlite3.connect(db_fname, timeout=90) as conn:
         cur = conn.cursor()
@@ -197,152 +193,34 @@ def create_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', '
                      PRIMARY KEY (id, stereo_id)
                     )""")
 
-        # this will create a setup table with the first item in YAML format which contains all input args, and additional
-        # fields with names identical to selected arg names pointed out on text files (e.g config, protein.pdbqt,
-        # protein setup file, etc). These additional fields will store content of those files as TEXT
-        args_fields = ['yaml', 'config']
-        if isinstance(args_to_save, (list, tuple, set)):
-            args_fields += list(args_to_save)
-        if isinstance(config_args_to_save, (list, tuple, set)):
-            args_fields += list(config_args_to_save)
-        if len(set(args_fields)) < len(args_fields):
-            raise ValueError('Some arguments which will be stored to DB as separate fields with text files content are '
-                             'duplicated. Please fix this.\n')
-
-        sql = f"CREATE TABLE setup ({', '.join(v + ' TEXT' for v in args_fields)})"
-
-        cur.execute(sql)
-        conn.commit()
-
-        d = deepcopy(args.__dict__)
-        values = [yaml.safe_dump(d)]
-        for v in args_to_save:
-            if d[v] is not None:
-                values.append(open(d[v]).read())
-            else:
-                values.append(None)
-
-        if args_to_save:
-            cur.execute(f"INSERT INTO setup (yaml, {','.join(args_to_save)}) VALUES (?, {','.join('?' * len(args_to_save))})", values)
-        else:
-            cur.execute(f"INSERT INTO setup (yaml) VALUES (?)", values)
-
-        conn.commit()
+        create_setup_table(conn)
+        save_session_args(conn, args.__dict__)
 
         # create some tables separately to keep backward compatibility
         create_variables_table(conn)
         create_plif_tables(conn)
 
+        conn.execute(f'PRAGMA user_version = {DB_USER_VERSION}')
+        conn.commit()
 
-def populate_setup_db(db_fname, args, args_to_save=(), config_args_to_save=('protein', 'protein_setup')):
+
+def populate_setup_db(db_fname, args):
+    """Save config file and all referenced text files to the setup table."""
+    from easydock.session import save_session_config
     validated_args = validate_config(args.config)
     with sqlite3.connect(db_fname, timeout=90) as conn:
-        cur = conn.cursor()
-
-        if cur.execute('SELECT config FROM setup').fetchone()[0] is None:
-            d = deepcopy(args.__dict__)
-            values = [open(d['config']).read()]
-            update_sql_line = 'UPDATE setup SET config = ?'
-
-            for v in args_to_save:
-                update_sql_line += f', {v} = ?'
-                if d[v] is not None:
-                    values.append(open(d[v]).read())
-                else:
-                    values.append(None)
-
-            config_dict = yaml.safe_load(open(args.config)) or {}
-            if not isinstance(config_dict, dict):
-                config_dict = {}
-            for v in config_args_to_save:
-                update_sql_line += f', {v} = ?'
-                config_value = config_dict.get(v)
-                if config_value is not None:
-                    values.append(open(expand_path(config_value)).read())
-                else:
-                    values.append(None)
-
-            update_sql_line = update_sql_line + ' WHERE config IS NULL'
-            cur.execute(update_sql_line, values)
-            conn.commit()
+        save_session_config(conn, args.config)
         raw_format = validated_args['raw_format']
         set_variable(conn, 'database', 'raw_format', raw_format)
 
 
 def restore_setup_from_db(db_fname, tmpdir=None):
     """
-    Reads stored YAML and creates temporary text files from additional fields in the setup table.
-    Returns a dictionary of args and values to be assigned to argparse namespace
-    :param db_fname: SQLite DB file name
-    :return: dictionary of arguments and their values
+    Restore args and recreate temp files from the setup table.
+    Returns (args_dict, tmpfiles). Thin wrapper around session.restore_session.
     """
-    with sqlite3.connect(db_fname, timeout=90) as conn:
-        cur = conn.cursor()
-        res = cur.execute('SELECT * FROM setup')
-        colnames = [d[0] for d in res.description]
-        values = [v for v in res][0]
-        values = dict(zip(colnames, values))
-        try:
-            vars_dict = get_variables(conn, 'database', ['raw_format'])
-            raw_format = vars_dict['raw_format']
-        except KeyError:
-            raw_format = DEFAULT_RAW_FORMAT
-
-    d = yaml.safe_load(values['yaml'])
-    try:
-        c = yaml.safe_load(values['config'])
-    except AttributeError:
-        c = {}
-
-    #add raw_format to restored config file explicitly to make it compatible
-    # with old databases created with config file without raw_format variable
-    c['raw_format'] = raw_format
-
-    del values['yaml']
-
-    tmpfiles = []
-    backup_tempdir = tempfile.tempdir
-    if tmpdir:
-        tempfile.tempdir = tmpdir
-
-    try:
-
-        for colname, value in values.items():
-            if colname in ['config'] or value is None:
-                continue
-            if colname in list(d.keys()):
-                if d[colname] is not None:
-                    suffix = '.' + d[colname].rsplit('.', 1)[1]
-                    tmppath = tempfile.mkstemp(suffix=suffix, text=True)
-                    d[colname] = tmppath[1]
-                    tmpfiles.append(tmppath[1])
-                else:
-                    continue  # skip empty fields (e.g. protein_h)
-            elif colname in c.keys():
-                suffix = '.' + c[colname].rsplit('.', 1)[1]
-                tmppath = tempfile.mkstemp(suffix=suffix, text=True)
-                c[colname] = tmppath[1]
-                tmpfiles.append(tmppath[1])
-            else:
-                raise KeyError(f'During loading no relevant argument name was found to match the loading field name: {colname}')
-            open(tmppath[1], 'wt').write(value)
-
-        if c:
-            tmppath = tempfile.mkstemp(suffix='.yml', text=True)
-            d['config'] = tmppath[1]
-            tmpfiles.append(tmppath[1])
-            with open(tmppath[1], 'wt') as f:
-                yaml.safe_dump(c, f)
-
-    except Exception as e:
-        for fname in tmpfiles:
-            os.unlink(fname)
-        raise e
-
-    finally:
-        tempfile.tempdir = backup_tempdir
-
-    return d, tmpfiles
+    from easydock.session import restore_session
+    return restore_session(db_fname, tmpdir=tmpdir)
 
 
 @timeout(seconds=300, default=None)
@@ -503,12 +381,12 @@ def get_variables(conn, module: str, variable_names: List[str] = None):
 
 def _get_input_fname_from_setup(conn) -> Optional[str]:
     try:
-        setup_yaml = conn.execute("SELECT yaml FROM setup").fetchone()[0]
-    except (sqlite3.OperationalError, TypeError, IndexError):
+        row = conn.execute("SELECT content FROM setup WHERE key = 'args'").fetchone()
+    except sqlite3.OperationalError:
         return None
-    if not setup_yaml:
+    if row is None or not row[0]:
         return None
-    data = yaml.safe_load(setup_yaml)
+    data = json.loads(row[0])
     if isinstance(data, dict):
         return data.get('input')
     return None
@@ -529,11 +407,10 @@ def _get_input_fname_from_setup(conn) -> Optional[str]:
 
 def get_protonation_arg_value(db_conn):
     """
-    Returns True if molecules have to be protonated and False otherwise
-    :param db_conn:
-    :return:
+    Returns True if molecules have to be protonated and False otherwise.
     """
-    d = yaml.safe_load(db_conn.execute("SELECT yaml FROM setup").fetchone()[0])
+    row = db_conn.execute("SELECT content FROM setup WHERE key = 'args'").fetchone()
+    d = json.loads(row[0])
     return d['protonation'] is not None
 
 

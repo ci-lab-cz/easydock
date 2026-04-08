@@ -7,7 +7,7 @@ import subprocess
 import threading
 import time
 from itertools import count
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any, Dict, Optional, Sequence, Union
 
 
 class JsonLineProcessClient:
@@ -87,8 +87,10 @@ class JsonLineProcessClient:
     def _read_stderr(self) -> None:
         assert self._proc.stderr is not None
         for line in self._proc.stderr:
+            stripped = line.rstrip("\n")
+            logging.debug("docking server: %s", stripped)
             with self._stderr_lock:
-                self._stderr_lines.append(line.rstrip("\n"))
+                self._stderr_lines.append(stripped)
                 if len(self._stderr_lines) > self._stderr_tail_lines:
                     self._stderr_lines = self._stderr_lines[-self._stderr_tail_lines:]
 
@@ -112,7 +114,7 @@ class JsonLineProcessClient:
     def request(
         self,
         command: str,
-        payload: Optional[List[Dict[str, Any]]] = None,
+        payload: Optional[Dict[str, Any]] = None,
         timeout: Optional[float] = None,
     ) -> Dict[str, Any]:
         if self._closed:

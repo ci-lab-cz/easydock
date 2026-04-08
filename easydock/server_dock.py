@@ -1,5 +1,6 @@
 import atexit
 import logging
+import os
 import threading
 import timeit
 from pathlib import Path
@@ -8,6 +9,7 @@ from typing import List
 import yaml
 from rdkit import Chem
 
+from easydock.containers import build_server_container_cmd
 from easydock.persistent_client import JsonLineProcessClient
 
 logger = logging.getLogger(__name__)
@@ -52,6 +54,23 @@ def _ensure_preparation_functions():
     return ligand_preparation, pdbqt2molblock
 
 
+def _collect_path_dirs(payload):
+    """Recursively collect unique parent dirs of all existing file/dir paths in payload."""
+    dirs = set()
+    items = (payload.values() if isinstance(payload, dict) else
+             payload if isinstance(payload, (list, tuple)) else [payload])
+    for v in items:
+        if isinstance(v, str):
+            p = os.path.abspath(os.path.expanduser(v))
+            if os.path.isfile(p):
+                dirs.add(os.path.dirname(p))
+            elif os.path.isdir(p):
+                dirs.add(p)
+        elif isinstance(v, (dict, list)):
+            dirs.update(_collect_path_dirs(v))
+    return sorted(dirs)
+
+
 def _parse_config(config_fname):
     with open(config_fname) as f:
         config = yaml.safe_load(f) or {}
@@ -66,62 +85,62 @@ def _parse_config(config_fname):
     if "server_cwd" in config and config["server_cwd"] is not None:
         config["server_cwd"] = str(config["server_cwd"])
 
-    config.setdefault("init_command", "init")
-    config.setdefault("dock_command", "dock")
-    config.setdefault("result_items_key", "results")
-    config.setdefault("score_key", "docking_score")
-    config.setdefault("pose_key", "raw_block")
-    config.setdefault("mol_block_key", "mol_block")
     config.setdefault("score_mode", "min")
     config.setdefault("startup_timeout", 120)
     config.setdefault("request_timeout", None)
     config.setdefault("boron_replacement", False)
-    config.setdefault("ligand_payload_type", "pdbqt")
-    config.setdefault("raw_format", "pdbqt")
+    config.setdefault("ligand_in_format", None)
+    config.setdefault("ligand_out_format", None)
+    config.setdefault("info_server", {})
 
     control_keys = {
         "script_file",
         "server_cwd",
-        "init_command",
-        "dock_command",
-        "result_items_key",
-        "score_key",
-        "pose_key",
-        "mol_block_key",
         "score_mode",
         "startup_timeout",
         "request_timeout",
         "boron_replacement",
-        "ligand_payload_type",
-        "raw_format",
-        "init_payload",
+        "ligand_in_format",
+        "ligand_out_format",
+        "info_server",
+        "init_server",
     }
 
-    init_payload = config.get("init_payload")
-    if not isinstance(init_payload, dict):
-        init_payload = {
+    init_server = config.get("init_server")
+    if not isinstance(init_server, dict):
+        init_server = {
             k: _normalize_path_values(v)
             for k, v in config.items()
             if k not in control_keys
         }
 
-    config["_resolved_init_payload"] = init_payload
+    config["_resolved_init_server"] = init_server
     config["_worker_key"] = yaml.safe_dump(
         {
             "script_file": config["script_file"],
             "server_cwd": config.get("server_cwd"),
-            "init_command": config["init_command"],
-            "dock_command": config["dock_command"],
             "request_timeout": config.get("request_timeout"),
-            "init_payload": init_payload,
+            "init_server": init_server,
         },
         sort_keys=True,
     )
+
+    bind_dirs = _collect_path_dirs(init_server)
+    config["_launch_command"] = build_server_container_cmd(config["script_file"], bind_dirs)
+
     return config
 
 
 def _prepare_ligand_payload(mol, config, ring_sample=False):
-    payload_type = config["ligand_payload_type"]
+    """
+    Return a list of instances in a specific format. Commonly there will be a single instance per molecule.
+    Instances can be conformers if ring_sample is True
+    :param mol:
+    :param config:
+    :param ring_sample:
+    :return:
+    """
+    payload_type = config["ligand_in_format"]
 
     if payload_type == "pdbqt":
         ligand_preparation, _ = _ensure_preparation_functions()
@@ -135,10 +154,10 @@ def _prepare_ligand_payload(mol, config, ring_sample=False):
     if payload_type == "smiles":
         return [Chem.MolToSmiles(mol, isomericSmiles=True)]
 
-    if payload_type == "mol_block":
+    if payload_type == "mol":
         return [Chem.MolToMolBlock(mol)]
 
-    raise ValueError(f"Unsupported ligand_payload_type: {payload_type}")
+    raise ValueError(f"Unsupported ligand_in_format: {payload_type}")
 
 
 def _response_payload(response):
@@ -163,17 +182,40 @@ def _check_response_ok(response, context="request"):
     raise RuntimeError(f"{context} failed with status={status!r}")
 
 
+def server_info(config):
+    """Start the server subprocess, query its INFO dict, then close.
+
+    Returns a dict with server-specific defaults such as batch_size,
+    ligand_in_format, ligand_out_format, score_mode, etc.
+    Can be called independently from init/dock.
+    """
+    config = _parse_config(config)
+    client = JsonLineProcessClient(
+        command=config["_launch_command"],
+        startup_timeout=config.get("startup_timeout", 120),
+        cwd=config.get("server_cwd"),
+    )
+    try:
+        response = client.request(command="info", payload={})
+        _check_response_ok(response, context="info")
+        info = _response_payload(response)
+        info.update(config["info_server"])
+        return info
+    finally:
+        client.close()
+
+
 def _create_client(config):
     client = JsonLineProcessClient(
-        command=config["script_file"],
+        command=config["_launch_command"],
         startup_timeout=config.get("startup_timeout", 120),
         request_timeout=config.get("request_timeout"),
         cwd=config.get("server_cwd"),
     )
 
     response = client.request(
-        command=config["init_command"],
-        payload=config["_resolved_init_payload"],
+        command="init",
+        payload=config["_resolved_init_server"],
         timeout=config.get("request_timeout"),
     )
     _check_response_ok(response, context="init")
@@ -202,57 +244,16 @@ def _get_worker_client(config):
         return _worker_client
 
 
-def _extract_batch_results(response, config):
-    """Parse response into a list of (molecule_id, result_items) tuples.
-
-    The outer response payload contains a list under result_items_key. Each element
-    of that list is a per-molecule dict with molecule_id, status, error, and its own
-    result_items_key list of "conformer" dicts.
-    Returns a list of (molecule_id, conformer_list) where conformer_list is None on error.
-    """
+def _extract_batch_results(response):
+    """Parse dock response into {instance_name: pose_dict_or_None}."""
     if not isinstance(response, dict):
-        return []
-
-    result_items_key = config["result_items_key"]
+        return {}
     payload = _response_payload(response)
-    per_mol_list = payload.get(result_items_key)
-
-    if not isinstance(per_mol_list, list):
-        logger.warning("Received response for 'payload' -> %r is not a list. This is a break of API.", result_items_key)
-        return []
-
-    outputs = []
-    for item in per_mol_list:
-        if not isinstance(item, dict):
-            logger.warning("Per-molecule result item is not a dict: %r", item)
-            continue
-
-        mol_id = item.get("molecule_id")
-        status = item.get("status")
-        error = item.get("error")
-
-        if error or status not in (None, True, "ok", "OK"):
-            logger.warning("Docking failed for %s: %s", mol_id, error or f"status={status!r}")
-            outputs.append((mol_id, None))
-            continue
-
-        conformers = item.get(result_items_key)
-        if not isinstance(conformers, list):
-            logger.warning("Missing or invalid %r in per-molecule result for %s", result_items_key, mol_id)
-            outputs.append((mol_id, None))
-            continue
-
-        outputs.append((mol_id, conformers))
-
-    return outputs
-
-
-def _extract_molecule_name(response):
-    payload = _response_payload(response)
-    name = payload.get("molecule_id")
-    if name is None and isinstance(response, dict):
-        name = response.get("molecule_id")
-    return name if isinstance(name, str) and name.strip() else None
+    results = payload.get("results")
+    if not isinstance(results, dict):
+        logger.warning("Dock response 'results' is not a dict. This is a break of API.")
+        return {}
+    return results
 
 
 def _set_mol_block_name(mol_block, name):
@@ -277,6 +278,18 @@ def mol_dock(mols: Chem.Mol | List[Chem.Mol], config, ring_sample=False):
 
     config = _parse_config(config)
 
+    if config["ligand_in_format"] is None or config["ligand_out_format"] is None:
+        client = _get_worker_client(config)
+        try:
+            response = client.request(command="info", payload={})
+            info = _response_payload(response)
+        except Exception:
+            info = {}
+        if config["ligand_in_format"] is None:
+            config["ligand_in_format"] = info.get("ligand_in_format", "pdbqt")
+        if config["ligand_out_format"] is None:
+            config["ligand_out_format"] = info.get("ligand_out_format", "pdbqt")
+
     data = []
     for mol in mols:
         mol_id = mol.GetProp("_Name")
@@ -287,26 +300,32 @@ def mol_dock(mols: Chem.Mol | List[Chem.Mol], config, ring_sample=False):
             logger.warning("Ligand preparation failed for %s: %s", mol_id, e)
             data.append((mol_id, None))
     if all(payload is None for mol_id, payload in data):
-        return data  # list of (mol_id, None)
+        return [(mol_id, None) for mol_id, _ in data]
 
-    failed_mol_ids = [mol_id for mol_id, ligand_payload in data if ligand_payload is None]
+    failed_mol_ids = [mol_id for mol_id, payload in data if payload is None]
     data = [item for item in data if item[1] is not None]  # keep only prepared mols
+
+    # Build flat instance dict {instance_name: single_repr} and track mapping back.
+    # When preparation yields multiple instances (e.g. ring conformers), each is
+    # sent as a distinct molecule with a unique name; results are merged client-side.
+    payload = {}           # {instance_name: single_repr}
+    instance_to_mol = {}   # {instance_name: original_mol_id}
+    for mol_id, ligand_payload in data:
+        if len(ligand_payload) == 1:
+            payload[mol_id] = ligand_payload[0]
+            instance_to_mol[mol_id] = mol_id
+        else:
+            for i, inst in enumerate(ligand_payload):
+                instance_name = f"{mol_id}__{i}"
+                payload[instance_name] = inst
+                instance_to_mol[instance_name] = mol_id
 
     start_time = timeit.default_timer()
 
     try:
         client = _get_worker_client(config)
-
-        payload = []
-        for mol_id, ligand_payload in data:
-            payload.append({
-                "molecule_id": mol_id,
-                # "ring_sample": bool(ring_sample),
-                config["ligand_payload_type"]: ligand_payload,
-            })
-
         response = client.request(
-            command=config["dock_command"],
+            command="dock",
             payload=payload,
             timeout=config.get("request_timeout"),
         )
@@ -317,48 +336,38 @@ def mol_dock(mols: Chem.Mol | List[Chem.Mol], config, ring_sample=False):
                        ', '.join(mol_ids), e)
         return [(mol_id, None) for mol_id in mol_ids + failed_mol_ids]
 
-    dock_time = round((timeit.default_timer() - start_time) / len(data), 1)  # average time per mol
-    results = _extract_batch_results(response, config)
+    dock_time = round((timeit.default_timer() - start_time) / len(data), 1)  # average per original mol
+    raw_results = _extract_batch_results(response)  # {instance_name: pose_dict_or_None}
 
-    score_key = config["score_key"]
-    pose_key = config["pose_key"]
-    mol_block_key = config["mol_block_key"]
-    raw_format = config.get("raw_format", "pdbqt")
-    
+    out_format = config.get("ligand_out_format", "pdbqt")
     score_mode = config.get("score_mode", "min")
     mol_by_id = {mol.GetProp("_Name"): mol for mol in mols}
 
-    outputs = [(mol_id, None) for mol_id in failed_mol_ids]
-
-    for mol_id, result_list in results:
-        
-        if result_list is None:
-            outputs.append((mol_id, None))
+    # Process each instance result and group instances by original mol_id
+    mol_instances = {mol_id: [] for mol_id, _ in data}
+    for instance_name, result in raw_results.items():
+        mol_id = instance_to_mol.get(instance_name)
+        if mol_id is None:
+            logger.warning("Unexpected instance name in response: %r", instance_name)
+            continue
+        if result is None:
+            logger.warning("Docking failed for instance %s", instance_name)
             continue
 
-        mol = mol_by_id.get(mol_id)
-        dock_output_conformer_list = []
+        docking_score = _safe_float(result.get("docking_score"))
+        if docking_score is None:
+            continue
 
-        for item in result_list:
-            docking_score = _safe_float(item.get(score_key))
-            if docking_score is None:
-                continue
+        mol_block = result.get("mol_block")
+        raw_block = result.get("raw_block")
 
-            mol_block = item.get(mol_block_key)
-            raw_block = item.get(pose_key)
-
-            if isinstance(mol_block, str) and mol_block.strip():
-                entry = {"docking_score": docking_score, "mol_block": mol_block}
-                if isinstance(raw_block, str):
-                    entry["raw_block"] = raw_block
-                dock_output_conformer_list.append(entry)
-                continue
-
-            if not isinstance(raw_block, str) or not raw_block.strip():
-                continue
-
-            # parse raw_block if mol_block is absent
-            if raw_format == "pdbqt":
+        if isinstance(mol_block, str) and mol_block.strip():
+            entry = {"docking_score": docking_score, "mol_block": mol_block}
+            if isinstance(raw_block, str):
+                entry["raw_block"] = raw_block
+        elif isinstance(raw_block, str) and raw_block.strip():
+            mol = mol_by_id.get(mol_id)
+            if out_format == "pdbqt":
                 if "MODEL" not in raw_block:
                     continue
                 try:
@@ -367,21 +376,26 @@ def mol_dock(mols: Chem.Mol | List[Chem.Mol], config, ring_sample=False):
                 except Exception:
                     logger.exception("Failed to convert pdbqt pose for %s", mol_id)
                     continue
-                dock_output_conformer_list.append({"docking_score": docking_score, "mol_block": mol_block, "raw_block": raw_block})
-
-            elif raw_format == "sdf":
-                dock_output_conformer_list.append({"docking_score": docking_score, "mol_block": raw_block.split('$$$$\n')[0], "raw_block": raw_block})
-
+                entry = {"docking_score": docking_score, "mol_block": mol_block, "raw_block": raw_block}
+            elif out_format == "sdf":
+                entry = {"docking_score": docking_score, "mol_block": raw_block.split('$$$$\n')[0], "raw_block": raw_block}
             else:
-                raise NotImplementedError(f'Output raw docking format {raw_format!r} is not implemented.')
+                raise NotImplementedError(f'Output raw docking format {out_format!r} is not implemented.')
+        else:
+            continue
 
-        if dock_output_conformer_list:
-            output = _choose_best(dock_output_conformer_list, score_mode)
-            output["mol_block"] = _set_mol_block_name(output["mol_block"], mol_id)
-            output["dock_time"] = dock_time
+        mol_instances[mol_id].append(entry)
+
+    outputs = [(mol_id, None) for mol_id in failed_mol_ids]
+    for mol_id, _ in data:
+        instances = mol_instances[mol_id]
+        if instances:
+            output = _choose_best(instances, score_mode)
+            if output is not None:
+                output["mol_block"] = _set_mol_block_name(output["mol_block"], mol_id)
+                output["dock_time"] = dock_time
         else:
             output = None
-
         outputs.append((mol_id, output))
 
     return outputs
