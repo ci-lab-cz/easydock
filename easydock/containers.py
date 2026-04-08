@@ -285,9 +285,22 @@ def build_server_container_cmd(cmd_str: str, bind_dirs: List[str]) -> List[str]:
 
     first = parts[0]
 
-    # Full form: user-written container command — expand ~ and $VARS but otherwise used as-is
+    # Full form: user-written container command — expand ~ and $VARS; inject --nv for GPU
     if first in ('apptainer', 'singularity', 'docker'):
-        return [expand_path(p) for p in parts]
+        parts = [expand_path(p) for p in parts]
+        if first in ('apptainer', 'singularity') and gpu_available() and '--nv' not in parts:
+            try:
+                idx = parts.index('run') + 1
+            except ValueError:
+                idx = 1
+            parts.insert(idx, '--nv')
+        if first == 'docker' and gpu_available() and '--gpus' not in parts:
+            try:
+                idx = parts.index('run') + 1
+            except ValueError:
+                idx = 1
+            parts[idx:idx] = ['--gpus', 'all']
+        return parts
 
     # Bare form: .sif path (possibly with trailing server args)
     sif_path = expand_path(first)
