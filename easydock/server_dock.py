@@ -89,8 +89,8 @@ def _parse_config(config_fname):
     config.setdefault("startup_timeout", 120)
     config.setdefault("request_timeout", None)
     config.setdefault("boron_replacement", False)
-    config.setdefault("ligand_in_format", "pdbqt")
-    config.setdefault("ligand_out_format", "pdbqt")
+    config.setdefault("ligand_in_format", None)
+    config.setdefault("ligand_out_format", None)
     config.setdefault("info_server", {})
 
     control_keys = {
@@ -277,6 +277,18 @@ def mol_dock(mols: Chem.Mol | List[Chem.Mol], config, ring_sample=False):
         mols = [mols]
 
     config = _parse_config(config)
+
+    if config["ligand_in_format"] is None or config["ligand_out_format"] is None:
+        client = _get_worker_client(config)
+        try:
+            response = client.request(command="info", payload={})
+            info = _response_payload(response)
+        except Exception:
+            info = {}
+        if config["ligand_in_format"] is None:
+            config["ligand_in_format"] = info.get("ligand_in_format", "pdbqt")
+        if config["ligand_out_format"] is None:
+            config["ligand_out_format"] = info.get("ligand_out_format", "pdbqt")
 
     data = []
     for mol in mols:
