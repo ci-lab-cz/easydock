@@ -192,6 +192,81 @@ seed: 0
     - `qvina-w`
     - `vina` - Vina can be used through a binary executable
 
+### Server-Based Docking
+
+`--program server` enables docking through a long-running server process. The server is started once per worker and handles multiple molecules without restarting. This mode supports containerized docking programs such as CarsiDock and GPU-accelerated Vina variants.
+
+```bash
+easydock -i input.smi -o output.db --program server --config config.yml -c 4 --sdf
+```
+
+!!! tip "GPU Auto-Detection"
+    If `nvidia-smi` is accessible, EasyDock automatically adds `--nv` (Apptainer/Singularity) or `--gpus all` (Docker) to the container launch command. No manual configuration is required.
+
+The config file has three kinds of keys:
+
+- **Control keys** (`script_file`, `score_mode`, `startup_timeout`, etc.) — read by EasyDock itself and placed at the top level.
+- **`init_server:`** — parameters forwarded verbatim to the server's `init` command (receptor files, pocket definition, program-specific settings).
+- **`info_server:`** — optional overrides for the server's default INFO values such as `batch_size`. The server exposes these defaults via its `info` command; this section lets you change them without modifying the server.
+
+The ligand input/output formats (`ligand_in_format`, `ligand_out_format`) are auto-detected from the server's `info` command and do not need to be set manually.
+
+#### CarsiDock
+
+CarsiDock is a deep-learning docking program. It accepts SMILES input and uses RTMScore for pose ranking (higher score = better). A pre-built Apptainer container is available (see [Installation](installation.md#pre-build-containers)).
+
+```yaml
+script_file: /path/to/carsidock.sif
+score_mode: max   # RTMScore: higher score is better
+
+init_server:
+  protein: /path/to/protein.pdb
+  reflig: /path/to/reference_ligand.sdf
+  num_conformer: 5
+```
+
+- `protein`: protein PDB file (defines the binding site)
+- `reflig`: reference ligand that defines the binding pocket
+- `num_conformer`: number of conformers to generate per ligand (default: 5)
+
+To limit the number of molecules docked per server request (e.g. for memory reasons), override `batch_size` via `info_server`:
+
+```yaml
+script_file: /path/to/carsidock.sif
+score_mode: max
+
+init_server:
+  protein: /path/to/protein.pdb
+  reflig: /path/to/reference_ligand.sdf
+  num_conformer: 5
+
+info_server:
+  batch_size: 5
+```
+
+#### Vina-GPU Server
+
+The Vina-GPU server bundles Vina-GPU, QVina2-GPU, and QVinaW-GPU in a single container. It accepts PDBQT input and output and uses Vina scoring (lower = better).
+
+```yaml
+script_file: /path/to/vinagpu.sif
+
+init_server:
+  protein: /path/to/protein.pdbqt
+  protein_setup: /path/to/grid.txt
+  program: vina-gpu
+  n_poses: 9
+  thread: 8000
+  seed: 0
+```
+
+!!! tip "Program Variants"
+    Change the `program` field under `init_server` to switch between GPU variants:
+
+    - `vina-gpu` — AutoDock Vina-GPU
+    - `qvina-gpu` — QuickVina2-GPU
+    - `qvinaw-gpu` — QuickVina-W-GPU
+
 ## Resuming Interrupted Calculations
 
 Simply run the same command or provide just the database:

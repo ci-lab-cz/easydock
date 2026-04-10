@@ -13,10 +13,13 @@ EasyDock automates the entire docking process from molecule preparation to resul
 ### Key Features
 
 - **Multiple Docking Programs**: Support for Vina, Gnina/Smina, QVina, Vina-GPU and their derivatives
+- **Server-Based Docking**: Containerized docking programs (CarsiDock, Vina-GPU) via a persistent server protocol
 - **Automated Preparation**: Molecule validation, salt removal, and stereoisomer enumeration
 - **Flexible Protonation**: Multiple methods including MolGpKa, Uni-pKa, Chemaxon, and pkasolver
+- **Container Support**: Run docking and protonation tools through Apptainer/Singularity or Docker with automatic GPU detection
 - **Distributed Computing**: Scale across multiple servers using Dask
 - **Database Storage**: All results organized in SQLite databases
+- **Pose Quality Assessment**: PoseBusters integration (`easydock_bust`) for physics-based validation of docked poses
 - **PLIF Analysis**: Protein-ligand interaction fingerprints for detailed analysis
 - **Resumable Calculations**: Interrupted runs can be continued seamlessly
 
@@ -44,6 +47,7 @@ easydock -i input.smi -o output.db --program vina --config config.yml --protonat
 - **[Usage Guide](usage.md)**: Complete guide for running docking simulations
 - **[Advanced Features](advanced.md)**: Ring sampling, distributed computing, and more
 - **[Data Retrieval](data_retrieval.md)**: Extracting and analyzing results
+- **[Pose Quality Assessment](posebusters.md)**: Running PoseBusters on docked poses with `easydock_bust`
 - **[PLIF Analysis](plif.md)**: Protein-ligand interaction fingerprints
 - **[Python API](python_api.md)**: Using EasyDock programmatically
 - **[Customization](customization.md)**: Extending EasyDock functionality

@@ -93,8 +93,30 @@ results = docking(
 
 ### Containerized solutions
 
-EasyDock supports singularity/apptainer containers (SIF-files) equipped with protonation tools and all dependencies. The container should provide a command "protonate" which takes two necessary arguments -i/--input and -o/--output taking input and output files in SMILES format: two columns tab-separated with SMILES and molecule id.
-Therefore, the protonation should be invoked by a command:
+EasyDock supports Singularity/Apptainer containers (SIF files) and Docker images equipped with protonation tools and all dependencies. The container must expose a `protonate` command that accepts `-i`/`--input` and `-o`/`--output` arguments for tab-separated SMILES files (two columns: SMILES and molecule ID).
+
+**Apptainer/Singularity SIF file** — provide the path to the `.sif`:
+
 ```bash
-apptainer run container.sif protonate -i input.smi -o output.smi 
+easydock -i input.smi -o output.db -c 4 --protonation /path/to/container.sif
 ```
+
+EasyDock invokes it as:
+
+```bash
+apptainer run container.sif protonate -i input.smi -o output.smi
+```
+
+**Docker image** — provide the image name:
+
+```bash
+easydock -i input.smi -o output.db -c 4 --protonation my-protonation-image
+```
+
+EasyDock invokes it as:
+
+```bash
+docker run [--gpus all] my-protonation-image protonate -i input.smi -o output.smi
+```
+
+The `--gpus all` flag is added automatically when `nvidia-smi` is available.

@@ -43,6 +43,63 @@ seed: 0
 - Apptainer: `-B /path/to/data:/path/to/data`
 - Docker: `-v /path/to/data:/path/to/data`
 
+### Bare Form (Auto-Build)
+
+Instead of writing the full container command manually, you can set `script_file` to just a `.sif` path or a Docker image name. EasyDock builds the complete launch command automatically:
+
+- Collects all file paths from the config payload and binds their parent directories
+- Detects GPU availability via `nvidia-smi` and injects `--nv` (Apptainer) or `--gpus all` (Docker)
+
+**Apptainer/Singularity SIF:**
+
+```yaml
+script_file: /path/to/carsidock.sif
+protein: /path/to/protein.pdb
+reflig: /path/to/reference_ligand.sdf
+```
+
+EasyDock resolves this to something like:
+
+```
+apptainer run --nv --bind /path/to /path/to/carsidock.sif server
+```
+
+**Docker image:**
+
+```yaml
+script_file: my-docker-image
+protein: /path/to/protein.pdbqt
+protein_setup: /path/to/grid.txt
+```
+
+Resolved to:
+
+```
+docker run -i --rm --gpus all -v /path/to:/path/to my-docker-image server
+```
+
+### Full Form (User-Written Command)
+
+Write the full container command in `script_file`. EasyDock expands `~` and environment variables in all path tokens. If a GPU is detected and `--nv` / `--gpus all` is not already present, it is injected automatically after `run`:
+
+```yaml
+script_file: apptainer run --bind /data:/data /path/to/image.sif server
+protein: /data/protein.pdbqt
+protein_setup: /data/grid.txt
+```
+
+!!! note "Bind Mounts in Full Form"
+    In the full form you are responsible for mounting all directories containing input files. In the bare form, EasyDock collects all file paths from the config and binds their parent directories automatically.
+
+### GPU Auto-Detection
+
+EasyDock calls `nvidia-smi` at runtime to check for GPU availability. If a GPU is found:
+
+- Apptainer/Singularity: `--nv` is inserted after `run`
+- Docker: `--gpus all` is inserted after `run`
+
+This applies to both bare and full forms. In the full form, the flag is only added if it is not already present.
+
 ## Distributed Computing
 
 Distribute docking across multiple servers using Dask.
@@ -104,6 +161,17 @@ This preserves:
 - Setup parameters
 
 Use the clean copy for docking with different proteins, programs or settings skipping the ligand initialization stage.
+
+### Database Upgrading
+
+Databases created before version 1.3.0 use an older internal schema. When you open such a database, EasyDock detects the schema version and prompts you to upgrade:
+
+```
+Database 'output.db' uses schema version 0 (current: 1).
+Upgrade now? [y/N] (auto-abort in 2 minutes):
+```
+
+Type `y` and press Enter to proceed. The upgrade rewrites the `setup` table to the new key/value format; all molecule data and docking results are preserved. If no response is received within 2 minutes, the run aborts automatically.
 
 ## Boron-Containing Compounds
 

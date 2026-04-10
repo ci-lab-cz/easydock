@@ -41,11 +41,14 @@ nav:
   - Usage: usage.md
   - Advanced features: advanced.md
   - Data retrieval: data_retrieval.md
+  - Pose quality assessment: posebusters.md
   - PLIF analysis: plif.md
   - Python API: python_api.md
   - Customization: customization.md
   - Citation: citation.md
   - Changelog: changelog.md
+  - For Developers:
+    - Server Protocol: server_protocol.md
 
 plugins:
   - search

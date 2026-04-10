@@ -87,6 +87,38 @@ get_sdf_from_easydock -i output.db -o output.sdf \
     --add_sql 'docking_score < -9'
 ```
 
+## Advanced Flags
+
+### PoseBusters Filter (`--bust`)
+
+Return only poses that passed the PoseBusters check. Bust results must be pre-computed with `easydock_bust` before using this flag (see [Pose Quality Assessment](posebusters.md)).
+
+```bash
+get_sdf_from_easydock -i output.db -o output.sdf --bust
+```
+
+Combined with explicit poses — each pose is filtered independently:
+
+```bash
+get_sdf_from_easydock -i output.db -o output.sdf --poses 1 2 3 --bust
+```
+
+### Keep Stereo ID in Names (`-s` / `--keep_stereo_id`)
+
+By default, the stereo ID suffix automatically injected by EasyDock during the preparation step (e.g. `_0`, `_1`, etc) is stripped from molecule names in the output. Use this flag to preserve it:
+
+```bash
+get_sdf_from_easydock -i output.db -o output.sdf -s
+```
+
+### Debug SQL (`--debug`)
+
+Print the final SQL query to stdout before execution. Useful for troubleshooting custom `--add_sql` expressions:
+
+```bash
+get_sdf_from_easydock -i output.db -o output.sdf --add_sql 'docking_score < -10' --debug
+```
+
 ## Enumerated Stereoisomer Handling
 
 !!! warning "Stereoisomer Limitation"

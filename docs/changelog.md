@@ -1,3 +1,15 @@
+**1.3.0**
+- add server-based docking (`--program server`) supporting containerized deep-learning programs via a persistent JSON Lines protocol  
+- add CarsiDock server integration (SMILES input, SDF output, RTMScore scoring)  
+- add Vina-GPU server integration (bundles Vina-GPU, QVina2-GPU, QVinaW-GPU in a single container)  
+- auto-build container launch commands from a bare `.sif` path or Docker image name; parent directories of config-referenced files are bound automatically  
+- auto-inject `--nv` / `--gpus all` into both bare and full-form container commands when a GPU is detected via `nvidia-smi`  
+- add Docker image support for containerized protonation tools (same interface as SIF containers)  
+- add `easydock_bust` tool for PoseBusters pose validation; pass/fail results stored in a `bust` table in the database  
+- add `--bust` flag to `get_sdf_from_easydock` to filter output by PoseBusters results  
+- add `--debug` flag to `get_sdf_from_easydock` to print the generated SQL query  
+- implement automatic detection and interactive upgrade of databases created by older EasyDock versions  
+
 **1.2.0**  
 - implement support of singularity/apptainer containers incorporating protonation tools on Linux and MacOS  
 - integrate uni-pka protonation as a pre-built container  

@@ -166,6 +166,57 @@ Install EasyDock in Windows Subsystem for Linux (WSL) to use container features.
 easydock -i input.smi -o output.db -c 4 --protonation /path/to/unipka.sif
 ```
 
+### Building Containers from Source
+
+Definition files and Dockerfiles for all EasyDock containers are in the `containers/` directory of the repository. Apptainer (`.def`) and Docker images can be built interchangeably — both expose the same command interface.
+
+#### Uni-pKa (protonation)
+
+```bash
+cd containers/unipka
+
+# Apptainer
+apptainer build unipka.sif unipka.def
+
+# Docker
+docker build -t unipka .
+```
+
+#### CarsiDock (server-based docking)
+
+The build downloads model checkpoints (~1 GB) from Google Drive and GitHub. An internet connection is required.
+
+```bash
+cd containers/carsidock
+
+# Apptainer
+apptainer build carsidock.sif carsidock_server.def
+
+# Docker
+docker build -t carsidock .
+```
+
+#### Vina-GPU Server (server-based docking)
+
+The build downloads GPU binaries and Boost from source. Requires an internet connection.
+
+```bash
+cd containers/vinagpu
+
+# Apptainer only (no Dockerfile provided)
+apptainer build vinagpu.sif vinagpu_server.def
+```
+
+## Optional Analysis Tools
+
+### PoseBusters
+
+PoseBusters provides physics-based validation of docked poses. Required for the `easydock_bust` tool and the `--bust` flag of `get_sdf_from_easydock`.
+
+```bash
+pip install posebusters
+```
+
 ## Verification
 
 Verify installation:
