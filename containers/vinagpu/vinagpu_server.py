@@ -18,17 +18,34 @@ INFO = {
 }
 
 PROGRAMS = {
+    # GPU programs (OpenCL-accelerated)
     'vina-gpu': {
         'binary': '/opt/vinagpu/vina-gpu/AutoDock-Vina-GPU-2-1',
         'opencl_path': '/opt/vinagpu/vina-gpu',
+        'gpu': True,
     },
     'qvina-gpu': {
         'binary': '/opt/vinagpu/qvina-gpu/QuickVina2-GPU-2-1',
         'opencl_path': '/opt/vinagpu/qvina-gpu',
+        'gpu': True,
     },
     'qvinaw-gpu': {
         'binary': '/opt/vinagpu/qvinaw-gpu/QuickVina-W-GPU-2-1',
         'opencl_path': '/opt/vinagpu/qvinaw-gpu',
+        'gpu': True,
+    },
+    # CPU programs from QVina/AutoDock-Vina repos
+    'vina': {
+        'binary': '/opt/vinagpu/vina/vina',
+        'gpu': False,
+    },
+    'qvina': {
+        'binary': '/opt/vinagpu/qvina/qvina2.1',
+        'gpu': False,
+    },
+    'qvinaw': {
+        'binary': '/opt/vinagpu/qvinaw/qvina-w',
+        'gpu': False,
     },
 }
 
@@ -50,10 +67,16 @@ class _VinaGPUServer:
     def __init__(self):
         self.initialized = False
         self.binary = None
+        self.is_gpu = None
         self.protein = None
         self.protein_setup = None
+        # GPU-only
         self.opencl_binary_path = None
         self.thread = 8000
+        # CPU-only
+        self.exhaustiveness = 8
+        self.cpu = None
+        # common
         self.n_poses = 9
         self.seed = None
         self.extra_args = []
@@ -66,10 +89,9 @@ class _VinaGPUServer:
 
         prog = PROGRAMS[program]
         self.binary = prog['binary']
-        self.opencl_binary_path = payload.get('opencl_binary_path') or prog['opencl_path']
+        self.is_gpu = prog['gpu']
         self.protein = _expand_path(payload.get('protein'))
         self.protein_setup = _expand_path(payload.get('protein_setup'))
-        self.thread = int(payload.get('thread', self.thread))
         self.n_poses = int(payload.get('n_poses', self.n_poses))
         self.seed = payload.get('seed')
         extra_args_raw = payload.get('extra_args', [])
@@ -77,6 +99,14 @@ class _VinaGPUServer:
             self.extra_args = shlex.split(extra_args_raw)
         else:
             self.extra_args = [str(a) for a in extra_args_raw]
+
+        if self.is_gpu:
+            self.opencl_binary_path = payload.get('opencl_binary_path') or prog['opencl_path']
+            self.thread = int(payload.get('thread', self.thread))
+        else:
+            self.exhaustiveness = int(payload.get('exhaustiveness', self.exhaustiveness))
+            cpu = payload.get('cpu')
+            self.cpu = int(cpu) if cpu is not None else None
 
         if not self.protein:
             return {'status': 'error', 'error': "'protein' is required"}
@@ -113,10 +143,17 @@ class _VinaGPUServer:
                     '--ligand', lig_fname,
                     '--out', out_fname,
                     '--config', self.protein_setup,
-                    '--opencl_binary_path', self.opencl_binary_path,
-                    '--thread', str(self.thread),
                     '--num_modes', str(self.n_poses),
                 ]
+                if self.is_gpu:
+                    cmd += [
+                        '--opencl_binary_path', self.opencl_binary_path,
+                        '--thread', str(self.thread),
+                    ]
+                else:
+                    cmd += ['--exhaustiveness', str(self.exhaustiveness)]
+                    if self.cpu is not None:
+                        cmd += ['--cpu', str(self.cpu)]
                 if self.seed is not None:
                     cmd += ['--seed', str(self.seed)]
                 cmd += self.extra_args
