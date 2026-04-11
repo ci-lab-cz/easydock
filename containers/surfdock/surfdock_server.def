@@ -1,0 +1,90 @@
+Bootstrap: docker
+From: rapidsai/miniforge-cuda:25.08-cuda12.8.0-base-ubuntu24.04-py3.10
+
+# SurfDock server container for easydock (Apptainer/Singularity build).
+#
+# Build from the containers/surfdock/ directory:
+#   apptainer build surfdock.sif surfdock_server.def
+#
+# SurfDock is cloned from the latest master commit at build time.
+# The %setup section copies only the server scripts (relative to the build directory).
+
+%setup
+    mkdir -p ${APPTAINER_ROOTFS}/apps/all/XALT/3.0.2
+    mkdir -p ${APPTAINER_ROOTFS}/opt
+    cp surfdock_server.py      ${APPTAINER_ROOTFS}/opt/surfdock_server.py
+    cp score_dataset_patched.py ${APPTAINER_ROOTFS}/opt/score_dataset_patched.py
+    cp init_server.sh          ${APPTAINER_ROOTFS}/opt/init_server.sh
+    cp dock_server.sh          ${APPTAINER_ROOTFS}/opt/dock_server.sh
+    cp dock_server_cpu.sh      ${APPTAINER_ROOTFS}/opt/dock_server_cpu.sh
+    cp environment.yaml        ${APPTAINER_ROOTFS}/opt/environment.yaml
+    cp msms_i86_64Linux2_2.6.1.tar.gz ${APPTAINER_ROOTFS}/opt/msms_i86_64Linux2_2.6.1.tar.gz
+    cp check_esm_embedding.py  ${APPTAINER_ROOTFS}/opt/check_esm_embedding.py
+    cp global_vars.py          ${APPTAINER_ROOTFS}/opt/global_vars.py
+
+%post
+    apt-get update && \
+    apt-get install --no-install-recommends --yes \
+        gcc build-essential git git-lfs wget && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+    # Clone SurfDock from the latest master commit; pull LFS objects (model weights, tools)
+    git clone https://github.com/CAODH/SurfDock /app/SurfDock/SurfDock
+    cd /app/SurfDock/SurfDock && git lfs pull
+
+    mv /opt/environment.yaml    /app/SurfDock/environment.yaml
+    conda env create -f environment.yaml
+
+    mv /opt/msms_i86_64Linux2_2.6.1.tar.gz /app/SurfDock/SurfDock/comp_surface/tools/msms_i86_64Linux2_2.6.1.tar.gz
+    # Extract bundled surface computation tools
+    tar -xf SurfDock/comp_surface/tools/APBS_PDB2PQR.tar.gz \
+        -C SurfDock/comp_surface/tools/
+    tar -xf SurfDock/comp_surface/tools/msms_i86_64Linux2_2.6.1.tar.gz \
+        -C SurfDock/comp_surface/tools/
+
+    cd /app/SurfDock/SurfDock
+    git clone https://github.com/facebookresearch/esm
+
+    # Warm up imports and pre-download ESM weights
+    # precomputed_arrays must be set here explicitly — %environment is runtime-only in Apptainer
+    export precomputed_arrays=/app/SurfDock/precomputed/precomputed_arrays
+    conda run --no-capture-output -n SurfDock \
+        python -c "from utils import so3, torus"
+    conda run --no-capture-output -n SurfDock \
+        python -c "from esm import pretrained; pretrained.load_model_and_alphabet('esm2_t33_650M_UR50D')"
+
+    # Install server scripts
+    mv /opt/check_esm_embedding.py        /app/SurfDock/SurfDock/bash_scripts/test_scripts/check_esm_embedding.py
+    mv /opt/global_vars.py                /app/SurfDock/SurfDock/comp_surface/prepare_target/default_config/global_vars.py
+    
+    mv /opt/surfdock_server.py      /app/SurfDock/SurfDock/surfdock_server.py
+    mv /opt/score_dataset_patched.py /app/SurfDock/SurfDock/score_in_place_dataset/score_dataset.py
+    mv /opt/init_server.sh          /app/SurfDock/SurfDock/bash_scripts/test_scripts/init_server.sh
+    mv /opt/dock_server.sh          /app/SurfDock/SurfDock/bash_scripts/test_scripts/dock_server.sh
+    mv /opt/dock_server_cpu.sh      /app/SurfDock/SurfDock/bash_scripts/test_scripts/dock_server_cpu.sh
+    chmod +x /app/SurfDock/SurfDock/bash_scripts/test_scripts/init_server.sh \
+             /app/SurfDock/SurfDock/bash_scripts/test_scripts/dock_server.sh \
+             /app/SurfDock/SurfDock/bash_scripts/test_scripts/dock_server_cpu.sh
+
+%environment
+    export precomputed_arrays=/app/SurfDock/precomputed/precomputed_arrays
+    export KMP_AFFINITY=disabled
+    # Use the pre-baked torch hub cache (downloaded during build as root).
+    # Prevents extract.py from trying to write to the user's home on read-only HPC filesystems.
+    export TORCH_HOME=/root/.cache/torch
+
+%runscript
+    case "$1" in
+        server)
+            shift
+            exec conda run --no-capture-output -n SurfDock \
+                python /app/SurfDock/SurfDock/surfdock_server.py "$@"
+            ;;
+        help)
+            echo "Use: apptainer run surfdock.sif server"
+            ;;
+        *)
+            exec "$@"
+            ;;
+    esac
