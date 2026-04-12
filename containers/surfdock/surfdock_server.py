@@ -450,7 +450,7 @@ class _SurfDockServer:
 
                 results[instance_name] = {
                     'docking_score': best_sc,
-                    'mol_block': best_mol_block,
+                    'mol_block': best_mol_block.split('$$$$')[0],
                     'raw_block': ''.join(raw_parts),
                 }
             except Exception:
