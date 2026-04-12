@@ -55,6 +55,24 @@ From: ubuntu:22.04
     wget -q -O /opt/vinagpu/qvinaw-gpu/Kernel2_Opt.bin       $BASE/QuickVina-W-GPU-2.1/Kernel2_Opt.bin
     chmod +x /opt/vinagpu/qvinaw-gpu/QuickVina-W-GPU-2-1
 
+    # Download CPU binaries from QVina repo (https://github.com/QVina/qvina)
+    QVINA_BASE=https://raw.githubusercontent.com/QVina/qvina/master/bin
+
+    # QVina2 CPU binary (qvina)
+    mkdir -p /opt/vinagpu/qvina
+    wget -q -O /opt/vinagpu/qvina/qvina2.1  $QVINA_BASE/qvina2.1
+    chmod +x /opt/vinagpu/qvina/qvina2.1
+
+    # QuickVina-W CPU binary (qvinaw)
+    mkdir -p /opt/vinagpu/qvinaw
+    wget -q -O /opt/vinagpu/qvinaw/qvina-w  $QVINA_BASE/qvina-w
+    chmod +x /opt/vinagpu/qvinaw/qvina-w
+
+    # AutoDock Vina CPU binary (vina) — included in QVina repo for reference
+    mkdir -p /opt/vinagpu/vina
+    wget -q -O /opt/vinagpu/vina/vina  $QVINA_BASE/vina
+    chmod +x /opt/vinagpu/vina/vina
+
 %environment
     export LD_LIBRARY_PATH="/usr/local/lib:$LD_LIBRARY_PATH"
 
@@ -66,7 +84,9 @@ From: ubuntu:22.04
             ;;
         help)
             echo "Usage: apptainer run vinagpu_server.sif server"
-            echo "Programs: vina-gpu, qvina-gpu, qvinaw-gpu (set via init_server.program in config)"
+            echo "GPU programs: vina-gpu, qvina-gpu, qvinaw-gpu"
+            echo "CPU programs: vina, qvina, qvinaw"
+            echo "Set the program via 'program' key in the server config (init_server block or top-level)."
             ;;
         *)
             exec "$@"

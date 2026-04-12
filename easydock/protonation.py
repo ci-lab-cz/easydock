@@ -15,6 +15,7 @@ from typing import Iterator, Tuple
 from rdkit import Chem
 from easydock.containers import apptainer_available, singularity_available, is_apptainer_container
 from easydock.auxiliary import chunk_into_n, expand_path
+from easydock.containers import gpu_available
 
 # TODO: revise explanation regarding containers
 
@@ -314,15 +315,6 @@ def __protonate_molgpka(args, models, pH: float = 7.4):
     return changed_smi, mol_name
 
 
-def _gpu_available() -> bool:
-    """Return True if an NVIDIA GPU is accessible on this node (nvidia-smi exits 0)."""
-    try:
-        subprocess.run(['nvidia-smi'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-        return True
-    except (subprocess.CalledProcessError, FileNotFoundError, PermissionError):
-        return False
-
-
 def protonate_container(items: Iterator[Tuple[str, str]], container: str, pH: float = 7.4,
                         use_gpu: bool = None) -> Iterator[Tuple[str, str]]:
     """
@@ -335,7 +327,7 @@ def protonate_container(items: Iterator[Tuple[str, str]], container: str, pH: fl
                     None (default) = auto-detect via nvidia-smi
     """
     if use_gpu is None:
-        use_gpu = _gpu_available()
+        use_gpu = gpu_available()
 
     inner_cmd = ['protonate', '--pH', str(pH)]
 
