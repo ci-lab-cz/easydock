@@ -20,17 +20,17 @@ RUN git clone https://github.com/CAODH/SurfDock /app/SurfDock/SurfDock && \
 WORKDIR /app/SurfDock
 
 COPY environment.yaml /app/SurfDock/environment.yaml
-RUN conda env create -f environment.yaml
+RUN conda env create -f /app/SurfDock/environment.yaml
 
 RUN echo "conda activate SurfDock" >> ~/.bashrc
 RUN ls SurfDock/comp_surface/tools
 
 COPY msms_i86_64Linux2_2.6.1.tar.gz SurfDock/comp_surface/tools/msms_i86_64Linux2_2.6.1.tar.gz
 # Extract bundled surface computation tools (tarballs committed to the repo)
-RUN tar -xf SurfDock/comp_surface/tools/APBS_PDB2PQR.tar.gz \
-        -C SurfDock/comp_surface/tools/ && \
-    tar -xf SurfDock/comp_surface/tools/msms_i86_64Linux2_2.6.1.tar.gz \
-        -C SurfDock/comp_surface/tools/
+RUN tar -xf /app/SurfDock/SurfDock/comp_surface/tools/APBS_PDB2PQR.tar.gz \
+        -C /app/SurfDock/SurfDock/comp_surface/tools/ && \
+    tar -xf /app/SurfDock/SurfDock/comp_surface/tools/msms_i86_64Linux2_2.6.1.tar.gz \
+        -C /app/SurfDock/SurfDock/comp_surface/tools/
 
 WORKDIR /app/SurfDock/SurfDock
 RUN git clone https://github.com/facebookresearch/esm
