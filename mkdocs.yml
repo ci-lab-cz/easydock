@@ -39,6 +39,7 @@ nav:
   - Home: index.md
   - Installation: installation.md
   - Usage: usage.md
+  - Generic Binary Docking: binary_dock.md
   - Advanced features: advanced.md
   - Data retrieval: data_retrieval.md
   - Pose quality assessment: posebusters.md
