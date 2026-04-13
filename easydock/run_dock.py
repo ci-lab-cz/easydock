@@ -6,7 +6,6 @@ import os
 import sqlite3
 import sys
 import time
-import yaml
 from functools import partial
 from multiprocessing import Pool
 from typing import List
@@ -17,7 +16,7 @@ from easydock.database import create_db, init_db, check_db_status, update_db, sa
     add_protonation, populate_setup_db, MolQueue
 from easydock.session import restore_session
 from easydock.reporting import get_pipeline_statistics, write_stage_error_log, report_error_log_file
-from easydock.args_validation import protonation_type, protonation_programs, cpu_type, filepath_type
+from easydock.args_validation import protonation_type, protonation_programs, cpu_type, filepath_type, log_level_type
 from easydock.server_dock import server_info
 
 
@@ -222,10 +221,10 @@ def main():
     common_argument_group.add_argument('--log', metavar='FILENAME', required=False, default=None,
                                        type=filepath_type,
                         help='log file path. If omitted logging information wil be printed to STDOUT.')
-    common_argument_group.add_argument('--log_level', metavar='INTEGER', required=False, type=int,
-                                       default=2, choices=list(range(6)),
-                        help='the level of logging: 0 - NOTSET, 1 - DEBUG, 2 - INFO, 3 - WARNING, 4 - ERROR, '
-                             '5 - CRITICAL.')
+    common_argument_group.add_argument('--log_level', metavar='LEVEL', required=False, type=log_level_type,
+                                       default=log_level_type('INFO'),
+                                       help='logging level name: NOTSET, DEBUG, INFO, WARNING, ERROR, or CRITICAL. '
+                             'Case-insensitive.')
     common_argument_group.add_argument('-c', '--ncpu', default=1, type=cpu_type,
                         help='number of cpus. This affects only docking on a single server.')
     common_argument_group.add_argument('-v', '--verbose', action='store_true', default=False,
@@ -240,10 +239,10 @@ def main():
     supplied_args = tuple(arg for arg in supplied_args if arg in allowed_args)
 
     if args.log:
-        logging.basicConfig(filename=args.log, encoding='utf-8', level=args.log_level * 10, datefmt='%Y-%m-%d %H:%M:%S',
+        logging.basicConfig(filename=args.log, encoding='utf-8', level=args.log_level, datefmt='%Y-%m-%d %H:%M:%S',
                             format='[%(asctime)s] %(levelname)s: (PID:%(process)d) %(message)s')
     else:
-        logging.basicConfig(stream=sys.stdout, encoding='utf-8', level=args.log_level * 10, datefmt='%Y-%m-%d %H:%M:%S',
+        logging.basicConfig(stream=sys.stdout, encoding='utf-8', level=args.log_level, datefmt='%Y-%m-%d %H:%M:%S',
                             format='[%(asctime)s] %(levelname)s: (PID:%(process)d) %(message)s')
 
     if args.tmpdir is None and args.hostfile is not None and os.path.isfile(args.output):

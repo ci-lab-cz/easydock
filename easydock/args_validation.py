@@ -1,3 +1,4 @@
+import logging
 import os
 import argparse
 from multiprocessing import cpu_count
@@ -27,3 +28,12 @@ def str_lower_type(x):
         return x.lower()
     else:
         return x
+
+
+def log_level_type(value):
+    level = logging.getLevelName(value.upper())
+    if not isinstance(level, int):
+        raise argparse.ArgumentTypeError(
+            f"Invalid log level: {value!r}. Choose from: NOTSET, DEBUG, INFO, WARNING, ERROR, CRITICAL."
+        )
+    return level
