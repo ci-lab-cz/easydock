@@ -1,12 +1,12 @@
-# Generic Binary Docking
+# Generic Docking
 
-`--program binary` is a generic wrapper that can run **any external docking binary or Python
+`--program generic` is a generic wrapper that can run **any external docking binary or Python
 script** through a single YAML config file.  No code changes are needed — the config drives
 everything: which executable to call, how to pass the ligand and receive the output, and how to
 extract the score.
 
 ```bash
-easydock -i input.smi -o output.db --program binary --config config.yml -c 4 --sdf
+easydock -i input.smi -o output.db --program generic --config config.yml -c 4 --sdf
 ```
 
 ## Config reference
@@ -60,7 +60,7 @@ parse_score:
 
 ## Example 2 — CarsiDock installed in a separate conda environment
 
-`env: carsidock_env` tells binary_dock to run the script as
+`env: carsidock_env` tells generic_dock to run the script as
 `conda run --no-capture-output -n carsidock_env python /path/to/carsidock_dock.py ...`.
 Use a directory path (e.g. `env: ~/miniconda3/envs/carsidock_env`) to bypass conda and call
 that environment's Python directly.
