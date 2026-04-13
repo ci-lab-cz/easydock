@@ -88,7 +88,7 @@ The `info` command must be implemented but may return an empty payload — the c
 
 ## Command 2 — Init Request
 
-Sent **once** after the server starts. Default command name: `"init"` (configurable via `init_command` in config).
+Sent **once** after the server starts. Command name: `"init"`.
 
 **Payload** is the content of the `init_server:` section from the config YAML — receptor files, pocket definition, and any program-specific parameters.
 
@@ -137,7 +137,7 @@ Sent **once** after the server starts. Default command name: `"init"` (configura
 
 ## Command 3 — Dock Request
 
-Sent for each batch of molecules. Default command name: `"dock"` (configurable via `dock_command`).
+Sent for each batch of molecules. Command name: `"dock"`.
 
 **Payload** is a flat dict mapping instance name to a single ligand representation string:
 
@@ -190,7 +190,7 @@ The `results` value is a flat dict mapping each instance name back to a result o
 
 | Field | Type | Description |
 |---|---|---|
-| `results` | object | Dict `{instance_name: result_or_null}`. Key name configurable via `result_items_key`. |
+| `results` | object | Dict `{instance_name: result_or_null}`.|
 | `docking_score` | float | Numeric score. Non-parseable values cause the instance to be skipped. |
 | `mol_block` | string | Best-pose MDL mol block. If present and non-empty, used directly; otherwise converted from `raw_block`. |
 | `raw_block` | string | Raw pose data — multi-conformer SDF or PDBQT text. Stored in the database for later retrieval. |

@@ -31,7 +31,7 @@ Result is a dictionary (keys may vary for different docking programs). Below are
 
 ```python
 {'docking_score': -11.856,
- 'pdb_block': 'string output of all poses in PDB format',
+ 'raw_block': 'string output of all poses in raw docking format (PDBQT or SDF)',
  'mol_block': 'string output of the top pose in MOL format',
  'dock_time': 34}
 ```
@@ -75,14 +75,23 @@ Output: tab-separated SMILES file for major microspecies with molecule names.
 Each program has two complementary functions: to protonate structure in input file and return output file, and a function to parse the output file to return. 
 
 ```python
-from easydock.protonation import protonate_chemaxon, protonate_apptainer, read_protonate_chemaxon, read_smiles
+from easydock.protonation import protonate_chemaxon, protonate_container, read_protonate_chemaxon, read_smiles
 
 protonate_chemaxon(input_file_name, output_file_name)
 for smi, name in read_protonate_chemaxon(output_file_name):
     print(smi, name)
+```
 
-protonate_apptainer(input_file_name, output_file_name, 'path/to/container.sif')
-for smi, name in read_smiles(output_file_name):
+`protonate_container` is a Python-based streaming function (not file-based). It takes an iterator of `(smiles, name)` tuples and yields protonated `(smiles, name)` tuples:
+
+```python
+data = [('NCC(=O)O', 'glycine'), ('C1CNCCN1', 'piperazine')]
+
+for smi, name in protonate_container(data, container='path/to/unipka.sif'):
+    print(smi, name)
+
+# Docker image also supported
+for smi, name in protonate_container(data, container='my-protonation-image'):
     print(smi, name)
 ```
 
@@ -95,10 +104,10 @@ from easydock.protonation import protonate_molgpka, protonate_pkasolver
 
 data = [('NCC(=O)O', 'glycine'), ('C1CNCCN1', 'piperazine')]
 
-for smi. name in protonate_molgpka(data):
+for smi, name in protonate_molgpka(data):
     print(smi, name)
 
-for smi. name in protonate_pkasolver(data):
+for smi, name in protonate_pkasolver(data):
     print(smi, name)
 ```
 
@@ -111,6 +120,6 @@ A more detailed description of protonation functions and their requirements is p
 All those protonate_ family functions can take `pH` argument to specify pH (default 7.4)
 
 ```python
-for smi. name in protonate_molgpka(data, pH=12):
+for smi, name in protonate_molgpka(data, pH=12):
     print(smi, name)
 ```
