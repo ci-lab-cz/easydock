@@ -8,7 +8,7 @@ Welcome to EasyDock documentation! EasyDock is a fully automatic pipeline for mo
 
 ## Overview
 
-EasyDock automates the entire docking process from molecule preparation to result analysis, supporting multiple docking programs and providing organized result storage.
+EasyDock automates the entire docking process from ligand preparation to result analysis, supporting multiple docking programs and providing organized result storage. EasyDock does not prepare protein structures, which should be prepared for each docking program according to their requirements.
 
 ### Key Features
 

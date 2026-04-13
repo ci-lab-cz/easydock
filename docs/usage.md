@@ -7,7 +7,7 @@ There are two major stages which can run separately or simultaneously: ligand pr
 EasyDock uses an SQLite database to store all inputs, parameters, and results. Once initialized, the database preserves all settings for reproducibility.
 
 !!! info "Database Immutability"
-    Once a database is created, most parameters cannot be changed via command line. The database is never overwritten. Delete and reinitialize if settings are incorrect. Direct changes of settings in the database should be done carefully to not create inconsistent settings.
+    Once a database is created, most parameters cannot be changed via command line. The database is never overwritten. Delete and reinitialize if settings are incorrect. Direct changes of settings in the database (`setup` table) should be done carefully to not create inconsistent settings.
 
 ### Basic Initialization
 
@@ -18,14 +18,14 @@ easydock -i input.smi -o output.db -c 4
 ```
 
 Parameters:
-- `-i`: Input SMILES file
-- `-o`: Output database file
-- `-c`: Number of CPU cores
+- `-i`: Input SMILES file  
+- `-o`: Output database file  
+- `-c`: Number of CPU cores  
 
 This performs:
-- Salt removal
-- Generation of one stereoisomer if there are some undefined chiral centers or double bonds (reproducible generation)
-- Conversion to 3D structures (or uses existing coordinates if 3D SDF input)
+- Salt removal  
+- Generation of one stereoisomer if there are some undefined chiral centers or double bonds (reproducible generation)  
+- Conversion to 3D structures (or uses existing coordinates if 3D SDF input)  
 
 ### Stereoisomer Enumeration
 
@@ -281,7 +281,7 @@ EasyDock will continue from where it stopped, using settings stored in the datab
 
 ### Generate SDF File
 
-Add `--sdf` flag to create an SDF file with top poses:
+Add `--sdf` flag to create an SDF file with top poses after docking will be finished:
 
 ```bash
 easydock -o output.db --program vina --config config.yml -c 4 --sdf
@@ -290,4 +290,4 @@ easydock -o output.db --program vina --config config.yml -c 4 --sdf
 This creates `output.sdf` with the best scoring pose for each molecule.
 
 !!! note "Feature"
-    The argument `--sdf` automatically extracts only one stereoisomer with the best docking scores among generated ones by EasyDock 
+    The argument `--sdf` automatically extracts only one stereoisomer with the best docking scores among generated ones by EasyDock. If different stereoisomers were supplied as input, they will be treated as individual species by `--sdf` option. 

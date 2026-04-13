@@ -198,7 +198,7 @@ docker build -t carsidock .
 
 #### Vina-GPU Server (server-based docking)
 
-The build downloads GPU binaries and Boost from source. Requires an internet connection.
+The build downloads CPU and GPU binaries and Boost from source. Requires an internet connection.
 
 ```bash
 cd containers/vinagpu
