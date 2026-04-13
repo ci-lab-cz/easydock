@@ -51,5 +51,6 @@ easydock -i input.smi -o output.db --program vina --config config.yml --protonat
 - **[PLIF Analysis](plif.md)**: Protein-ligand interaction fingerprints
 - **[Python API](python_api.md)**: Using EasyDock programmatically
 - **[Customization](customization.md)**: Extending EasyDock functionality
+- **[Third-party Licenses](licenses.md)**: Licenses of all integrated tools
 - **[Citation](citation.md)**: Citation information
 - **[Changelog](changelog.md)**: Changes in each version

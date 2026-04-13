@@ -46,6 +46,7 @@ nav:
   - PLIF analysis: plif.md
   - Python API: python_api.md
   - Customization: customization.md
+  - Third-party Licenses: licenses.md
   - Citation: citation.md
   - Changelog: changelog.md
   - For Developers:

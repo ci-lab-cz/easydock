@@ -35,6 +35,15 @@ easydock -i input.smi -o output.db --program vina --config config.yml --protonat
 ## Licence
 BSD-3
 
+## Third-party tools
+
+EasyDock integrates several external tools, each governed by its own license.
+See the [full license list](https://easydock.readthedocs.io/en/latest/licenses/) in the documentation.
+
+- Most docking programs and protonation tools are **Apache 2.0** or **MIT**
+- Chemaxon requires a **commercial license**
+- Meeko is **LGPL-2.1**
+
 ## Citation
 Minibaeva, G.; Ivanova, A.; Polishchuk, P.,  
 EasyDock: customizable and scalable docking tool.  
