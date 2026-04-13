@@ -17,12 +17,12 @@ Create a database with molecule validation:
 easydock -i input.smi -o output.db -c 4
 ```
 
-Parameters:
+Parameters:  
 - `-i`: Input SMILES file  
 - `-o`: Output database file  
 - `-c`: Number of CPU cores  
 
-This performs:
+This performs:  
 - Salt removal  
 - Generation of one stereoisomer if there are some undefined chiral centers or double bonds (reproducible generation)  
 - Conversion to 3D structures (or uses existing coordinates if 3D SDF input)  
@@ -244,9 +244,25 @@ info_server:
   batch_size: 5
 ```
 
+#### SurfDock
+
+SurfDock is a surface-aware deep-learning docking program. It accepts SMILES input and ranks poses by screen confidence (higher score = better). A pre-built Apptainer container is available (see [Installation](installation.md#pre-build-containers)).
+
+```yaml
+script_file: /path/to/surfdock.sif
+
+init_server:
+  protein: /path/to/protein.pdb
+  reflig: /path/to/reference_ligand.sdf
+  num_save_poses: 10        # number of poses to save per ligand (default: 10)
+  device: gpu               # gpu or cpu (default: gpu)
+  tmpdir: /path/to/tmp/dir  # (optional), where to store temporary files
+  keep_tmpdir: true         # (default: false), whether to keep temp file (useful for debug)
+```
+
 #### Vina-GPU Server
 
-The Vina-GPU server bundles Vina-GPU, QVina2-GPU, and QVinaW-GPU in a single container. It accepts PDBQT input and output and uses Vina scoring (lower = better).
+The Vina-GPU server bundles GPU and CPU Vina variants in a single container. It accepts PDBQT input and output and uses Vina scoring (lower = better).
 
 ```yaml
 script_file: /path/to/vinagpu.sif
@@ -261,11 +277,19 @@ init_server:
 ```
 
 !!! tip "Program Variants"
-    Change the `program` field under `init_server` to switch between GPU variants:
+    Change the `program` field under `init_server` to switch between variants:
+
+    **GPU variants** (require a compatible GPU):
 
     - `vina-gpu` — AutoDock Vina-GPU
     - `qvina-gpu` — QuickVina2-GPU
     - `qvinaw-gpu` — QuickVina-W-GPU
+
+    **CPU variants** (no GPU required):
+
+    - `vina` — AutoDock Vina
+    - `qvina` — QuickVina2
+    - `qvinaw` — QuickVina-W
 
 ## Resuming Interrupted Calculations
 

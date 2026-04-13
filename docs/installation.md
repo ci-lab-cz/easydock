@@ -121,14 +121,11 @@ Install Singularity or Apptainer following their official documentation.
 
 ### macOS
 
-Containers run through Docker since Singularity/Apptainer cannot run natively on macOS.
+EasyDock supports Docker natively on macOS. Install Docker and ensure CLI access without sudo — no additional setup is required.
 
-**Setup Steps:**
+#### Running SIF Containers via Apptainer Proxy (Advanced)
 
-1. **Install Docker** - Ensure CLI access without sudo
-2. **Create Apptainer Container**
-
-Create a file named `Dockerfile`:
+If you need to run Apptainer SIF containers on macOS, you can set up a Docker-based Apptainer proxy. Create a file named `Dockerfile`:
 
 ```dockerfile
 FROM ubuntu:22.04

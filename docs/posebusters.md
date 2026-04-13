@@ -18,15 +18,26 @@ On the **first run**, the protein structure is stored in the database and reused
 
 ## Arguments
 
-| Argument | Default | Description |
-|----------|---------|-------------|
-| `-i` / `--input` | required | EasyDock SQLite database |
-| `-p` / `--protein` | — | Protein PDB file with all hydrogen atoms. Required on the first run; stored in the database and reused on subsequent runs. Providing a different file replaces the stored structure and clears all previously computed bust results. |
-| `-d` / `--ids` | all docked | Molecule IDs to process. Can be a space-separated list or a path to a text file with one ID per line. |
-| `--poses` | `1` | Pose numbers to check, 1-based. |
-| `-c` / `--ncpu` | all CPUs | Number of CPUs. |
-| `-o` / `--output` | stdout | Output file path. |
-| `--full` | off | Write all individual PoseBusters check columns to the output. When set, all molecules are re-processed from scratch to produce the full report. |
+`-i` / `--input` (required)
+:   EasyDock SQLite database.
+
+`-p` / `--protein`
+:   Protein PDB file with all hydrogen atoms. Required on the first run; stored in the database and reused on subsequent runs. Providing a different file replaces the stored structure and clears all previously computed bust results.
+
+`-d` / `--ids` (default: all docked)
+:   Molecule IDs to process. Can be a space-separated list or a path to a text file with one ID per line.
+
+`--poses` (default: `1`)
+:   Pose numbers to check, 1-based.
+
+`-c` / `--ncpu` (default: all CPUs)
+:   Number of CPUs.
+
+`-o` / `--output` (default: stdout)
+:   Output file path.
+
+`--full`
+:   Write all individual PoseBusters check columns to the output. When set, all molecules are re-processed from scratch to produce the full report.
 
 ## Output Format
 

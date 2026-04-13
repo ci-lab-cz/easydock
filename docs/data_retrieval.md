@@ -122,6 +122,6 @@ get_sdf_from_easydock -i output.db -o output.sdf --add_sql 'docking_score < -10'
 ## Enumerated Stereoisomer Handling
 
 !!! warning "Stereoisomer Limitation"
-    `get_sdf_from_easydock` does not automatically select the best pose among enumerated stereoisomers. 
+    `get_sdf_from_easydock` does not automatically select the best pose among enumerated stereoisomers. It treats all database records as independent. 
     
-    **Workaround:** Use `easydock -o database.db --sdf` which handles this automatically.
+    **Workaround:** If needed, use `easydock -o database.db --sdf` which keep only the best enumerated stereoisomer.

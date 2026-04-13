@@ -301,3 +301,59 @@ A minimal server must:
 5. Write each response as a JSON Line to STDOUT, wrapping it as `{"id": <id>, "payload": <result>}`.
 
 See `containers/carsidock/carsidock_server.py` and `containers/vinagpu/vinagpu_server.py` in the repository for complete reference implementations.
+
+---
+
+## Container Interface Conventions
+
+EasyDock detects the container type from `script_file` and builds the launch command automatically.
+
+### How EasyDock launches the container
+
+The `script_file` value is parsed as follows:
+
+| `script_file` form | How it is launched |
+|---|---|
+| Path ending in `.sif` (file exists) | `apptainer run [--nv] [--bind ...] file.sif server` |
+| Name that is not an existing file/dir | `docker run -i --rm [--gpus all] [-v ...] image server` |
+| Starts with `apptainer` / `singularity` / `docker` | Used as-is (full form — bind mounts and GPU flags are the user's responsibility) |
+| Anything else | Run as a plain executable |
+
+`server` is always appended as the first positional argument so the container entrypoint knows to start the JSON Lines server.
+
+### GPU and bind-mount auto-detection
+
+- **GPU**: if `nvidia-smi` is accessible, EasyDock automatically adds `--nv` (Apptainer/Singularity) or `--gpus all` (Docker) to the launch command. No manual configuration is needed.
+- **Bind mounts**: EasyDock recursively scans all values in the `init_server:` config section, identifies existing file and directory paths, and mounts their parent directories into the container at the same absolute path. Receptor files and grid definitions passed via `init_server:` are therefore accessible inside the container without any manual `-v` or `--bind` flags.
+
+### Apptainer / Singularity — `%runscript` template
+
+```singularity
+%runscript
+    case "$1" in
+        server)
+            shift
+            exec python3 /opt/myserver/server.py "$@"
+            ;;
+        help)
+            echo "Usage: apptainer run myserver.sif server"
+            ;;
+        *)
+            exec "$@"
+            ;;
+    esac
+```
+
+### Docker — `ENTRYPOINT` template
+
+```dockerfile
+ENTRYPOINT ["/bin/sh", "-c", "\
+  case \"$1\" in \
+    server) shift; exec python /opt/myserver/server.py \"$@\" ;; \
+    help)   echo 'Use: docker run <image> server' ;; \
+    *)      exec \"$@\" ;; \
+  esac", "--"]
+```
+
+!!! note "Stdin must stay open"
+    Docker containers must be started with `-i` (`--interactive`) so STDIN remains connected. EasyDock adds `-i` automatically when launching Docker containers in bare form.
