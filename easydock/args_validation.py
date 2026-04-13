@@ -3,7 +3,7 @@ import argparse
 from multiprocessing import cpu_count
 from easydock.auxiliary import expand_path as _expand_path
 
-protonation_programs = ['chemaxon', 'pkasolver', 'molgpka']
+protonation_programs = ['chemaxon', 'pkasolver', 'molgpka', 'molgpka_fix']
 
 def protonation_type(value: str):
     if value.endswith(".sif") and os.path.isfile(_expand_path(value)):

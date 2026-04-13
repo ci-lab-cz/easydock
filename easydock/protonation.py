@@ -181,7 +181,7 @@ def __protonate_pkasolver(args, model, pH: float = 7.4):
     return Chem.MolToSmiles(output_mol), mol_name
 
 
-def protonate_molgpka(items: Iterator[Tuple[str, str]], ncpu: int = 1, pH: float = 7.4):
+def protonate_molgpka(items: Iterator[Tuple[str, str]], ncpu: int = 1, pH: float = 7.4, fix: bool = False):
     # parallel execution of protonation was disabled because runs much slower than a single process protonation
     warnings.filterwarnings('ignore', category=UserWarning)
     from molgpka.predict_pka_mp import load_state_dicts, load_models
@@ -190,7 +190,7 @@ def protonate_molgpka(items: Iterator[Tuple[str, str]], ncpu: int = 1, pH: float
     models = load_state_dicts()
     models = load_models(models)
     for q in items:
-        yield __protonate_molgpka(q, models, pH=pH)
+        yield __protonate_molgpka(q, models, pH=pH, fix=fix)
 
 
 def __add_hydrogen_to_atom(editable_mol, atom_idx):
@@ -208,7 +208,7 @@ def __assign_pka_pkb_to_heavy_atoms(mol, acid_dict, base_dict):
     return mol
 
 
-def __protonate_molgpka(args, models, pH: float = 7.4):
+def __protonate_molgpka(args, models, pH: float = 7.4, fix: bool = False):
     from molgpka.predict_pka_mp import predict2
 
     smi, mol_name = args
@@ -247,60 +247,61 @@ def __protonate_molgpka(args, models, pH: float = 7.4):
                     logging.warning(f'(molgpka) Molecule {mol_name} has issues with assignment of protonation states (protonation)')
         editable_mol.UpdatePropertyCache()
 
-        # fix and revert some protonation states
-        for pattern, ids, pattern_type in molgpka_patterns1:
-            matches = editable_mol.GetSubstructMatches(pattern, uniquify=True)
-            if pattern_type == 'pos':
-                prop_name = 'pkb'
-            else:
-                prop_name = 'pka'
-            while matches:
-                worst_value = float('inf') if pattern_type == 'pos' else float('-inf')
-                worst_atom_idx = None
-                for match in matches:
-                    v1 = editable_mol.GetAtomWithIdx(match[ids[0]]).GetDoubleProp(prop_name)
-                    v2 = editable_mol.GetAtomWithIdx(match[ids[1]]).GetDoubleProp(prop_name)
-                    if pattern_type == 'neg' and max(v1, v2) > worst_value:
-                        worst_value = max(v1, v2)
-                        if v1 > v2:
-                            worst_atom_idx = match[ids[0]]
-                        else:
-                            worst_atom_idx = match[ids[1]]
-                    elif pattern_type == 'pos' and min(v1, v2) < worst_value:
-                        worst_value = min(v1, v2)
-                        if v1 < v2:
-                            worst_atom_idx = match[ids[0]]
-                        else:
-                            worst_atom_idx = match[ids[1]]
-
-                charge = editable_mol.GetAtomWithIdx(worst_atom_idx).GetFormalCharge()
-                if pattern_type == 'pos':
-                    atom = editable_mol.GetAtomWithIdx(worst_atom_idx)
-                    atom.SetFormalCharge(charge - 1)
-                    atom.SetNumExplicitHs(atom.GetNumExplicitHs() - 1)
-                elif pattern_type == 'neg':
-                    atom = editable_mol.GetAtomWithIdx(worst_atom_idx)
-                    atom.SetFormalCharge(charge + 1)
-                    atom.SetNumExplicitHs(atom.GetNumExplicitHs() + 1)
-
+        if fix:
+            # fix and revert some protonation states
+            for pattern, ids, pattern_type in molgpka_patterns1:
                 matches = editable_mol.GetSubstructMatches(pattern, uniquify=True)
-
-        editable_mol.UpdatePropertyCache()
-
-        # single atom fixes
-        for pattern, pattern_type in molgpka_patterns2:
-            matches = editable_mol.GetSubstructMatches(pattern, uniquify=True)
-            for match in matches:
-                atom = editable_mol.GetAtomWithIdx(match[0])
                 if pattern_type == 'pos':
-                    atom.SetFormalCharge(atom.GetFormalCharge() - 1)
-                    atom.SetNumExplicitHs(atom.GetNumExplicitHs() - 1)
-                    atom.UpdatePropertyCache()
-                if pattern_type == 'neg':
-                    atom.SetFormalCharge(atom.GetFormalCharge() + 1)
-                    atom.SetNumExplicitHs(atom.GetNumExplicitHs() + 1)
-                    atom.UpdatePropertyCache()
-        editable_mol.UpdatePropertyCache()
+                    prop_name = 'pkb'
+                else:
+                    prop_name = 'pka'
+                while matches:
+                    worst_value = float('inf') if pattern_type == 'pos' else float('-inf')
+                    worst_atom_idx = None
+                    for match in matches:
+                        v1 = editable_mol.GetAtomWithIdx(match[ids[0]]).GetDoubleProp(prop_name)
+                        v2 = editable_mol.GetAtomWithIdx(match[ids[1]]).GetDoubleProp(prop_name)
+                        if pattern_type == 'neg' and max(v1, v2) > worst_value:
+                            worst_value = max(v1, v2)
+                            if v1 > v2:
+                                worst_atom_idx = match[ids[0]]
+                            else:
+                                worst_atom_idx = match[ids[1]]
+                        elif pattern_type == 'pos' and min(v1, v2) < worst_value:
+                            worst_value = min(v1, v2)
+                            if v1 < v2:
+                                worst_atom_idx = match[ids[0]]
+                            else:
+                                worst_atom_idx = match[ids[1]]
+
+                    charge = editable_mol.GetAtomWithIdx(worst_atom_idx).GetFormalCharge()
+                    if pattern_type == 'pos':
+                        atom = editable_mol.GetAtomWithIdx(worst_atom_idx)
+                        atom.SetFormalCharge(charge - 1)
+                        atom.SetNumExplicitHs(atom.GetNumExplicitHs() - 1)
+                    elif pattern_type == 'neg':
+                        atom = editable_mol.GetAtomWithIdx(worst_atom_idx)
+                        atom.SetFormalCharge(charge + 1)
+                        atom.SetNumExplicitHs(atom.GetNumExplicitHs() + 1)
+
+                    matches = editable_mol.GetSubstructMatches(pattern, uniquify=True)
+
+            editable_mol.UpdatePropertyCache()
+
+            # single atom fixes
+            for pattern, pattern_type in molgpka_patterns2:
+                matches = editable_mol.GetSubstructMatches(pattern, uniquify=True)
+                for match in matches:
+                    atom = editable_mol.GetAtomWithIdx(match[0])
+                    if pattern_type == 'pos':
+                        atom.SetFormalCharge(atom.GetFormalCharge() - 1)
+                        atom.SetNumExplicitHs(atom.GetNumExplicitHs() - 1)
+                        atom.UpdatePropertyCache()
+                    if pattern_type == 'neg':
+                        atom.SetFormalCharge(atom.GetFormalCharge() + 1)
+                        atom.SetNumExplicitHs(atom.GetNumExplicitHs() + 1)
+                        atom.UpdatePropertyCache()
+            editable_mol.UpdatePropertyCache()
 
         changed_smi = Chem.MolToSmiles(Chem.RemoveHs(editable_mol))
 

@@ -594,11 +594,13 @@ def add_protonation(db_fname, program='molgpka', tautomerize=True, table_name='m
                     items = []
             update_db_protonated_smiles(conn, items, table_name)
 
-        elif program in ['pkasolver', 'molgpka']:  # native python protocol
+        elif program in ['pkasolver', 'molgpka', 'molgpka_fix']:  # native python protocol
             if program == 'pkasolver':
                 protonate_func = partial(protonate_pkasolver, ncpu=ncpu, mol_count=mol_count, pH=pH)
             elif program == 'molgpka':
-                protonate_func = partial(protonate_molgpka, ncpu=1, pH=pH)
+                protonate_func = partial(protonate_molgpka, ncpu=1, pH=pH, fix=False)
+            elif program == 'molgpka_fix':
+                protonate_func = partial(protonate_molgpka, ncpu=1, pH=pH, fix=True)
             else:
                 raise ValueError(f'There is no implemented functions to protonate molecules by {program}')
 
