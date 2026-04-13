@@ -1,2 +1,6 @@
 .idea
 easydock/__pycache__
+build
+easydock.egg-info
+dist
+test
