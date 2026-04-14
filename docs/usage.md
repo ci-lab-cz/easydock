@@ -219,7 +219,7 @@ The ligand input/output formats (`ligand_in_format`, `ligand_out_format`) are au
 
 #### CarsiDock
 
-CarsiDock is a deep-learning docking program. It accepts SMILES input and uses RTMScore for pose ranking (higher score = better). A pre-built Apptainer container is available (see [Installation](installation.md#pre-built-containers)).
+CarsiDock is a deep-learning docking program. It accepts SMILES input and uses RTMScore for pose ranking (higher score = better). A pre-built Apptainer container is available (see [Installation](installation.md#pre-built-docking-containers)).
 
 ```yaml
 script_file: /path/to/carsidock.sif
@@ -252,7 +252,7 @@ info_server:
 
 #### SurfDock
 
-SurfDock is a surface-aware deep-learning docking program. It accepts SMILES input and ranks poses by screen confidence (higher score = better). A pre-built Apptainer container is available (see [Installation](installation.md#pre-built-containers)).
+SurfDock is a surface-aware deep-learning docking program. It accepts SMILES input and ranks poses by screen confidence (higher score = better). A pre-built Apptainer container is available (see [Installation](installation.md#containerized-docking-programs)).
 
 ```yaml
 script_file: /path/to/surfdock.sif

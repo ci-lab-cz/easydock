@@ -85,7 +85,7 @@ for smi, name in read_protonate_chemaxon(output_file_name):
 
 ### Container-based Protonation Functions
 
-`protonate_container` launches a container once and streams molecules through it via stdin/stdout. It takes an iterator of `(smiles, name)` tuples and yields protonated `(smiles, name)` tuples. Both Apptainer/Singularity SIF files and Docker images are supported (see [pre-built containers](installation.md#pre-built-containers)).
+`protonate_container` launches a container once and streams molecules through it via stdin/stdout. It takes an iterator of `(smiles, name)` tuples and yields protonated `(smiles, name)` tuples. Both Apptainer/Singularity SIF files and Docker images are supported (see [pre-built containers](installation.md#pre-built-protonation-containers)).
 
 ```python
 from easydock.protonation import protonate_container
