@@ -44,6 +44,11 @@ Using MolGpKa:
 easydock -i input.smi -o output.db -c 4 --protonation molgpka
 ```
 
+Using MolGpKa with post-processing SMARTS fixes (corrects common mis-protonations):
+```bash
+easydock -i input.smi -o output.db -c 4 --protonation molgpka_fix
+```
+
 Using pre-built Uni-pKa container:
 ```bash
 easydock -i input.smi -o output.db -c 4 --protonation /path/to/unipka.sif
@@ -190,7 +195,8 @@ seed: 0
     
     - `qvina2`
     - `qvina-w`
-    - `vina` - Vina can be used through a binary executable
+    
+    The `qvina` module also accepts a plain `vina` binary — the CLI is compatible.
 
 ### Server-Based Docking
 
@@ -213,7 +219,7 @@ The ligand input/output formats (`ligand_in_format`, `ligand_out_format`) are au
 
 #### CarsiDock
 
-CarsiDock is a deep-learning docking program. It accepts SMILES input and uses RTMScore for pose ranking (higher score = better). A pre-built Apptainer container is available (see [Installation](installation.md#pre-build-containers)).
+CarsiDock is a deep-learning docking program. It accepts SMILES input and uses RTMScore for pose ranking (higher score = better). A pre-built Apptainer container is available (see [Installation](installation.md#pre-built-containers)).
 
 ```yaml
 script_file: /path/to/carsidock.sif
@@ -246,7 +252,7 @@ info_server:
 
 #### SurfDock
 
-SurfDock is a surface-aware deep-learning docking program. It accepts SMILES input and ranks poses by screen confidence (higher score = better). A pre-built Apptainer container is available (see [Installation](installation.md#pre-build-containers)).
+SurfDock is a surface-aware deep-learning docking program. It accepts SMILES input and ranks poses by screen confidence (higher score = better). A pre-built Apptainer container is available (see [Installation](installation.md#pre-built-containers)).
 
 ```yaml
 script_file: /path/to/surfdock.sif
@@ -290,6 +296,16 @@ init_server:
     - `vina` — AutoDock Vina
     - `qvina` — QuickVina2
     - `qvinaw` — QuickVina-W
+
+### Generic Docking
+
+`--program generic` runs any external docking binary or Python script driven purely by a YAML config — no code changes required. Useful for docking programs that EasyDock does not ship a dedicated module for.
+
+```bash
+easydock -i input.smi -o output.db --program generic --config config.yml -c 4 --sdf
+```
+
+See [Generic Docking](generic_dock.md) for the full config format and I/O conventions.
 
 ## Resuming Interrupted Calculations
 
