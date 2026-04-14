@@ -46,11 +46,12 @@ nav:
   - Pose quality assessment: posebusters.md
   - PLIF analysis: plif.md
   - Python API: python_api.md
-  - Customization: customization.md
   - Third-party Licenses: licenses.md
   - Citation: citation.md
   - Changelog: changelog.md
   - For Developers:
+    - Adding a Docking Program: custom_docking.md
+    - Adding a Protonation Tool: custom_protonation.md
     - Server Protocol: server_protocol.md
 
 plugins:

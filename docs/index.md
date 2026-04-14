@@ -52,7 +52,12 @@ easydock -i input.smi -o output.db --program vina --config config.yml --protonat
 - **[Pose Quality Assessment](posebusters.md)**: Running PoseBusters on docked poses with `easydock_bust`
 - **[PLIF Analysis](plif.md)**: Protein-ligand interaction fingerprints
 - **[Python API](python_api.md)**: Using EasyDock programmatically
-- **[Customization](customization.md)**: Extending EasyDock functionality
 - **[Third-party Licenses](licenses.md)**: Licenses of all integrated tools
 - **[Citation](citation.md)**: Citation information
 - **[Changelog](changelog.md)**: Changes in each version
+
+### For Developers
+
+- **[Server Protocol](server_protocol.md)**: Client-server docking protocol and container interface conventions
+- **[Adding a Docking Program](custom_docking.md)**: Implementing a new `xxx_dock.py` module
+- **[Adding a Protonation Tool](custom_protonation.md)**: File-based, native Python, and container-based protonation conventions
