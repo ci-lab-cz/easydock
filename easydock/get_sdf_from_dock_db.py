@@ -115,10 +115,13 @@ def main():
             sys.exit(1)
 
     # add raw_block field to retrieve poses, only if sdf file should be returned as output
-    try:
-        docking_format = get_variables(conn, 'database', ['raw_format'])['raw_format']
-    except KeyError:
-        docking_format = DEFAULT_RAW_FORMAT
+    docking_format = DEFAULT_RAW_FORMAT
+    if conn.execute('PRAGMA user_version').fetchone()[0] > 0:
+        try:
+            docking_format = get_variables(conn, 'database', ['raw_format'])['raw_format']
+        except KeyError:
+            docking_format = DEFAULT_RAW_FORMAT
+
     if ext == 'sdf' and args.poses:
         if 'raw_block' not in args.fields:
             args.fields.append('raw_block')
