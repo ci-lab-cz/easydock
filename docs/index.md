@@ -46,7 +46,6 @@ easydock -i input.smi -o output.db --program vina --config config.yml --protonat
 
 - **[Installation](installation.md)**: Setup instructions for all platforms
 - **[Usage Guide](usage.md)**: Complete guide for running docking simulations
-- **[Generic Docking](generic_dock.md)**: Using EasyDock with arbitrary external docking programs
 - **[Advanced Features](advanced.md)**: Ring sampling, distributed computing, and more
 - **[Data Retrieval](data_retrieval.md)**: Extracting and analyzing results
 - **[Pose Quality Assessment](posebusters.md)**: Running PoseBusters on docked poses with `easydock_bust`
@@ -58,6 +57,7 @@ easydock -i input.smi -o output.db --program vina --config config.yml --protonat
 
 ### For Developers
 
-- **[Server Protocol](server_protocol.md)**: Client-server docking protocol and container interface conventions
 - **[Adding a Docking Program](custom_docking.md)**: Implementing a new `xxx_dock.py` module
 - **[Adding a Protonation Tool](custom_protonation.md)**: File-based, native Python, and container-based protonation conventions
+- **[Server Protocol](server_protocol.md)**: Client-server docking protocol and container interface conventions
+- **[Generic Docking](generic_dock.md)**: Using EasyDock with arbitrary external docking programs

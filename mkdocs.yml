@@ -40,7 +40,6 @@ nav:
   - Home: index.md
   - Installation: installation.md
   - Usage: usage.md
-  - Generic Docking: generic_dock.md
   - Advanced features: advanced.md
   - Data retrieval: data_retrieval.md
   - Pose quality assessment: posebusters.md
@@ -53,6 +52,7 @@ nav:
     - Adding a Docking Program: custom_docking.md
     - Adding a Protonation Tool: custom_protonation.md
     - Server Protocol: server_protocol.md
+    - Generic Docking: generic_dock.md
 
 plugins:
   - search
