@@ -15,7 +15,7 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/ci-lab-cz/easydock",
-    packages=['easydock'],
+    packages=['easydock', 'easydock.dock'],
     classifiers=[
         "Programming Language :: Python :: 3",
         "Operating System :: OS Independent",

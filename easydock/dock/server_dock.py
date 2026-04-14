@@ -10,7 +10,7 @@ import yaml
 from rdkit import Chem
 
 from easydock.containers import build_server_container_cmd
-from easydock.persistent_client import JsonLineProcessClient
+from easydock.dock.persistent_client import JsonLineProcessClient
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ def _normalize_path_values(obj):
 def _ensure_preparation_functions():
     global ligand_preparation, pdbqt2molblock
     if ligand_preparation is None or pdbqt2molblock is None:
-        from easydock.preparation_for_docking import (
+        from easydock.dock.preparation_for_docking import (
             ligand_preparation as _ligand_preparation,
             pdbqt2molblock as _pdbqt2molblock,
         )

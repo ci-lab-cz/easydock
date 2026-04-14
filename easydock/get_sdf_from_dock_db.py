@@ -7,7 +7,7 @@ import sqlite3
 import sys
 from rdkit import Chem
 
-from .preparation_for_docking import pdbqt2molblock
+from .dock.preparation_for_docking import pdbqt2molblock
 from .database import get_variables, DEFAULT_RAW_FORMAT
 
 

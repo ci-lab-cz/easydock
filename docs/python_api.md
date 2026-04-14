@@ -8,7 +8,7 @@ EasyDock can be used as a Python library for custom workflows and integration wi
 
 ```python
 from easydock.run_dock import docking
-from easydock.vina_dock import mol_dock
+from easydock.dock.vina_dock import mol_dock
 from rdkit import Chem
 
 # Prepare molecules, exactly the same species as provided will be docked 
@@ -39,11 +39,11 @@ Result is a dictionary (keys may vary for different docking programs). Below are
 ### Using other integrated docking tools
 
 ```python
-from easydock.gnina_dock import mol_dock
-from easydock.qvina_dock import mol_dock
-from easydock.vinagpu_dock import mol_dock
-from easydock.server_dock import mol_dock
-from easydock.generic_dock import mol_dock
+from easydock.dock.gnina_dock import mol_dock
+from easydock.dock.qvina_dock import mol_dock
+from easydock.dock.vinagpu_dock import mol_dock
+from easydock.dock.server_dock import mol_dock
+from easydock.dock.generic_dock import mol_dock
 
 # Same code as above, just import other mol_dock function
 ...

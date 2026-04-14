@@ -12,7 +12,7 @@ import yaml
 from rdkit import Chem
 
 from easydock.auxiliary import expand_path
-from easydock.preparation_for_docking import ligand_preparation, pdbqt2molblock
+from easydock.dock.preparation_for_docking import ligand_preparation, pdbqt2molblock
 
 logger = logging.getLogger(__name__)
 

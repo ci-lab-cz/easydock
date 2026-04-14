@@ -17,7 +17,7 @@ from easydock.database import create_db, init_db, check_db_status, update_db, sa
 from easydock.session import restore_session
 from easydock.reporting import get_pipeline_statistics, write_stage_error_log, report_error_log_file
 from easydock.args_validation import protonation_type, protonation_programs, cpu_type, filepath_type, log_level_type
-from easydock.server_dock import server_info
+from easydock.dock.server_dock import server_info
 
 
 class RawTextArgumentDefaultsHelpFormatter(argparse.RawTextHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
@@ -305,22 +305,22 @@ def main():
         if args.config:
             populate_setup_db(args.output, args)
             if args.program == 'vina':
-                from easydock.vina_dock import mol_dock, pred_dock_time
+                from easydock.dock.vina_dock import mol_dock, pred_dock_time
             elif args.program == 'gnina':
-                from easydock.gnina_dock import mol_dock
-                from easydock.vina_dock import pred_dock_time
+                from easydock.dock.gnina_dock import mol_dock
+                from easydock.dock.vina_dock import pred_dock_time
             elif args.program == 'vina-gpu':
-                from easydock.vinagpu_dock import mol_dock
-                from easydock.vina_dock import pred_dock_time
+                from easydock.dock.vinagpu_dock import mol_dock
+                from easydock.dock.vina_dock import pred_dock_time
             elif args.program == 'qvina':
-                from easydock.qvina_dock import mol_dock
-                from easydock.vina_dock import pred_dock_time
+                from easydock.dock.qvina_dock import mol_dock
+                from easydock.dock.vina_dock import pred_dock_time
             elif args.program == 'server':
-                from easydock.server_dock import mol_dock
-                from easydock.vina_dock import pred_dock_time
+                from easydock.dock.server_dock import mol_dock
+                from easydock.dock.vina_dock import pred_dock_time
             elif args.program == 'generic':
-                from easydock.generic_dock import mol_dock
-                from easydock.vina_dock import pred_dock_time
+                from easydock.dock.generic_dock import mol_dock
+                from easydock.dock.vina_dock import pred_dock_time
             else:
                 raise ValueError(f'Illegal --program argument value was supplied: {args.program}')
 

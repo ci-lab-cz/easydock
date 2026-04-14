@@ -7,16 +7,16 @@ This page is intended for **developers** who want to integrate a new docking pro
 
 ## Overview
 
-Each docking program has its own module in the `easydock/` package that exposes a `mol_dock` function:
+Each docking program has its own module in the `easydock/dock/` subpackage that exposes a `mol_dock` function:
 
 | Program | Module |
 |---|---|
-| Vina | `easydock/vina_dock.py` |
-| Gnina/Smina | `easydock/gnina_dock.py` |
-| QVina | `easydock/qvina_dock.py` |
-| Vina-GPU | `easydock/vinagpu_dock.py` |
-| Server-based (CarsiDock, SurfDock, Vina-GPU server) | `easydock/server_dock.py` |
-| Generic (config-driven wrapper) | `easydock/generic_dock.py` |
+| Vina | `easydock/dock/vina_dock.py` |
+| Gnina/Smina | `easydock/dock/gnina_dock.py` |
+| QVina | `easydock/dock/qvina_dock.py` |
+| Vina-GPU | `easydock/dock/vinagpu_dock.py` |
+| Server-based (CarsiDock, SurfDock, Vina-GPU server) | `easydock/dock/server_dock.py` |
+| Generic (config-driven wrapper) | `easydock/dock/generic_dock.py` |
 
 ## Function Signature
 
@@ -114,9 +114,10 @@ for mol_id, res in docking(mols,
 
 To make the new program available via `easydock --program my_program`, add:
 
-1. **A new choice** for `--program` in the argparse definition in `easydock/run_dock.py`.
-2. **An import branch** in `run_dock.py` that imports `mol_dock` from your new module when `args.program == 'my_program'`. Search for the existing branches (`if args.program == 'vina': ...`) and add yours alongside.
+1. **Place the new module** under `easydock/dock/` (e.g. `easydock/dock/my_program_dock.py`).
+2. **A new choice** for `--program` in the argparse definition in `easydock/run_dock.py`.
+3. **An import branch** in `run_dock.py` that imports `mol_dock` from your new module (`from easydock.dock.my_program_dock import mol_dock`) when `args.program == 'my_program'`. Search for the existing branches (`if args.program == 'vina': ...`) and add yours alongside.
 
 ## Reference Implementations
 
-The existing modules are the best starting point. `vina_dock.py` is the simplest (pure-Python Vina binding); `server_dock.py` and `generic_dock.py` show more elaborate patterns for batched and config-driven execution.
+The existing modules are the best starting point. `easydock/dock/vina_dock.py` is the simplest (pure-Python Vina binding); `easydock/dock/server_dock.py` and `easydock/dock/generic_dock.py` show more elaborate patterns for batched and config-driven execution.

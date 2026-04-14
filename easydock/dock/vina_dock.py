@@ -12,7 +12,7 @@ import timeit
 
 from rdkit.Chem.rdMolDescriptors import CalcNumRotatableBonds
 from easydock.auxiliary import expand_path
-from easydock.preparation_for_docking import ligand_preparation, pdbqt2molblock
+from easydock.dock.preparation_for_docking import ligand_preparation, pdbqt2molblock
 
 import platform
 if platform.system() != 'Windows':

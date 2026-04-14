@@ -234,7 +234,7 @@ Unknown commands must return:
 
 ## Final Output
 
-`mol_dock` from `server_dock.py` returns a **list** of `(mol_id, output)` tuples — one per input molecule:
+`mol_dock` from `easydock/dock/server_dock.py` returns a **list** of `(mol_id, output)` tuples — one per input molecule:
 
 ```python
 (mol_id, {

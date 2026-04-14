@@ -16,9 +16,9 @@ from typing import Optional, Union, List, Dict
 import yaml
 
 from easydock import read_input
-from easydock.preparation_for_docking import mol_is_3d
+from easydock.dock.preparation_for_docking import mol_is_3d
 from easydock.auxiliary import take, mol_name_split, timeout, expand_path, count_input_structures
-from easydock.preparation_for_docking import pdbqt2molblock
+from easydock.dock.preparation_for_docking import pdbqt2molblock
 from easydock.protonation import (
     protonate_chemaxon,
     read_protonate_chemaxon,

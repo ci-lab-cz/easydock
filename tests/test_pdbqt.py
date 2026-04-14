@@ -1,7 +1,7 @@
 import pytest
 from rdkit import Chem
 
-from easydock.preparation_for_docking import pdbqt2molblock
+from easydock.dock.preparation_for_docking import pdbqt2molblock
 
 OFFENDING_PDBQT = """MODE 1
 REMARK VINA RESULT:      -9.5      0.000      0.000

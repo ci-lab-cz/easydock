@@ -10,7 +10,7 @@ import subprocess
 import yaml
 
 from easydock.auxiliary import expand_path
-from easydock.preparation_for_docking import ligand_preparation, pdbqt2molblock
+from easydock.dock.preparation_for_docking import ligand_preparation, pdbqt2molblock
 
 
 class RawTextArgumentDefaultsHelpFormatter(argparse.RawTextHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
