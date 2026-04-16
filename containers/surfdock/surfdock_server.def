@@ -23,7 +23,7 @@ From: rapidsai/miniforge-cuda:25.08-cuda12.8.0-base-ubuntu24.04-py3.10
     cp global_vars.py          ${APPTAINER_ROOTFS}/opt/global_vars.py
 
 %post
-    apt-get update && \
+    apt-get update --fix-missing && \
     apt-get install --no-install-recommends --yes \
         gcc build-essential git git-lfs wget && \
     apt-get clean && \

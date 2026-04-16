@@ -7,7 +7,7 @@
 
 FROM rapidsai/miniforge-cuda:25.08-cuda12.8.0-base-ubuntu24.04-py3.10@sha256:871560f1d2bc8ba85d1cfe43c97bce786f34bc685b2a9222fe2abd289afd1831
 
-RUN apt-get update && \
+RUN apt-get update --fix-missing && \
     apt-get install --no-install-recommends --yes \
     gcc build-essential git git-lfs wget && \
     apt-get clean && \
