@@ -340,7 +340,7 @@ class _SurfDockServer:
             force_optimize=False,
         )
 
-        loader = DataLoader(dataset=docking_dataset, batch_size=5, shuffle=False)
+        loader = DataLoader(dataset=docking_dataset, batch_size=1, shuffle=False)
 
         for orig_complex_graph in loader:
             if 'ligand' not in orig_complex_graph.node_types:
