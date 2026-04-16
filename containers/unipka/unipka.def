@@ -7,6 +7,7 @@ From: dptechnology/unimol:latest-pytorch1.11.0-cuda11.3
     smarts_pattern.tsv /unipka/smarts_pattern.tsv
 
 %post
+    mkdir -p /apps/all/XALT/3.0.2
     wget -q -O /unipka/t_dwar_v_novartis_a_b.pt \
         https://zenodo.org/records/19288649/files/t_dwar_v_novartis_a_b.pt
 
