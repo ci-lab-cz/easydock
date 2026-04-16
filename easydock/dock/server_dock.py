@@ -127,6 +127,7 @@ def _parse_config(config_fname):
 
     bind_dirs = _collect_path_dirs(init_server)
     config["_launch_command"] = build_server_container_cmd(config["script_file"], bind_dirs)
+    logger.debug("Server launch command: %s", " ".join(config["_launch_command"]))
 
     return config
 
