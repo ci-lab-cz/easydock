@@ -61,7 +61,7 @@ def _collect_path_dirs(payload):
              payload if isinstance(payload, (list, tuple)) else [payload])
     for v in items:
         if isinstance(v, str):
-            p = os.path.abspath(os.path.expanduser(v))
+            p = os.path.realpath(os.path.expanduser(v))
             if os.path.isfile(p):
                 dirs.add(os.path.dirname(p))
             elif os.path.isdir(p):
