@@ -20,8 +20,6 @@ pdbqt2molblock = None
 _worker_client = None
 _worker_key = None
 _worker_lock = threading.Lock()
-_worker_init_failed_key = None
-_worker_init_error = None
 
 
 def _safe_float(value):
@@ -226,13 +224,9 @@ def _create_client(config):
 
 
 def _get_worker_client(config):
-    global _worker_client, _worker_key, _worker_init_failed_key, _worker_init_error
+    global _worker_client, _worker_key
 
     with _worker_lock:
-        # If this config already failed init, raise immediately — no new spawn.
-        if _worker_init_failed_key == config["_worker_key"] and _worker_init_error is not None:
-            raise RuntimeError(f"Server init previously failed: {_worker_init_error}")
-
         need_new = (
             _worker_client is None
             or not _worker_client.is_alive()
@@ -240,24 +234,12 @@ def _get_worker_client(config):
         )
 
         if need_new:
-            # Config changed — clear stale failure record.
-            if _worker_key != config["_worker_key"]:
-                _worker_init_failed_key = None
-                _worker_init_error = None
-
             if _worker_client is not None:
                 try:
                     _worker_client.close()
                 except Exception:
                     logger.exception("Failed to close previous worker client")
-
-            try:
-                _worker_client = _create_client(config)
-            except Exception as e:
-                _worker_client = None
-                _worker_init_failed_key = config["_worker_key"]
-                _worker_init_error = str(e)
-                raise
+            _worker_client = _create_client(config)
             _worker_key = config["_worker_key"]
 
         return _worker_client
@@ -433,7 +415,7 @@ atexit.register(_cleanup_worker_client)
 
 
 def _reset_worker_state_for_tests():
-    global _worker_client, _worker_key, _worker_init_failed_key, _worker_init_error
+    global _worker_client, _worker_key
     with _worker_lock:
         if _worker_client is not None:
             try:
@@ -442,5 +424,3 @@ def _reset_worker_state_for_tests():
                 pass
         _worker_client = None
         _worker_key = None
-        _worker_init_failed_key = None
-        _worker_init_error = None
