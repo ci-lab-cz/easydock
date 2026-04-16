@@ -13,7 +13,7 @@ from typing import List
 from rdkit import Chem
 from rdkit.Chem.rdMolDescriptors import CalcNumRotatableBonds
 from easydock.database import create_db, init_db, check_db_status, update_db, save_sdf, \
-    add_protonation, populate_setup_db, MolQueue
+    add_protonation, populate_setup_db, MolQueue, set_variable
 from easydock.session import restore_session
 from easydock.reporting import get_pipeline_statistics, write_stage_error_log, report_error_log_file
 from easydock.args_validation import protonation_type, protonation_programs, cpu_type, filepath_type, log_level_type
@@ -331,7 +331,12 @@ def main():
 
             batch_size = 1
             if args.program == 'server':
-                batch_size = server_info(args.config).get('batch_size', 1)
+                info = server_info(args.config)
+                batch_size = info.get('batch_size', 1)
+                raw_format = info.get('ligand_out_format')
+                if raw_format:
+                    with sqlite3.connect(args.output, timeout=90) as conn:
+                        set_variable(conn, 'database', 'raw_format', raw_format)
 
             with sqlite3.connect(args.output, timeout=90) as conn:
                 mols = MolQueue(args.output, batch_size=batch_size)
