@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=64", "setuptools-scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "easydock"
+dynamic = ["version"]
+description = "EasyDock Python module to facilitate molecular docking"
+readme = "README.md"
+license = { file = "LICENSE.txt" }
+authors = [
+    { name = "Pavel Polishchuk", email = "pavel_polishchuk@ukr.net" },
+    { name = "Guzel Minibaeva" },
+    { name = "Aleksandra Ivanova" },
+]
+requires-python = ">=3.6"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Scientific/Engineering :: Chemistry",
+]
+
+[project.optional-dependencies]
+rdkit = ["rdkit>=2017.09"]
+
+[project.scripts]
+easydock = "easydock.run_dock:main"
+easydock_bust = "easydock.easydock_bust:main"
+easydock_plif = "easydock.easydock_plif:main"
+get_sdf_from_easydock = "easydock.get_sdf_from_dock_db:main"
+make_clean_copy = "easydock.make_clean_copy:main"
+run_dock = "easydock.run_dock_obsolete:main"
+
+[tool.setuptools.packages.find]
+include = ["easydock*"]

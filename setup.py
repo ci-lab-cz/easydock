@@ -1,36 +1,30 @@
-import setuptools
-from os import path
-import easydock
+from setuptools import setup
 
-this_directory = path.abspath(path.dirname(__file__))
-with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
-    long_description = f.read()
 
-setuptools.setup(
-    name="easydock",
-    version=easydock.__version__,
-    author="Pavel Polishchuk, Guzel Minibaeva, Aleksandra Ivanova",
-    author_email="pavel_polishchuk@ukr.net",
-    description="EasyDock Python module to facilitate molecular docking",
-    long_description=long_description,
-    long_description_content_type="text/markdown",
-    url="https://github.com/ci-lab-cz/easydock",
-    packages=['easydock', 'easydock.dock'],
-    classifiers=[
-        "Programming Language :: Python :: 3",
-        "Operating System :: OS Independent",
-        "Topic :: Scientific/Engineering :: Bio-Informatics",
-        "Topic :: Scientific/Engineering :: Chemistry"
-    ],
-    python_requires='>=3.6',
-    extras_require={
-        'rdkit': ['rdkit>=2017.09'],
-    },
-    entry_points={'console_scripts':
-                      ['run_dock = easydock.run_dock_obsolete:main',
-                       'easydock = easydock.run_dock:main',
-                       'get_sdf_from_easydock = easydock.get_sdf_from_dock_db:main',
-                       'make_clean_copy = easydock.make_clean_copy:main',
-                       'easydock_plif = easydock.easydock_plif:main',
-                       'easydock_bust = easydock.easydock_bust:main',]}
+def branch_aware_local(version):
+    """Include branch name in local version segment for non-master branches.
+
+    Examples:
+      Tagged commit (any branch):      1.2.0
+      master, untagged:                1.3.0.dev79+gabcdef1
+      dev branch, untagged:            1.3.0.dev79+dev.gabcdef1
+      feature/foo branch, untagged:    1.3.0.dev79+feature.foo.gabcdef1
+    """
+    if version.exact:
+        return ""
+    node = f"g{version.node[:6]}" if version.node else ""
+    branch = version.branch
+    if branch and branch not in ("master", "main", "HEAD"):
+        safe = branch.replace("/", ".").replace("-", ".").replace("_", ".")
+        return f"{safe}.{node}" if node else safe
+    return node
+
+
+setup(
+    use_scm_version={
+        "write_to": "easydock/_version.py",
+        "version_scheme": "guess-next-dev",
+        "local_scheme": branch_aware_local,
+        "fallback_version": "0.0.0+unknown",
+    }
 )
