@@ -324,7 +324,7 @@ def protonate_container(items: Iterator[Tuple[str, str]], container: str, pH: fl
     :param items: iterator of (smi, mol_name) tuples
     :param container: path to a .sif file (apptainer/singularity) or a docker image name
     :param pH: target pH passed to the container's protonate command
-    :param use_gpu: add --gpus all when using docker backend (ignored for apptainer);
+    :param use_gpu: add --nv (apptainer) or --gpus all (docker) when GPU is available;
                     None (default) = auto-detect via nvidia-smi
     """
     if use_gpu is None:
@@ -336,10 +336,11 @@ def protonate_container(items: Iterator[Tuple[str, str]], container: str, pH: fl
         sif_path = expand_path(container)
         system = platform.system()
         if system == 'Linux':
+            gpu_args = ['--nv'] if use_gpu else []
             if apptainer_available():
-                cmd = ['apptainer', 'run', sif_path] + inner_cmd
+                cmd = ['apptainer', 'run'] + gpu_args + [sif_path] + inner_cmd
             elif singularity_available():
-                cmd = ['singularity', 'run', sif_path] + inner_cmd
+                cmd = ['singularity', 'run'] + gpu_args + [sif_path] + inner_cmd
             else:
                 raise RuntimeError('Neither apptainer nor singularity are available.')
         else:
