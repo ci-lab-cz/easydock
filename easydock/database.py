@@ -796,8 +796,7 @@ def get_mols(conn, mol_ids, field_name='mol_block', poses=None):
     cur = conn.cursor()
     raw_format = DEFAULT_RAW_FORMAT
     if poses != [1]:
-        try:
-            raw_format = get_variables(conn, 'database', ['raw_format'])['raw_format']
+        raw_format = get_variables(conn, 'database', ['raw_format'])['raw_format']
 
     t = ''
     if poses != [1]:
