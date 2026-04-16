@@ -16,8 +16,8 @@ from easydock.database import (
     set_variable,
     DEFAULT_RAW_FORMAT,
     insert_db,
+    get_poses_from_raw_block,
 )
-from easydock.get_sdf_from_dock_db import get_poses_from_raw_block
 
 
 def create_bust_table(conn):

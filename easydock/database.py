@@ -37,6 +37,42 @@ from rdkit.Chem.SaltRemover import SaltRemover
 
 VALID_RAW_FORMATS = ('pdbqt', 'sdf')
 DEFAULT_RAW_FORMAT = 'pdbqt'
+_POSE_SEP = ':'
+
+
+def get_poses_from_raw_block(raw_block, docking_format, mol, mol_id, poses):
+    """
+    Extract specific poses from a raw_block string.
+
+    :param raw_block: raw block string (pdbqt or sdf format)
+    :param docking_format: 'pdbqt' or 'sdf'
+    :param mol: RDKit Mol object used as atom-order template (pdbqt only)
+    :param mol_id: molecule name without pose suffix
+    :param poses: 1-based list of pose indices to extract
+    :return: list of (pose_index, mol_block_string) tuples; mol_block_string has no trailing $$$$
+    """
+    results = []
+    if docking_format == 'pdbqt':
+        raw_block_list = [q for q in raw_block.strip().split('ENDMDL') if q]
+        for i in poses:
+            try:
+                pose_mol_block = pdbqt2molblock(raw_block_list[i - 1] + 'ENDMDL\n', mol, mol_id + f'{_POSE_SEP}{i}')
+            except IndexError:
+                logging.warning(f'Pose {i} not found in raw block of {mol_id}. Skipping.')
+                continue
+            if pose_mol_block:
+                results.append((i, pose_mol_block))
+    elif docking_format == 'sdf':
+        raw_block_list = [q for q in raw_block.strip().split('$$$$\n') if q.strip()]
+        for i in poses:
+            try:
+                block = raw_block_list[i - 1]
+            except IndexError:
+                logging.warning(f'Pose {i} not found in raw block of {mol_id}. Skipping.')
+                continue
+            name_line, rest = block.split('\n', 1)
+            results.append((i, f'{mol_id}{_POSE_SEP}{i}\n{rest}'))
+    return results
 
 
 class MolQueue:
@@ -758,16 +794,10 @@ def get_mols(conn, mol_ids, field_name='mol_block', poses=None):
                              f'Allowed: mol_block, source_mol_block, smi. Supplied: {field_name}')
 
     cur = conn.cursor()
+    raw_format = DEFAULT_RAW_FORMAT
     if poses != [1]:
         try:
             raw_format = get_variables(conn, 'database', ['raw_format'])['raw_format']
-        except KeyError:
-            raw_format = DEFAULT_RAW_FORMAT
-        if raw_format != 'pdbqt':
-            raise ValueError(
-                f"Pose extraction is only supported for 'pdbqt' format, "
-                f"but raw_format='{raw_format}' is stored in the database."
-            )
 
     t = ''
     if poses != [1]:
@@ -785,19 +815,16 @@ def get_mols(conn, mol_ids, field_name='mol_block', poses=None):
             if 1 in poses:
                 mols.append(m0)
             if poses != [1]:
-                raw_block_list = items[4].strip().split('ENDMDL')
-                for i in [j for j in poses if j != 1]:
-                    try:
-                        pose = raw_block_list[i - 1]
-                        pose_mol_block = pdbqt2molblock(pose + 'ENDMDL\n', m0)
-                        m = Chem.MolFromMolBlock(pose_mol_block)
-                        m.SetProp('_Name', f'{items[0]}_{items[1]}')
-                        m.SetIntProp('_easydock_rowid', items[2])
-                        m.SetIntProp('_easydock_pose', i)
-                        mols.append(m)
-                    except IndexError:
-                        logging.warning(f'Pose number {i} is not in the raw block of {m0.GetProp("_Name")}. '
-                                        f'It will be skipped.')
+                mol_id = f'{items[0]}_{items[1]}'
+                for pose_idx, pose_mol_block in get_poses_from_raw_block(
+                        items[4], raw_format, m0, mol_id, [j for j in poses if j != 1]):
+                    m = Chem.MolFromMolBlock(pose_mol_block)
+                    if m is None:
+                        continue
+                    m.SetProp('_Name', mol_id)
+                    m.SetIntProp('_easydock_rowid', items[2])
+                    m.SetIntProp('_easydock_pose', pose_idx)
+                    mols.append(m)
     cur.close()
     return mols
 

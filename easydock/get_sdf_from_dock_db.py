@@ -7,45 +7,7 @@ import sqlite3
 import sys
 from rdkit import Chem
 
-from .dock.preparation_for_docking import pdbqt2molblock
-from .database import get_variables, DEFAULT_RAW_FORMAT
-
-
-_POSE_SEP = ':'
-
-def get_poses_from_raw_block(raw_block, docking_format, mol, mol_id, poses):
-    """
-    Extract specific poses from a raw_block string.
-
-    :param raw_block: raw block string (pdbqt or sdf format)
-    :param docking_format: 'pdbqt' or 'sdf'
-    :param mol: RDKit Mol object used as atom-order template (pdbqt only)
-    :param mol_id: molecule name without pose suffix
-    :param poses: 1-based list of pose indices to extract
-    :return: list of (pose_index, mol_block_string) tuples; mol_block_string has no trailing $$$$
-    """
-    results = []
-    if docking_format == 'pdbqt':
-        raw_block_list = [q for q in raw_block.strip().split('ENDMDL') if q]
-        for i in poses:
-            try:
-                pose_mol_block = pdbqt2molblock(raw_block_list[i - 1] + 'ENDMDL\n', mol, mol_id + f'{_POSE_SEP}{i}')
-            except IndexError:
-                logging.warning(f'Pose {i} not found in raw block of {mol_id}. Skipping.')
-                continue
-            if pose_mol_block:
-                results.append((i, pose_mol_block))
-    elif docking_format == 'sdf':
-        raw_block_list = [q for q in raw_block.strip().split('$$$$\n') if q.strip()]
-        for i in poses:
-            try:
-                block = raw_block_list[i - 1]
-            except IndexError:
-                logging.warning(f'Pose {i} not found in raw block of {mol_id}. Skipping.')
-                continue
-            name_line, rest = block.split('\n', 1)
-            results.append((i, f'{mol_id}{_POSE_SEP}{i}\n{rest}'))
-    return results
+from .database import get_variables, DEFAULT_RAW_FORMAT, get_poses_from_raw_block, _POSE_SEP
 
 
 def main():
