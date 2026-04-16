@@ -8,6 +8,7 @@ import traceback
 from typing import List, Tuple, Union
 
 from easydock.auxiliary import expand_path
+from easydock.args_validation import protonation_programs
 
 
 def docker_available(container=None):
@@ -185,8 +186,7 @@ def is_apptainer_container(program: str) -> bool:
 
 def is_docker_image(program: str) -> bool:
     """Return True if program looks like a docker image name (not a file, not a known program name)."""
-    _known_programs = {'chemaxon', 'pkasolver', 'molgpka', 'dimorphite'}
-    return program not in _known_programs and not os.path.isfile(program)
+    return program not in protonation_programs and not os.path.isfile(program)
 
 
 def gpu_available() -> bool:
