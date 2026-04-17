@@ -10,7 +10,7 @@ The easiest way to install EasyDock with all dependencies:
 conda env create -f env.yml
 ```
 
-This installs EasyDock with Vina (docking) and MolGpKa (protonation).
+This installs EasyDock with Vina (docking), MolGpKa (protonation), ProLIF and PoseBusters.
 
 ## Manual Installation
 
@@ -89,7 +89,7 @@ apptainer build carsidock.sif carsidock_server.def
 docker build -t carsidock .
 ```
 
-Other server-based containers (SurfDock and Vina-GPU) are created in the same way from the corresponding receipt files. Vina-GPU server will include both CPU and GPU Vina family programs (Vina, QVina2 and QVina-W).
+Other server-based containers (**SurfDock** and **Vina-GPU**) are created in the same way from the corresponding receipt files. Vina-GPU server will include both CPU and GPU Vina family programs (Vina, QVina2 and QVina-W).
 
 ## Optional Protonation Tools
 

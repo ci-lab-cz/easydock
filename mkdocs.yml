@@ -53,6 +53,7 @@ nav:
     - Adding a Protonation Tool: custom_protonation.md
     - Server Protocol: server_protocol.md
     - Generic Docking: generic_dock.md
+    - Database Schema: database_schema.md
 
 plugins:
   - search
