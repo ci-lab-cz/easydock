@@ -139,6 +139,22 @@ def read_smiles(fname):
             yield tuple(line.strip().split()[:2])
 
 
+_pkasolver_model = None
+_pkasolver_pH = None
+
+
+def _init_pkasolver_worker(pH):
+    global _pkasolver_model, _pkasolver_pH
+    from pkasolver.query import QueryModel
+    with contextlib.redirect_stdout(None):
+        _pkasolver_model = QueryModel()
+    _pkasolver_pH = pH
+
+
+def _pkasolver_worker(args):
+    return __protonate_pkasolver(args, model=_pkasolver_model, pH=_pkasolver_pH)
+
+
 def protonate_pkasolver(items: Iterator[Tuple[str, str]], ncpu: int = 1, mol_count=1, pH: float = 7.4):
     import torch
     from pkasolver.query import QueryModel
@@ -150,9 +166,12 @@ def protonate_pkasolver(items: Iterator[Tuple[str, str]], ncpu: int = 1, mol_cou
             for smi, mol_name in items:
                 yield __protonate_pkasolver((smi, mol_name), model=model, pH=pH)
         else:
-            pool = Pool(ncpu)
-            for smi, mol_name in pool.imap_unordered(partial(__protonate_pkasolver, model=model, pH=pH), items, chunksize=chunksize):
-                yield smi, mol_name
+            pool = Pool(ncpu, initializer=_init_pkasolver_worker, initargs=(pH,))
+            try:
+                yield from pool.imap_unordered(_pkasolver_worker, items, chunksize=chunksize)
+            finally:
+                pool.close()
+                pool.join()
 
 
 def __protonate_pkasolver(args, model, pH: float = 7.4):
@@ -176,7 +195,10 @@ def __protonate_pkasolver(args, model, pH: float = 7.4):
         ids = output_mol.GetSubstructMatches(Chem.MolFromSmarts('[$([NH+,NH2+,NH3+]-[*]=O)]'))
         if ids:
             for i in ids:
-                output_mol.GetAtomWithIdx(i[0]).SetFormalCharge(0)
+                atom = output_mol.GetAtomWithIdx(i[0])
+                atom.SetFormalCharge(0)
+                atom.SetNumExplicitHs(max(0, atom.GetTotalNumHs() - 1))
+        Chem.SanitizeMol(output_mol)
 
     return Chem.MolToSmiles(output_mol), mol_name
 
