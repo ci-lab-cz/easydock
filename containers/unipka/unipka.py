@@ -1383,11 +1383,11 @@ def get_ensemble(smi: str, template_a2b: pd.DataFrame, template_b2a: pd.DataFram
 
         ensemble[q0] = smis_0
     except Exception as e:
-        sys.stderr.write(str(e))
-        traceback.print_exc()
+        logger.debug(f'get_ensemble failed for {smi}: {e}', exc_info=True)
         ensemble = dict()
 
-    logging.debug(f'time {datetime.datetime.now() - time_}s | microspecies enumeration | {smi} | {sum(len(v) for v in ensemble.values())}')  # CHECKPOINT 1
+    n_microstates = sum(len(v) for v in ensemble.values())
+    logger.debug(f'time {datetime.datetime.now() - time_}s | microspecies enumeration | {smi} | {n_microstates}')
 
     return smi, ensemble
 
@@ -2128,9 +2128,10 @@ def get_major_form_from_ensemble(item, pH=7.4):
     smi, ensemble_free_energies = item
     try:
         prot_smi = get_major_form(calc_distribution(ensemble_free_energies, pH=pH))
+        if not prot_smi:
+            logger.debug(f'get_major_form returned empty SMILES for {smi}')
     except Exception as e:
-        sys.stderr.write(str(e))
-        traceback.print_exc()
+        logger.debug(f'get_major_form_from_ensemble failed for {smi}: {e}', exc_info=True)
         prot_smi = None
     return smi, prot_smi
 
@@ -2276,6 +2277,7 @@ class UnipkaStream:
                     pass
                 elif len(all_microstates) == 0:
                     # empty ensemble — complete immediately
+                    logger.debug(f'Empty ensemble for {smi}: yielding None for {smi_to_names[smi]}')
                     for name in smi_to_names[smi]:
                         yield smi, None, name
                 else:
@@ -2322,6 +2324,8 @@ class UnipkaStream:
             if parent is None or parent not in pending:
                 continue
             energy = gpu_results.get(ms)  # None if not predicted
+            if energy is None:
+                logger.debug(f'GPU prediction returned None for microstate {ms} (parent {parent})')
             pending[parent]['predicted'][ms] = energy
 
             mol_state = pending[parent]
@@ -2335,13 +2339,19 @@ class UnipkaStream:
                             ensemble_free_energy[charge].append((m, e))
                 ensemble_free_energy = dict(ensemble_free_energy)
 
+                if not ensemble_free_energy:
+                    logger.debug(f'No predicted energies for {parent}: all microstates failed GPU prediction')
+
                 try:
                     _, prot_smi = get_major_form_from_ensemble(
                         (parent, ensemble_free_energy), self._pH
                     )
                 except Exception:
+                    logger.debug(f'get_major_form_from_ensemble failed for {parent}', exc_info=True)
                     prot_smi = None
 
+                if not prot_smi:
+                    logger.debug(f'Empty protonated SMILES for {parent} (names: {smi_to_names[parent]})')
                 for name in smi_to_names[parent]:
                     yield parent, prot_smi, name
                 del pending[parent]
@@ -2415,11 +2425,11 @@ def main():
     fout = open(args.output, 'wt') if args.output else sys.stdout
     try:
         for smi, prot_smi, mol_name in pipeline.process(source()):
-            if prot_smi:
-                fout.write(f'{prot_smi}\t{mol_name}\n')
-                fout.flush()
-            else:
-                sys.stderr.write(f'Molecule {mol_name} caused an error\n')
+            if prot_smi is None:
+                prot_smi = smi
+                logger.warning(f'Molecule {mol_name} (SMILES: {smi}) produced no protonated form, the source form was returned')
+            fout.write(f'{prot_smi}\t{mol_name}\n')
+            fout.flush()
     finally:
         if args.output:
             fout.close()
