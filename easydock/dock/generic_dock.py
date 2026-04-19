@@ -11,7 +11,7 @@ import timeit
 import yaml
 from rdkit import Chem
 
-from easydock.auxiliary import expand_path
+from easydock.auxiliary import expand_path, resolve_path
 from easydock.dock.preparation_for_docking import ligand_preparation, pdbqt2molblock
 
 logger = logging.getLogger(__name__)
@@ -32,14 +32,15 @@ _OUT_FORMAT_SUFFIX = {
 def __parse_config(config_fname):
     with open(config_fname) as f:
         config = yaml.safe_load(f) or {}
+    config_dir = os.path.dirname(os.path.abspath(config_fname))
     if 'script_file' in config:
-        config['script_file'] = expand_path(str(config['script_file']))
+        config['script_file'] = resolve_path(str(config['script_file']), config_dir)
     if 'env' in config:
-        config['env'] = expand_path(str(config['env']))
+        config['env'] = resolve_path(str(config['env']), config_dir)
     program_args = config.get('program_args') or {}
     for key, value in program_args.items():
         if isinstance(value, str):
-            program_args[key] = expand_path(value)
+            program_args[key] = resolve_path(value, config_dir)
     return config
 
 

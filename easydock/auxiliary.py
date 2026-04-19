@@ -105,6 +105,14 @@ def expand_path(path):
     return os.path.expanduser(os.path.expandvars(path))
 
 
+def resolve_path(path, base=None):
+    """Expand user/vars; if still relative and base dir is given, anchor to it."""
+    p = expand_path(path)
+    if base is not None and not os.path.isabs(p):
+        p = os.path.join(base, p)
+    return p
+
+
 def count_input_structures(input_fname: str) -> Optional[int]:
     """
     Count all records in input file, including structures that may fail RDKit parsing.
