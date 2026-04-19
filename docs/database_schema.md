@@ -25,21 +25,21 @@ The schema consists of six tables:
 
 The central table. One row per enumerated stereoisomer of each input molecule. The primary key is `(id, stereo_id)`.
 
-| Column | Type | Default | Description |
-|---|---|---|---|
-| `id` | TEXT | — | Molecule identifier — taken from the input file title or derived from SMILES. |
-| `stereo_id` | INTEGER | `0` | Stereoisomer index. `0` for the first (or only) isomer; incremented for each additional one. |
-| `smi_input` | TEXT | NULL | Raw SMILES exactly as read from the input file. Only set for SMILES inputs; NULL for SDF/PDBQT. |
-| `smi` | TEXT | NULL | Canonical SMILES after salt stripping and stereoisomer assignment. Used as the docking input for 2D structures. |
-| `smi_protonated` | TEXT | NULL | Protonated canonical SMILES at the target pH. Set only when `--protonation` is used. |
-| `source_mol_block_input` | TEXT | NULL | Original mol block from the input SDF/PDBQT file. Set only for 3D structure inputs. |
-| `source_mol_block` | TEXT | NULL | Cleaned mol block (salts stripped, 2D/3D structure) prepared for docking. Set for 3D inputs. |
-| `source_mol_block_protonated` | TEXT | NULL | Mol block after protonation, inheriting 3D coordinates from `source_mol_block`. Set when protonation is applied to a 3D input. |
-| `docking_score` | REAL | NULL | Best docking score in kcal/mol. NULL until docking completes for this molecule. |
-| `raw_block` | TEXT | NULL | All docking poses in their native format (PDBQT or SDF, controlled by the `raw_format` variable). NULL until docking completes. |
-| `mol_block` | TEXT | NULL | Best docking pose as an MDL mol block. NULL until docking completes. |
-| `dock_time` | REAL | NULL | Wall-clock docking time for this molecule in seconds. |
-| `time` | TEXT | NULL | ISO timestamp of the last write to this row (`datetime(current_timestamp, 'localtime')`). Updated on every `UPDATE`. |
+| Column | Type | Default | Description                                                                                                                    |
+|---|---|---|--------------------------------------------------------------------------------------------------------------------------------|
+| `id` | TEXT | — | Molecule identifier — taken from the input<br>file title or derived from SMILES.                                               |
+| `stereo_id` | INTEGER | `0` | Stereoisomer index. `0` for the first (or only)<br>isomer; incremented for each additional one.                                |
+| `smi_input` | TEXT | NULL | Raw SMILES exactly as read from the input file.<br>Only set for SMILES inputs; NULL for SDF/PDBQT.                             |
+| `smi` | TEXT | NULL | Canonical SMILES after salt stripping andvz<br>stereoisomer assignment. Used as the docking<br>input for 2D structures.               |
+| `smi_protonated` | TEXT | NULL | Protonated canonical SMILES at the target pH.<br>Set only when `--protonation` is used.                                           |
+| `source_mol_block_input` | TEXT | NULL | Original mol block from the input SDF/PDBQT file.<br>Set only for 3D structure inputs.                                            |
+| `source_mol_block` | TEXT | NULL | Cleaned mol block (salts stripped, 2D/3D structure)<br>prepared for docking. Set for 3D inputs.                                   |
+| `source_mol_block_protonated` | TEXT | NULL | Mol block after protonation, inheriting 3D<br>coordinates from `source_mol_block`. Set when protonation<br>is applied to a 3D input. |
+| `docking_score` | REAL | NULL | Best docking score in kcal/mol. NULL until<br>docking completes for this molecule.                                                |
+| `raw_block` | TEXT | NULL | All docking poses in their native format<br>(PDBQT or SDF, controlled by the `raw_format` variable). NULL until docking completes. |
+| `mol_block` | TEXT | NULL | Best docking pose as an MDL mol block.<br>NULL until docking completes.                                                           |
+| `dock_time` | REAL | NULL | Wall-clock docking time for this molecule in seconds.                                                                          |
+| `time` | TEXT | NULL | ISO timestamp of the last write to this row<br>(`datetime(current_timestamp, 'localtime')`).<br>Updated on every `UPDATE`.           |
 
 ### Primary Key
 
