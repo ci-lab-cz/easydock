@@ -53,10 +53,10 @@ Each stage selects its work by checking which columns are still NULL:
 
 | Stage | Selects rows where | Writes columns |
 |---|---|---|
-| **Input parsing** | (new rows) | `id`, `stereo_id`, `smi_input`, `smi`, `source_mol_block_input`, `source_mol_block` |
-| **Protonation** | `smi IS NOT NULL AND smi_protonated IS NULL AND docking_score IS NULL` | `smi_protonated`, `source_mol_block_protonated` |
-| **Docking** (with protonation) | `docking_score IS NULL AND (smi_protonated IS NOT NULL OR source_mol_block_protonated IS NOT NULL)` | `docking_score`, `raw_block`, `mol_block`, `dock_time` |
-| **Docking** (without protonation) | `docking_score IS NULL AND (smi IS NOT NULL OR source_mol_block IS NOT NULL)` | `docking_score`, `raw_block`, `mol_block`, `dock_time` |
+| **Input parsing** | (new rows) | `id`, `stereo_id`, `smi_input`, `smi`,<br>`source_mol_block_input`, `source_mol_block` |
+| **Protonation** | `smi IS NOT NULL`<br>`AND smi_protonated IS NULL`<br>`AND docking_score IS NULL` | `smi_protonated`, `source_mol_block_protonated` |
+| **Docking** (with protonation) | `docking_score IS NULL`<br>`AND (smi_protonated IS NOT NULL`<br>`OR source_mol_block_protonated IS NOT NULL)` | `docking_score`, `raw_block`,<br>`mol_block`, `dock_time` |
+| **Docking** (without protonation) | `docking_score IS NULL`<br>`AND (smi IS NOT NULL`<br>`OR source_mol_block IS NOT NULL)` | `docking_score`, `raw_block`,<br>`mol_block`, `dock_time` |
 
 ### Notes
 
@@ -81,7 +81,7 @@ Stores the full session configuration so interrupted runs can be resumed with `-
 |---|---|
 | `args` | JSON-serialised `argparse` namespace — all CLI arguments as passed to the original run. |
 | `config` | Raw YAML text of the docking config file. |
-| `file:<path>` | Content of a text file referenced inside the config YAML. `<path>` is the dotted YAML key (e.g., `file:protein`, `file:init_server.protein`). Stored so the session can be fully reconstructed without the original files. |
+| `file:<path>` | Content of a text file referenced inside the config YAML. `<path>` is the dotted YAML key (e.g., `file:protein`, `file:init_server.protein`).<br>Stored so the session can be fully reconstructed without the original files. |
 
 ---
 
@@ -101,10 +101,10 @@ A generic key-value store for module-level metadata. Allows any module to persis
 
 | Module | Name | Type | Values | Meaning |
 |---|---|---|---|---|
-| `database` | `raw_format` | str | `'pdbqt'`, `'sdf'` | Format of pose data stored in `mols.raw_block`. Defaults to `'pdbqt'`; set to `'sdf'` for server-based docking programs that return SDF. |
-| `run_dock` | `input_structures_total` | int | positive integer | Total number of input structures counted at startup — used for progress reporting. |
-| `easydock_bust` | `bust_protein` | str | PDB text | Protein PDB block with explicit hydrogens added, used by PoseBusters. |
-| `easydock_plif` | `plif_protein` | str | PDB text | Protein PDB block with explicit hydrogens added, used by ProLIF. |
+| `database` | `raw_format` | str | `'pdbqt'`, `'sdf'` | Format of pose data stored in `mols.raw_block`.<br>Defaults to `'pdbqt'`; set to `'sdf'` for server-based docking programs that return SDF. |
+| `run_dock` | `input_structures_total` | int | positive integer | Total number of input structures counted at startup —<br>used for progress reporting. |
+| `easydock_bust` | `bust_protein` | str | PDB text | Protein PDB block with explicit hydrogens added,<br>used by PoseBusters. |
+| `easydock_plif` | `plif_protein` | str | PDB text | Protein PDB block with explicit hydrogens added,<br>used by ProLIF. |
 
 ---
 
@@ -165,8 +165,8 @@ On database open, `session.py` checks the version and runs any necessary migrati
 
 | Migration | From → To | What changes |
 |---|---|---|
-| `migrate_setup_table()` | 0 → 1 | Converts the old `setup` table (dynamic columns, one row) to the current key-value schema. |
-| `migrate_pdb_block_to_raw_block()` | legacy → current | Renames the `pdb_block` column in `mols` to `raw_block` if the old name is still present. Run automatically when `raw_format` variable is absent. |
+| `migrate_setup_table()` | 0 → 1 | Converts the old `setup` table (dynamic columns, one row)<br>to the current key-value schema. |
+| `migrate_pdb_block_to_raw_block()` | legacy → current | Renames the `pdb_block` column in `mols` to `raw_block`<br>if the old name is still present.<br>Run automatically when `raw_format` variable is absent. |
 
 The user is prompted before any migration is applied (120-second timeout; auto-abort on no response).
 
