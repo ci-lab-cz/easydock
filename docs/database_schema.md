@@ -25,21 +25,21 @@ The schema consists of six tables:
 
 The central table. One row per enumerated stereoisomer of each input molecule. The primary key is `(id, stereo_id)`.
 
-| Column | Type | Default | Description                                                                                                                    |
-|---|---|---|--------------------------------------------------------------------------------------------------------------------------------|
-| `id` | TEXT | — | Molecule identifier — taken from the input<br>file title or derived from SMILES.                                               |
-| `stereo_id` | INTEGER | `0` | Stereoisomer index. `0` for the first (or only)<br>isomer; incremented for each additional one.                                |
-| `smi_input` | TEXT | NULL | Raw SMILES exactly as read from the input file.<br>Only set for SMILES inputs; NULL for SDF/PDBQT.                             |
-| `smi` | TEXT | NULL | Canonical SMILES after salt stripping andvz<br>stereoisomer assignment. Used as the docking<br>input for 2D structures.               |
-| `smi_protonated` | TEXT | NULL | Protonated canonical SMILES at the target pH.<br>Set only when `--protonation` is used.                                           |
-| `source_mol_block_input` | TEXT | NULL | Original mol block from the input SDF/PDBQT file.<br>Set only for 3D structure inputs.                                            |
-| `source_mol_block` | TEXT | NULL | Cleaned mol block (salts stripped, 2D/3D structure)<br>prepared for docking. Set for 3D inputs.                                   |
-| `source_mol_block_protonated` | TEXT | NULL | Mol block after protonation, inheriting 3D<br>coordinates from `source_mol_block`. Set when protonation<br>is applied to a 3D input. |
-| `docking_score` | REAL | NULL | Best docking score in kcal/mol. NULL until<br>docking completes for this molecule.                                                |
-| `raw_block` | TEXT | NULL | All docking poses in their native format<br>(PDBQT or SDF, controlled by the `raw_format` variable). NULL until docking completes. |
-| `mol_block` | TEXT | NULL | Best docking pose as an MDL mol block.<br>NULL until docking completes.                                                           |
-| `dock_time` | REAL | NULL | Wall-clock docking time for this molecule in seconds.                                                                          |
-| `time` | TEXT | NULL | ISO timestamp of the last write to this row<br>(`datetime(current_timestamp, 'localtime')`).<br>Updated on every `UPDATE`.           |
+| Column | Type | Default | Description                                                                                                                         |
+|---|---|---|-------------------------------------------------------------------------------------------------------------------------------------|
+| `id` | TEXT | — | Molecule identifier — taken from the input<br>file title or derived from SMILES.                                                    |
+| `stereo_id` | INTEGER | `0` | Stereoisomer index. `0` for the first (or only)<br>isomer; incremented for each additional one.                                     |
+| `smi_input` | TEXT | NULL | Raw SMILES exactly as read from the input file.<br>Only set for SMILES inputs; NULL for SDF/PDBQT.                                  |
+| `smi` | TEXT | NULL | Canonical SMILES after salt stripping andvz<br>stereoisomer assignment. Used as the docking<br>input for 2D structures.             |
+| `smi_protonated` | TEXT | NULL | Protonated canonical SMILES at the target pH.<br>Set only when `--protonation` is used.                                             |
+| `source_mol_block_input` | TEXT | NULL | Original mol block from the input SDF/PDBQT file.<br>Set only for 3D structure inputs.                                              |
+| `source_mol_block` | TEXT | NULL | Cleaned mol block (salts stripped, 2D/3D structure)<br>prepared for docking. Set for 3D inputs.                                     |
+| `source_mol_block_protonated` | TEXT | NULL | Mol block after protonation, inheriting 3D<br>coordinates from `source_mol_block`.<br>Set when protonation is applied to<br>a 3D input. |
+| `docking_score` | REAL | NULL | Best docking score in kcal/mol. NULL until<br>docking completes for this molecule.                                                  |
+| `raw_block` | TEXT | NULL | All docking poses in their native format<br>(PDBQT or SDF, controlled by the `raw_format`<br>variable). NULL until docking completes.  |
+| `mol_block` | TEXT | NULL | Best docking pose as an MDL mol block.<br>NULL until docking completes.                                                             |
+| `dock_time` | REAL | NULL | Wall-clock docking time for this molecule in<br>seconds.                                                                               |
+| `time` | TEXT | NULL | ISO timestamp of the last write to this row<br>(`datetime(current_timestamp, 'localtime')`).<br>Updated on every `UPDATE`.          |
 
 ### Primary Key
 
@@ -53,8 +53,8 @@ Each stage selects its work by checking which columns are still NULL:
 
 | Stage | Selects rows where | Writes columns |
 |---|---|---|
-| **Input parsing** | (new rows) | `id`, `stereo_id`, `smi_input`, `smi`,<br>`source_mol_block_input`, `source_mol_block` |
-| **Protonation** | `smi IS NOT NULL`<br>`AND smi_protonated IS NULL`<br>`AND docking_score IS NULL` | `smi_protonated`, `source_mol_block_protonated` |
+| **Input parsing** | (new rows) | `id`, `stereo_id`, `smi_input`, `smi`,<br>`source_mol_block_input`,<br>`source_mol_block` |
+| **Protonation** | `smi IS NOT NULL`<br>`AND smi_protonated IS NULL`<br>`AND docking_score IS NULL` | `smi_protonated`,<br>`source_mol_block_protonated` |
 | **Docking** (with protonation) | `docking_score IS NULL`<br>`AND (smi_protonated IS NOT NULL`<br>`OR source_mol_block_protonated IS NOT NULL)` | `docking_score`, `raw_block`,<br>`mol_block`, `dock_time` |
 | **Docking** (without protonation) | `docking_score IS NULL`<br>`AND (smi IS NOT NULL`<br>`OR source_mol_block IS NOT NULL)` | `docking_score`, `raw_block`,<br>`mol_block`, `dock_time` |
 
@@ -81,7 +81,7 @@ Stores the full session configuration so interrupted runs can be resumed with `-
 |---|---|
 | `args` | JSON-serialised `argparse` namespace — all CLI arguments as passed to the original run. |
 | `config` | Raw YAML text of the docking config file. |
-| `file:<path>` | Content of a text file referenced inside the config YAML. `<path>` is the dotted YAML key (e.g., `file:protein`, `file:init_server.protein`).<br>Stored so the session can be fully reconstructed without the original files. |
+| `file:<path>` | Content of a text file referenced inside the config YAML. `<path>` is the dotted YAML key<br>(e.g., `file:protein`, `file:init_server.protein`).<br>Stored so the session can be fully reconstructed without the original files. |
 
 ---
 
@@ -101,7 +101,7 @@ A generic key-value store for module-level metadata. Allows any module to persis
 
 | Module | Name | Type | Values | Meaning |
 |---|---|---|---|---|
-| `database` | `raw_format` | str | `'pdbqt'`, `'sdf'` | Format of pose data stored in `mols.raw_block`.<br>Defaults to `'pdbqt'`; set to `'sdf'` for server-based docking programs that return SDF. |
+| `database` | `raw_format` | str | `'pdbqt'`, `'sdf'` | Format of pose data stored in `mols.raw_block`.<br>Defaults to `'pdbqt'`; set to `'sdf'` for<br>server-based docking programs that return SDF. |
 | `run_dock` | `input_structures_total` | int | positive integer | Total number of input structures counted at startup —<br>used for progress reporting. |
 | `easydock_bust` | `bust_protein` | str | PDB text | Protein PDB block with explicit hydrogens added,<br>used by PoseBusters. |
 | `easydock_plif` | `plif_protein` | str | PDB text | Protein PDB block with explicit hydrogens added,<br>used by ProLIF. |
@@ -115,7 +115,7 @@ Lookup table for protein-ligand interaction contact types, populated by `easydoc
 | Column | Type | Description |
 |---|---|---|
 | `plif_id` | INTEGER (PRIMARY KEY AUTOINCREMENT) | Surrogate key for the contact type. |
-| `contact_name` | TEXT (UNIQUE) | Human-readable contact identifier, e.g., `'GLU80.A.HBDonor'`. Format: `<residue>.<chain>.<interaction_type>`. |
+| `contact_name` | TEXT (UNIQUE) | Human-readable contact identifier,<br>e.g., `'GLU80.A.HBDonor'`.<br>Format: `<residue>.<chain>.<interaction_type>`. |
 
 ---
 
