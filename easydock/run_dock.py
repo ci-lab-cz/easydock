@@ -29,9 +29,9 @@ def _report_stage_statistics(title: str, lines):
     for line in lines:
         logging.info(line)
 
-    sys.stderr.write(title + '\n')
-    for line in lines:
-        sys.stderr.write(line + '\n')
+    # sys.stderr.write(title + '\n')
+    # for line in lines:
+    #     sys.stderr.write(line + '\n')
     sys.stderr.flush()
 
 
@@ -41,16 +41,16 @@ def report_preparation_statistics(stats):
         f'successfully read structures: {stats["successfully_read_structures"]}',
         f'generated stereoisomers: {stats["generated_stereoisomers"]}',
         f'input compounds failed stereoisomer generation: {stats["failed_stereoisomer_generation"]}',
-        f'protonated stereoisomers: {stats["protonated_stereoisomers"]}',
-        f'stereoisomers failed protonation: {stats["failed_protonation"]}',
+        f'protonated structures/stereoisomers: {stats["protonated_stereoisomers"]}',
+        f'structures/stereoisomers failed protonation: {stats["failed_protonation"]}',
     ]
     _report_stage_statistics('Preparation stage statistics:', lines)
 
 
 def report_docking_statistics(stats):
     lines = [
-        f'docked stereoisomers: {stats["docked_stereoisomers"]}',
-        f'stereoisomers failed to dock: {stats["failed_docking"]}',
+        f'docked structures/stereoisomers: {stats["docked_stereoisomers"]}',
+        f'structures/stereoisomers failed to dock: {stats["failed_docking"]}',
     ]
     _report_stage_statistics('Docking stage statistics:', lines)
 

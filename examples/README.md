@@ -81,7 +81,7 @@ From `output.db`:
 easydock -o output.db --program server --config config_vinagpu.yml
 ```
 
-s
+
 ## CarsiDock (--program server, GPU-only)
 
 From scratch:
