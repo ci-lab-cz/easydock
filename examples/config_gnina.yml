@@ -1,0 +1,11 @@
+script_file: CUDA_VISIBLE_DEVICES=0 apptainer exec --nv -B /home/XXX/python/easydock/examples /home/XXX/python/easydock/examples/containers/gnina1.3.1.sif gnina --device 0
+protein: /home/XXX/python/easydock/examples/protein/5ufx_protein.pdbqt
+protein_setup: /home/XXX/python/easydock/examples/protein/grid.txt
+exhaustiveness: 16
+seed: 120
+n_poses: 5
+scoring: default
+cnn_scoring: rescore
+cnn: crossdock_default2018
+addH: False
+ncpu: 1

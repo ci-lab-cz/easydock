@@ -1,0 +1,7 @@
+script_file: containers/vinagpu.sif
+
+init_server:
+  program: vina-gpu          # can be vina, qvina, qvinaw, vina-gpu, qvina-gpu, qvinaw-gpu
+  protein: protein/5ufx_protein.pdbqt
+  protein_setup: protein/grid.txt
+  n_poses: 5

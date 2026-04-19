@@ -1,0 +1,5 @@
+script_file: containers/carsidock.sif
+
+init_server:
+  protein: protein/5ufx_protein.pdb
+  reflig: protein/5ufx_ligand.sdf

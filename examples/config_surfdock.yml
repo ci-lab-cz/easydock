@@ -1,0 +1,7 @@
+script_file: containers/surfdock.sif
+
+init_server:
+  protein: protein/5ufx_protein.pdb
+  reflig: protein/5ufx_ligand.sdf
+  device: gpu
+  num_save_poses: 5

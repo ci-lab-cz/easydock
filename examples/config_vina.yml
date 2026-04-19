@@ -1,0 +1,6 @@
+protein: protein/5ufx_protein.pdbqt
+protein_setup: protein/grid.txt
+exhaustiveness: 16
+seed: 0
+n_poses: 5
+ncpu: 4
