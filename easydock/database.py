@@ -328,6 +328,17 @@ def generate_init_data(mol_input: tuple[Chem.Mol, str], max_stereoisomers: int, 
         return isomer_list
 
 
+def _insert_rows(cur, sql, rows):
+    try:
+        cur.executemany(sql, rows)
+    except sqlite3.IntegrityError:
+        for row in rows:
+            try:
+                cur.execute(sql, row)
+            except sqlite3.IntegrityError:
+                logging.warning(f'molecule "{row[0]}" (SMILES: {row[2]}) was skipped due to a constraint violation (duplicate id or SMILES)')
+
+
 def init_db(db_fname: str, input_fname: str, ncpu: int, max_stereoisomers=1, prefix: str=None):
     Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
 
@@ -341,6 +352,9 @@ def init_db(db_fname: str, input_fname: str, ncpu: int, max_stereoisomers=1, pre
             from itertools import islice
             mol_input = islice(mol_input, last_index, None)
 
+        sql_smi = 'INSERT INTO mols (id, stereo_id, smi_input, smi) VALUES(?, ?, ?, ?)'
+        sql_mol = 'INSERT INTO mols (id, stereo_id, smi, source_mol_block_input, source_mol_block) VALUES(?, ?, ?, ?, ?)'
+
         data_smi = []  # non 3D structures
         data_mol = []  # 3D structures
         load_data_params = partial(generate_init_data, max_stereoisomers=max_stereoisomers, prefix=prefix)
@@ -352,14 +366,14 @@ def init_db(db_fname: str, input_fname: str, ncpu: int, max_stereoisomers=1, pre
                     data_mol.append(data)
 
             if i % 100 == 0:
-                cur.executemany(f'INSERT INTO mols (id, stereo_id, smi_input, smi) VALUES(?, ?, ?, ?)', data_smi)
-                cur.executemany(f'INSERT INTO mols (id, stereo_id, smi, source_mol_block_input, source_mol_block) VALUES(?, ?, ?, ?, ?)', data_mol)
+                _insert_rows(cur, sql_smi, data_smi)
+                _insert_rows(cur, sql_mol, data_mol)
                 conn.commit()
-                data_smi = []  # non 3D structures
-                data_mol = []  # 3D structures
+                data_smi = []
+                data_mol = []
 
-        cur.executemany(f'INSERT INTO mols (id, stereo_id, smi_input, smi) VALUES(?, ?, ?, ?)', data_smi)
-        cur.executemany(f'INSERT INTO mols (id, stereo_id, smi, source_mol_block_input, source_mol_block) VALUES(?, ?, ?, ?, ?)', data_mol)
+        _insert_rows(cur, sql_smi, data_smi)
+        _insert_rows(cur, sql_mol, data_mol)
         conn.commit()
 
         input_structures_total = count_input_structures(input_fname)
