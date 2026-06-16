@@ -100,11 +100,17 @@ easydock_plif -i output.db -p protein.pdb -o similarity.txt \
     --ref_plif ala31.a.hydrophobic asp86.a.cationic -c 4
 ```
 
-4. Extract top scoring by PLIF similarity:
+4. Select compound ids with desired PLIF similarity based on the text output file (column `plif_sim`) and pass them to `get_sdf_from_easydock`
+```
+#Example similarity.txt
+id	stereo_id	pose	plif_sim
+mol1	0	1	1.0
+mol2	0	1	0.5
+...
+```
+
 ```bash
-get_sdf_from_easydock -i output.db -o output.sdf \
-    --fields plif_similarity \
-    --add_sql 'plif_similarity > 0.8'
+get_sdf_from_easydock -i output.db -o output.sdf -d mol1
 ```
 
 ## Important Notes
