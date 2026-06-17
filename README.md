@@ -49,7 +49,13 @@ See the [full license list](https://easydock.readthedocs.io/en/latest/licenses/)
 - Meeko is **LGPL-2.1**
 
 ## Citation
-Minibaeva, G.; Ivanova, A.; Polishchuk, P.,  
-EasyDock: customizable and scalable docking tool.  
+1. EasyDock: customizable and scalable docking tool.  
+Minibaeva, G.; Ivanova, A.; Polishchuk, P.  
 *Journal of Cheminformatics* **2023**, 15 (1), 102.  
 https://doi.org/10.1186/s13321-023-00772-2
+  
+  
+2. EasyDock 1.3: An Automated Pipeline for Molecular Docking.   
+Minibaeva, G.; Yap, V.; Polishchuk, P.  
+*J. Chem. Inf. Model.* **2026**.  
+https://doi.org/10.1021/acs.jcim.6c01221
