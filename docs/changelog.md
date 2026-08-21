@@ -1,10 +1,10 @@
-**unreleased**
+**1.3.1**  
 - Uni-pKa container: add `-n`/`--nforms` and `--occupancy` arguments to retrieve several most populated microspecies instead of a single major one; the occupancy threshold has a higher priority than the number of forms  
 - Uni-pKa container: report the occupancy of every returned protonation form as a third output column (ignored by EasyDock, which keeps receiving one form per molecule)  
 - Uni-pKa container: add `--distribution-file`, `--ph-range`, `--ph-step` and `--distribution-min-occupancy` arguments to store the distribution of individual microspecies over a range of pH values  
 - Uni-pKa container: calculate occupancies in a numerically stable way, which fixes a failure for ensembles with extreme free energies, and skip microspecies with a non-finite predicted free energy  
 
-**1.3.0**
+**1.3.0**  
 - add server-based docking (`--program server`) supporting containerized deep-learning programs via a persistent JSON Lines protocol  
 - add CarsiDock server integration (SMILES input, SDF output, RTMScore scoring)  
 - add Vina-GPU server integration (bundles Vina-GPU, QVina2-GPU, QVinaW-GPU in a single container)  
