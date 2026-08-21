@@ -69,6 +69,118 @@ No protonation (use input states):
 easydock -i input.smi -o output.db -c 4
 ```
 
+### Standalone Uni-pKa Usage
+
+The Uni-pKa container can also be run on its own, outside the docking pipeline, to inspect
+protonation states in more detail than EasyDock needs. Its `protonate` command reads
+tab-separated `SMILES<TAB>name` records from a file (`-i`) or from STDIN, and writes the result
+to a file (`-o`) or to STDOUT:
+
+```bash
+# Apptainer
+apptainer run unipka.sif protonate -i input.smi -o output.smi
+
+# Docker
+docker run -i unipka protonate -i input.smi -o output.smi
+```
+
+Every output line contains the protonated SMILES, the molecule name and the occupancy of that
+form at the requested pH:
+
+```
+CC(=O)Oc1ccccc1C(=O)[O-]	ASPIRIN	0.9998
+```
+
+If no protonation form could be predicted, the input SMILES is returned with `NA` instead of an
+occupancy value.
+
+#### Retrieving Several Microspecies
+
+| Argument | Default | Description |
+|---|---|---|
+| `-n`, `--nforms` | 1 | maximum number of protonation forms per molecule |
+| `--occupancy` | 0 | minimum occupancy of a returned form, a fraction in [0, 1] |
+
+The occupancy threshold has a higher priority than the number of forms: the threshold filters the
+forms and `-n` only caps how many of them are returned. Therefore fewer than `-n` forms are
+returned if not enough of them reach the threshold. If no form reaches it at all, the most
+populated one is returned anyway and a warning is logged, so a molecule is never lost.
+
+```bash
+# up to 3 forms per molecule, each populated by at least 5%
+apptainer run unipka.sif protonate -i input.smi -o output.smi -n 3 --occupancy 0.05
+```
+
+All forms of a molecule are written consecutively and ordered by decreasing occupancy
+(imidazole at pH 7.4):
+
+```
+c1c[nH]cn1	IMIDAZOLE	0.6254
+c1c[nH+]c[nH]1	IMIDAZOLE	0.3746
+```
+
+!!! note "EasyDock always retrieves a single form"
+    EasyDock invokes the container without these arguments and thus receives exactly one line per
+    molecule, as before. Several forms of the same molecule cannot be stored in an EasyDock
+    database, because a molecule is identified there by `id` and `stereo_id` only.
+
+#### Distribution of Microspecies over pH
+
+`--distribution-file` additionally stores the occupancy of every individual microspecies over a
+range of pH values. Free energies of microspecies do not depend on pH, only their reweighting
+does, therefore a whole pH range is calculated without additional model predictions.
+
+| Argument | Default | Description |
+|---|---|---|
+| `--distribution-file` | - | output file for the distribution of microspecies (tab-separated) |
+| `--ph-range MIN MAX` | 0 14 | pH range to calculate the distribution |
+| `--ph-step` | 0.5 | pH step |
+| `--distribution-min-occupancy` | 0.01 | occupancy threshold to store a microspecies |
+
+The last three arguments are used only if `--distribution-file` was supplied.
+
+```bash
+apptainer run unipka.sif protonate -i input.smi -o output.smi \
+    --distribution-file distribution.tsv --ph-range 2 12 --ph-step 0.25
+```
+
+The file has a header and six columns:
+
+| Column | Description |
+|---|---|
+| `name` | molecule name |
+| `input_smi` | SMILES as it was supplied in the input |
+| `microstate_smi` | SMILES of the microspecies |
+| `dG` | predicted free energy of the microspecies, does not depend on pH |
+| `occupancy` | occupancy of the microspecies at the given pH value |
+| `pH` | pH value |
+
+Rows are written in blocks, one block per molecule, and molecules appear in the order they are
+completed by the pipeline. Within a block rows are ordered by pH value and then by decreasing
+occupancy, thus the most populated microspecies of every pH value comes first and the order
+reflects how the ranking changes with pH:
+
+```
+name	input_smi	microstate_smi	dG	occupancy	pH
+IMIDAZOLE	c1c[nH]cn1	c1c[nH+]c[nH]1	-6.7938	0.999993	2
+IMIDAZOLE	c1c[nH]cn1	c1c[nH]cn1	-5.24537	6.64703e-06	2
+...
+IMIDAZOLE	c1c[nH]cn1	c1c[nH+]c[nH]1	-6.7938	0.600706	7
+IMIDAZOLE	c1c[nH]cn1	c1c[nH]cn1	-5.24537	0.399294	7
+IMIDAZOLE	c1c[nH]cn1	c1c[nH]cn1	-5.24537	0.625422	7.4
+IMIDAZOLE	c1c[nH]cn1	c1c[nH+]c[nH]1	-6.7938	0.374578	7.4
+```
+
+A microspecies is stored only if its occupancy reaches `--distribution-min-occupancy` at least at
+one pH value of the range. This is decided per microspecies and not per row, so that the whole
+curve of a stored microspecies is written and can be plotted without gaps. Consequently every pH
+value of a block has the same number of rows. The pH value given by `--pH` is always added to the
+range, therefore the occupancies reported in the main output can always be found in the
+distribution file.
+
+Molecules for which nothing could be predicted are skipped in the distribution file. They are
+reported in the main output and in the log as described above.
+
 ## Molecular Docking
 
 ### Vina Docking

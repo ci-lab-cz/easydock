@@ -155,6 +155,10 @@ docker build -t unipka .
 easydock -i input.smi -o output.db -c 4 --protonation /path/to/unipka.sif
 ```
 
+The container can also be run on its own to retrieve several microspecies of a molecule or their
+distribution over a range of pH values - see
+[Standalone Uni-pKa Usage](usage.md#standalone-uni-pka-usage).
+
 ## Container Support
 
 EasyDock supports running external tools through Apptainer/Singularity or Docker containers. This section covers the OS-level runtime setup. For concrete container recipes and pre-built images, see [Containerized Docking Programs](#containerized-docking-programs) and [Containerized Protonation Tools](#containerized-protonation-tools).

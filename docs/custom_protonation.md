@@ -123,6 +123,13 @@ The container must expose a `protonate` subcommand that:
 3. Accepts a `--pH <float>` argument (required; default convention 7.4).
 4. Keeps running until STDIN is closed — the container is launched **once** and streams all molecules through a single process.
 
+!!! tip "Additional output columns are ignored"
+    EasyDock reads only the first two tab-separated columns of every output line, therefore a
+    container may append further columns with its own data without breaking the interface. The
+    Uni-pKa container uses this to report the occupancy of the returned protonation form as a
+    third column. Note that EasyDock stores a single protonated structure per molecule, so a
+    container must write exactly one line per input molecule.
+
 EasyDock invokes the container as:
 
 ```bash

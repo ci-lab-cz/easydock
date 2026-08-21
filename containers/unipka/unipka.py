@@ -11,7 +11,7 @@ import traceback
 from collections import defaultdict, OrderedDict
 from functools import partial
 from multiprocessing import Pool, cpu_count
-from typing import Dict, Iterator, List, Tuple, Union, Optional, Callable
+from typing import Dict, Iterator, List, NamedTuple, Tuple, Union, Optional, Callable
 from pprint import pprint
 
 import numpy as np
@@ -1473,19 +1473,85 @@ def predict_ensemble_free_energy(smi_list: List, template_a2b: pd.DataFrame, tem
     return result
 
 
-def calc_distribution(ensemble_free_energy: Dict[int, Dict[str, float]], pH: float) -> Dict[int, List[Tuple[str, float]]]:
-    ensemble_boltzmann_factor = defaultdict(list)
-    partition_function = 0
+def flatten_ensemble(ensemble_free_energy: Dict[int, List[Tuple[str, float]]]) -> Tuple[List[str], np.ndarray, np.ndarray]:
+    """
+    Flatten an ensemble of free energies into parallel arrays.
+
+    Microstates with a non-finite free energy are dropped, otherwise a single bad value would
+    propagate through the normalization and make the occupancies of a whole molecule NaN.
+
+    Params:
+    ----
+    `ensemble_free_energy`: dict of charge and a list of (microstate SMILES, free energy) tuples
+
+    Return:
+    ----
+    `microstates`, `charges`, `energies`: list of SMILES of length M and two arrays of shape (M, )
+    """
+    microstates, charges, energies = [], [], []
     for q, macrostate_free_energy in ensemble_free_energy.items():
         for microstate, DfGm in macrostate_free_energy:
-            boltzmann_factor = math.exp(-DfGm - q * LN10 * (pH - TRANSLATE_PH))
-            partition_function += boltzmann_factor
-            ensemble_boltzmann_factor[q].append((microstate, boltzmann_factor))
-    return {
-        q: [(microstate, boltzmann_factor / partition_function) for microstate, boltzmann_factor in
-            macrostate_boltzmann_factor]
-        for q, macrostate_boltzmann_factor in ensemble_boltzmann_factor.items()
-    }
+            if not math.isfinite(DfGm):
+                logger.debug(f'non-finite free energy {DfGm} of microstate {microstate} was dropped')
+                continue
+            microstates.append(microstate)
+            charges.append(q)
+            energies.append(DfGm)
+    return microstates, np.array(charges, dtype=np.float64), np.array(energies, dtype=np.float64)
+
+
+def calc_occupancy_grid(ensemble_free_energy: Dict[int, List[Tuple[str, float]]],
+                        ph_values) -> Tuple[List[str], np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Calculate Boltzmann occupancies of all microstates at every given pH value.
+
+    Free energies do not depend on pH, only their reweighting does. Therefore occupancies at any
+    number of pH values are obtained without additional model predictions.
+
+    Occupancies are computed in a numerically stable way: the exponents are shifted by their
+    maximum at each pH value, which makes the most populated microstate contribute exactly 1 and
+    avoids both overflow and a division by an underflowed partition function.
+
+    Params:
+    ----
+    `ensemble_free_energy`: dict of charge and a list of (microstate SMILES, free energy) tuples
+
+    `ph_values`: a sequence of pH values
+
+    Return:
+    ----
+    `microstates`, `charges`, `energies`, `occupancies`: list of SMILES of length M, two arrays of
+    shape (M, ) and an array of occupancies of shape (M, len(ph_values))
+    """
+    microstates, charges, energies = flatten_ensemble(ensemble_free_energy)
+    if not microstates:
+        return [], np.empty(0), np.empty(0), np.empty((0, len(ph_values)))
+    ph = np.asarray(ph_values, dtype=np.float64)
+    x = -energies[:, None] - charges[:, None] * LN10 * (ph[None, :] - TRANSLATE_PH)
+    x -= x.max(axis=0, keepdims=True)
+    w = np.exp(x)
+    return microstates, charges, energies, w / w.sum(axis=0, keepdims=True)
+
+
+def calc_distribution(ensemble_free_energy: Dict[int, List[Tuple[str, float]]], pH: float) -> Dict[int, List[Tuple[str, float]]]:
+    """
+    Calculate occupancies of all microstates of an ensemble at a single pH value.
+
+    Params:
+    ----
+    `ensemble_free_energy`: dict of charge and a list of (microstate SMILES, free energy) tuples
+
+    `pH`: pH value
+
+    Return:
+    ----
+    Dict of charge and a list of (microstate SMILES, occupancy) tuples
+    """
+    microstates, charges, _, occupancies = calc_occupancy_grid(ensemble_free_energy, [pH])
+    distribution = defaultdict(list)
+    for microstate, q, occupancy in zip(microstates, charges, occupancies[:, 0]):
+        distribution[int(q)].append((microstate, float(occupancy)))
+    return dict(distribution)
 
 
 class FreeEnergyPredictor(object):
@@ -2113,27 +2179,80 @@ def get_activation_fn(activation):
         raise RuntimeError("--activation-fn {} not supported".format(activation))
 
 
-def get_major_form(distribution):
-    max_ratio = 0
-    max_smi = ''
-    for items in distribution.values():
-        for smi, ratio in items:
-            if ratio > max_ratio:
-                max_ratio = ratio
-                max_smi = smi
-    return max_smi
+def get_top_forms(distribution: Dict[int, List[Tuple[str, float]]], n: int = 1,
+                  min_occupancy: float = 0.0) -> List[Tuple[str, float]]:
+    """
+    Select the most populated microspecies of a distribution.
+
+    The occupancy threshold has a higher priority than the number of forms: it filters the forms
+    and `n` only caps their number, thus fewer than `n` forms are returned if not enough of them
+    pass the threshold. If no form passes it, the single most populated form is returned anyway.
+
+    Params:
+    ----
+    `distribution`: dict of charge and a list of (microstate SMILES, occupancy) tuples
+
+    `n`: maximum number of forms to return
+
+    `min_occupancy`: minimum occupancy of a returned form, a fraction in [0, 1]
+
+    Return:
+    ----
+    A list of (SMILES, occupancy) tuples sorted by decreasing occupancy
+    """
+    forms = [(microstate, occupancy) for macrostate in distribution.values()
+             for microstate, occupancy in macrostate]
+    if not forms:
+        return []
+    forms.sort(key=lambda x: (-x[1], x[0]))   # SMILES tie-break to keep the output reproducible
+    passing = [form for form in forms if form[1] >= min_occupancy]
+    return passing[:n] if passing else forms[:1]
+
+
+def get_major_form(distribution: Dict[int, List[Tuple[str, float]]]) -> str:
+    forms = get_top_forms(distribution)
+    return forms[0][0] if forms else ''
+
+
+def get_forms_from_ensemble(item, pH: float = 7.4, n: int = 1,
+                            min_occupancy: float = 0.0) -> Tuple[str, List[Tuple[str, float]]]:
+    """
+    Select the most populated microspecies of an ensemble of free energies.
+
+    Params:
+    ----
+    `item`: a tuple of an input SMILES and its ensemble of free energies
+
+    `pH`: pH value
+
+    `n`: maximum number of forms to return
+
+    `min_occupancy`: minimum occupancy of a returned form, a fraction in [0, 1]
+
+    Return:
+    ----
+    A tuple of the input SMILES and a list of (SMILES, occupancy) tuples sorted by decreasing
+    occupancy. The list is empty if the distribution could not be calculated.
+    """
+    smi, ensemble_free_energies = item
+    try:
+        forms = get_top_forms(calc_distribution(ensemble_free_energies, pH=pH), n=n,
+                              min_occupancy=min_occupancy)
+        if not forms:
+            logger.debug(f'get_top_forms returned no forms for {smi}')
+        elif forms[0][1] < min_occupancy:
+            logger.warning(f'No protonation form of {smi} reaches the occupancy threshold '
+                           f'{min_occupancy} at pH {pH}, the most populated form '
+                           f'(occupancy {forms[0][1]:.4f}) was returned')
+    except Exception as e:
+        logger.debug(f'get_forms_from_ensemble failed for {smi}: {e}', exc_info=True)
+        forms = []
+    return smi, forms
 
 
 def get_major_form_from_ensemble(item, pH=7.4):
-    smi, ensemble_free_energies = item
-    try:
-        prot_smi = get_major_form(calc_distribution(ensemble_free_energies, pH=pH))
-        if not prot_smi:
-            logger.debug(f'get_major_form returned empty SMILES for {smi}')
-    except Exception as e:
-        logger.debug(f'get_major_form_from_ensemble failed for {smi}: {e}', exc_info=True)
-        prot_smi = None
-    return smi, prot_smi
+    smi, forms = get_forms_from_ensemble(item, pH=pH)
+    return smi, (forms[0][0] if forms else None)
 
 
 def calc_all(items, template_a2b, template_b2a, predictor, pH=7.4):
@@ -2185,6 +2304,23 @@ def _priority_stream(
         yield best
 
 
+class MolResult(NamedTuple):
+    """
+    Result of the whole pipeline for a single molecule.
+
+    :param input_smi: SMILES as it was supplied in the input
+    :param name: molecule name
+    :param forms: list of (SMILES, occupancy) tuples of the selected protonation forms sorted by
+                  decreasing occupancy, empty if the molecule failed
+    :param ensemble_free_energy: dict of charge and a list of (microstate SMILES, free energy)
+                                 tuples, empty if the molecule failed
+    """
+    input_smi: str
+    name: str
+    forms: List[Tuple[str, float]]
+    ensemble_free_energy: Dict[int, List[Tuple[str, float]]]
+
+
 class UnipkaStream:
     """
     Streaming pKa prediction pipeline with no batch-level barriers.
@@ -2192,8 +2328,8 @@ class UnipkaStream:
     CPU (get_ensemble) and GPU (predictor.predict) stages overlap: pool workers
     continuously generate ensembles while the GPU fires whenever enough
     microstates have accumulated (gpu_trigger_microstates) or a timeout expires.
-    Each molecule is yielded as (smi, prot_smi, name) the moment all its
-    microstates have been predicted, without waiting for other molecules.
+    Each molecule is yielded as a MolResult the moment all its microstates have been
+    predicted, without waiting for other molecules.
 
     :param template_a2b: protonation template DataFrame
     :param template_b2a: deprotonation template DataFrame
@@ -2201,6 +2337,8 @@ class UnipkaStream:
     :param patterns: pre-loaded SMARTS patterns for priority scoring
     :param ncpu: number of worker processes for ensemble generation
     :param pH: target pH
+    :param n_forms: maximum number of protonation forms to return per molecule
+    :param min_occupancy: minimum occupancy of a returned form, a fraction in [0, 1]
     :param priority_buffer_size: lookahead window for priority reordering
     :param gpu_trigger_microstates: fire GPU when this many microstates accumulated
     :param gpu_trigger_timeout: fire GPU after this many seconds even if threshold not reached
@@ -2214,6 +2352,8 @@ class UnipkaStream:
         patterns: List[Mol],
         ncpu: int,
         pH: float = 7.4,
+        n_forms: int = 1,
+        min_occupancy: float = 0.0,
         priority_buffer_size: int = 2000,
         gpu_trigger_microstates: int = 512,
         gpu_trigger_timeout: float = 5.0,
@@ -2224,17 +2364,19 @@ class UnipkaStream:
         self._patterns = patterns
         self._ncpu = ncpu
         self._pH = pH
+        self._n_forms = n_forms
+        self._min_occupancy = min_occupancy
         self._priority_buffer_size = priority_buffer_size
         self._gpu_trigger_microstates = gpu_trigger_microstates
         self._gpu_trigger_timeout = gpu_trigger_timeout
 
     def process(
         self, source: Iterator[Tuple[str, str]]
-    ) -> Iterator[Tuple[str, str, str]]:
+    ) -> Iterator[MolResult]:
         """
         Accept an iterator of (smi, name) tuples.
-        Yield (smi, prot_smi, name) as each molecule completes all stages.
-        prot_smi is None if the molecule failed.
+        Yield a MolResult as each molecule completes all stages. Its forms are empty if the
+        molecule failed.
         """
         # Per-molecule state: smi → dict with tracking info
         pending: Dict[str, dict] = {}
@@ -2277,9 +2419,9 @@ class UnipkaStream:
                     pass
                 elif len(all_microstates) == 0:
                     # empty ensemble — complete immediately
-                    logger.debug(f'Empty ensemble for {smi}: yielding None for {smi_to_names[smi]}')
+                    logger.debug(f'Empty ensemble for {smi}: yielding no forms for {smi_to_names[smi]}')
                     for name in smi_to_names[smi]:
-                        yield smi, None, name
+                        yield MolResult(smi, name, [], {})
                 else:
                     pending[smi] = {
                         'ensemble': ensemble,
@@ -2312,7 +2454,7 @@ class UnipkaStream:
         pending: dict,
         microstate_to_smi: Dict[str, str],
         smi_to_names: Dict[str, List[str]],
-    ) -> Iterator[Tuple[str, str, str]]:
+    ) -> Iterator[MolResult]:
         """Run predictor on accumulated microstates; yield completed molecules."""
         if not microstate_queue:
             return
@@ -2343,18 +2485,96 @@ class UnipkaStream:
                     logger.debug(f'No predicted energies for {parent}: all microstates failed GPU prediction')
 
                 try:
-                    _, prot_smi = get_major_form_from_ensemble(
-                        (parent, ensemble_free_energy), self._pH
+                    _, forms = get_forms_from_ensemble(
+                        (parent, ensemble_free_energy), self._pH, self._n_forms, self._min_occupancy
                     )
                 except Exception:
-                    logger.debug(f'get_major_form_from_ensemble failed for {parent}', exc_info=True)
-                    prot_smi = None
+                    logger.debug(f'get_forms_from_ensemble failed for {parent}', exc_info=True)
+                    forms = []
 
-                if not prot_smi:
-                    logger.debug(f'Empty protonated SMILES for {parent} (names: {smi_to_names[parent]})')
+                if not forms:
+                    logger.debug(f'No protonation forms for {parent} (names: {smi_to_names[parent]})')
                 for name in smi_to_names[parent]:
-                    yield parent, prot_smi, name
+                    yield MolResult(parent, name, forms, ensemble_free_energy)
                 del pending[parent]
+
+
+def build_ph_grid(ph_min: float, ph_max: float, ph_step: float, extra_ph: float = None) -> List[float]:
+    """
+    Build a sorted list of pH values covering [`ph_min`, `ph_max`] with a given step.
+
+    `ph_max` is always included, even if the range is not a multiple of the step. `extra_ph`
+    (the pH value of the main output) is inserted if it is missing, so that occupancies reported
+    in the main output can always be found in the distribution file.
+    """
+    n_steps = int(math.floor((ph_max - ph_min) / ph_step + 1e-9))
+    values = [round(ph_min + i * ph_step, 6) for i in range(n_steps + 1)]
+    if values[-1] < round(ph_max, 6):
+        values.append(round(ph_max, 6))
+    if extra_ph is not None and round(extra_ph, 6) not in values:
+        values.append(round(extra_ph, 6))
+    return sorted(values)
+
+
+class DistributionWriter:
+    """
+    Write occupancies of individual microspecies over a range of pH values to a tab-separated file.
+
+    Rows are written in blocks, one block per molecule, in the order molecules are completed by
+    the pipeline. Within a block rows are sorted by pH value and then by decreasing occupancy.
+
+    A microspecies is written only if its occupancy reaches `min_occupancy` at least at one pH
+    value of the grid. This is decided per microspecies and not per row, so that its whole curve
+    is either written or omitted. Microspecies reported in the main output are always written and,
+    if none of them reaches the threshold, the most populated one is written. Therefore a block is
+    never empty.
+
+    :param fname: output file name
+    :param ph_values: sorted list of pH values
+    :param min_occupancy: occupancy threshold to write a microspecies, a fraction in [0, 1]
+    """
+
+    HEADER = ('name', 'input_smi', 'microstate_smi', 'dG', 'occupancy', 'pH')
+
+    def __init__(self, fname: str, ph_values: List[float], min_occupancy: float = 0.0):
+        self._ph_values = list(ph_values)
+        self._min_occupancy = min_occupancy
+        self._fh = open(fname, 'wt')
+        self._fh.write('\t'.join(self.HEADER) + '\n')
+        self._fh.flush()
+
+    def write(self, result: MolResult) -> None:
+        if not result.ensemble_free_energy:
+            logger.debug(f'no distribution was written for {result.name}: empty ensemble')
+            return
+
+        microstates, _, energies, occupancies = calc_occupancy_grid(result.ensemble_free_energy,
+                                                                   self._ph_values)
+        if not microstates:
+            logger.debug(f'no distribution was written for {result.name}: '
+                         f'no free energies were predicted')
+            return
+
+        reported = {smi for smi, _ in result.forms}
+        max_occupancy = occupancies.max(axis=1)
+        ids = [i for i, microstate in enumerate(microstates)
+               if max_occupancy[i] >= self._min_occupancy or microstate in reported]
+        if not ids:
+            # a large ensemble may spread the population so thinly that no microspecies reaches
+            # the threshold at any pH value, keep the most populated one to write a non-empty block
+            ids = [int(np.argmax(max_occupancy))]
+            logger.debug(f'no microspecies of {result.name} reaches the occupancy threshold '
+                         f'{self._min_occupancy}, only the most populated one was written')
+
+        for j, pH in enumerate(self._ph_values):
+            # SMILES tie-break to keep the order of equally populated microspecies reproducible
+            for i in sorted(ids, key=lambda i: (-occupancies[i, j], microstates[i])):
+                self._fh.write(f'{result.name}\t{result.input_smi}\t{microstates[i]}\t'
+                               f'{energies[i]:.6g}\t{occupancies[i, j]:.6g}\t{pH:g}\n')
+        self._fh.flush()
+
+    def close(self) -> None:
+        self._fh.close()
 
 
 def main():
@@ -2371,6 +2591,26 @@ def main():
     parser.add_argument('-m', '--model', default='/unipka/t_dwar_v_novartis_a_b.pt',
                         help="Model file")
     parser.add_argument('--pH', type=float, default=7.4, help="pH value (default: 7.4)")
+    parser.add_argument('-n', '--nforms', type=int, default=1, dest='n',
+                        help="number of protonation forms to retrieve (default: 1). The occupancy "
+                             "threshold has a higher priority, thus fewer forms may be returned")
+    parser.add_argument('--occupancy', type=float, default=0,
+                        help="minimum occupancy of a retrieved protonation form, a fraction in "
+                             "[0, 1] (default: 0). If no form reaches the threshold, the most "
+                             "populated one is returned anyway")
+    parser.add_argument('--distribution-file', default=None,
+                        help="output file to store occupancies of individual microspecies over a "
+                             "range of pH values (tab-separated)")
+    parser.add_argument('--ph-range', nargs=2, type=float, default=None, metavar=('MIN', 'MAX'),
+                        help="pH range to calculate the distribution of microspecies, used only "
+                             "if --distribution-file was supplied (default: 0 14)")
+    parser.add_argument('--ph-step', type=float, default=None,
+                        help="pH step to calculate the distribution of microspecies, used only "
+                             "if --distribution-file was supplied (default: 0.5)")
+    parser.add_argument('--distribution-min-occupancy', type=float, default=0.01,
+                        help="a microspecies is stored in --distribution-file only if its "
+                             "occupancy reaches this threshold at least at one pH value of the "
+                             "range (default: 0.01)")
     parser.add_argument('-c', '--ncpu', type=int, default=None, help="number of CPU (default: all)")
     parser.add_argument(
         '--log-level',
@@ -2381,6 +2621,23 @@ def main():
 
     args = parser.parse_args()
 
+    if args.n < 1:
+        parser.error('-n must be 1 or greater')
+    if not 0 <= args.occupancy <= 1:
+        parser.error('--occupancy must be a fraction in [0, 1]')
+    if not 0 <= args.distribution_min_occupancy <= 1:
+        parser.error('--distribution-min-occupancy must be a fraction in [0, 1]')
+
+    ph_range = (0.0, 14.0) if args.ph_range is None else tuple(args.ph_range)
+    ph_step = 0.5 if args.ph_step is None else args.ph_step
+    if args.distribution_file is not None:
+        if ph_range[0] >= ph_range[1]:
+            parser.error('--ph-range must be supplied as MIN MAX, where MIN < MAX')
+        if ph_step <= 0:
+            parser.error('--ph-step must be greater than 0')
+        if ph_step > ph_range[1] - ph_range[0]:
+            parser.error('--ph-step must not exceed the width of --ph-range')
+
     logging.basicConfig(
         format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
@@ -2388,6 +2645,18 @@ def main():
         stream=sys.stderr,
     )
     logger.setLevel(args.log_level)
+
+    if args.distribution_file is None and (args.ph_range is not None or args.ph_step is not None):
+        logger.warning('--ph-range and --ph-step are ignored because --distribution-file '
+                       'was not supplied')
+
+    distribution_writer = None
+    if args.distribution_file is not None:
+        ph_values = build_ph_grid(ph_range[0], ph_range[1], ph_step, extra_ph=args.pH)
+        distribution_writer = DistributionWriter(args.distribution_file, ph_values,
+                                                 min_occupancy=args.distribution_min_occupancy)
+        logger.info(f'distribution of microspecies will be written to {args.distribution_file} '
+                    f'for {len(ph_values)} pH values')
 
     if args.ncpu is None:
         ncpu = cpu_count()
@@ -2406,6 +2675,8 @@ def main():
         patterns=patterns,
         ncpu=ncpu,
         pH=args.pH,
+        n_forms=args.n,
+        min_occupancy=args.occupancy,
     )
 
     if args.input is not None:
@@ -2424,15 +2695,23 @@ def main():
 
     fout = open(args.output, 'wt') if args.output else sys.stdout
     try:
-        for smi, prot_smi, mol_name in pipeline.process(source()):
-            if prot_smi is None:
-                prot_smi = smi
-                logger.warning(f'Molecule {mol_name} (SMILES: {smi}) produced no protonated form, the source form was returned')
-            fout.write(f'{prot_smi}\t{mol_name}\n')
+        for res in pipeline.process(source()):
+            if not res.forms:
+                logger.warning(f'Molecule {res.name} (SMILES: {res.input_smi}) produced no '
+                               f'protonated form, the source form was returned')
+                fout.write(f'{res.input_smi}\t{res.name}\tNA\n')
+            else:
+                # forms are already sorted by decreasing occupancy
+                for prot_smi, occupancy in res.forms:
+                    fout.write(f'{prot_smi}\t{res.name}\t{occupancy:.4f}\n')
             fout.flush()
+            if distribution_writer is not None:
+                distribution_writer.write(res)
     finally:
         if args.output:
             fout.close()
+        if distribution_writer is not None:
+            distribution_writer.close()
         pool.terminate()
 
 
