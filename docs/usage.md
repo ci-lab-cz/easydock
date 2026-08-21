@@ -137,7 +137,9 @@ does, therefore a whole pH range is calculated without additional model predicti
 | `--ph-step` | 0.5 | pH step |
 | `--distribution-min-occupancy` | 0.01 | occupancy threshold to store a microspecies |
 
-The last three arguments are used only if `--distribution-file` was supplied.
+`--ph-range` and `--ph-step` are used only if `--distribution-file` was supplied.
+`--distribution-min-occupancy` applies both to the distribution file and to the images
+described below.
 
 ```bash
 apptainer run unipka.sif protonate -i input.smi -o output.smi \
@@ -180,6 +182,47 @@ distribution file.
 
 Molecules for which nothing could be predicted are skipped in the distribution file. They are
 reported in the main output and in the log as described above.
+
+#### Plotting the Distribution
+
+`--png` writes one image per molecule into a directory. The upper panel contains occupancy curves
+of individual microspecies and the lower panel their 2D structures. Every microspecies has its own
+colour which is used for its curve, for the frame of its structure and for its caption, thus the
+colour links a curve to a structure.
+
+| Argument | Default | Description |
+|---|---|---|
+| `--png` | - | output directory for images, created if it does not exist |
+
+```bash
+# images only
+apptainer run unipka.sif protonate -i input.smi -o output.smi --png images
+
+# both outputs at once
+apptainer run unipka.sif protonate -i input.smi -o output.smi \
+    --png images --distribution-file distribution.tsv --ph-range 2 12
+```
+
+![Distribution of microspecies of imidazole](assets/unipka_distribution.png)
+
+Images are always plotted for the **whole pH range 0-14** with a step of 0.1 to get smooth curves.
+`--ph-range` and `--ph-step` apply to the distribution file only and never affect images, whereas
+`--distribution-min-occupancy` applies to both outputs. Since the inclusion criterion is applied to
+the pH range of each output separately, an image and the distribution file may contain different
+sets of microspecies when their ranges differ. For instance, with `--ph-range 8 12` the neutral
+form of aspirin is absent from the distribution file because it is not populated above pH 8, but it
+is still plotted because it dominates below pH 4.
+
+The dashed vertical line marks the pH value of `--pH`, and the caption of every structure reports
+its charge and its occupancy at that pH, which is the value reported in the main output. Images are
+1000 px wide, a structure occupies a cell of 330x250 px and up to three cells are placed in a row.
+An image is written for every molecule with a predicted ensemble, including molecules having a
+single form. Molecules for which nothing could be predicted are skipped, as in the distribution
+file.
+
+!!! note "Throughput"
+    Rendering takes about 0.1 s per molecule, therefore `--png` is intended for tens or hundreds
+    of molecules rather than for whole libraries.
 
 ## Molecular Docking
 

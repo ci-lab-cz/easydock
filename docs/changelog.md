@@ -1,3 +1,6 @@
+**unreleased (accessible from master)**  
+- Uni-pKa container: add `--png` argument to plot the distribution of individual microspecies together with their 2D structures, one image per molecule; curves and structures are linked by colour. Images are always plotted for the whole pH range 0-14.  
+
 **1.3.1**  
 - Uni-pKa container: add `-n`/`--nforms` and `--occupancy` arguments to retrieve several most populated microspecies instead of a single major one; the occupancy threshold has a higher priority than the number of forms  
 - Uni-pKa container: report the occupancy of every returned protonation form as a third output column (ignored by EasyDock, which keeps receiving one form per molecule)  
