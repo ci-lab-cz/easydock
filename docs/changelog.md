@@ -1,5 +1,9 @@
 **unreleased (accessible from master)**  
 - Uni-pKa container: add `--png` argument to plot the distribution of individual microspecies together with their 2D structures, one image per molecule; curves and structures are linked by colour. Images are always plotted for the whole pH range 0-14.  
+- fix the `raw_format` database variable for generic docking: it is now taken from `ligand_out_format` [#74](https://github.com/ci-lab-cz/easydock/issues/74)  
+- server-based docking: `ligand_out_format` set in the client config is now respected when storing the `raw_format` database variable  
+- generic docking: support of the PDB output format (`ligand_out_format: pdb`)  
+- generic docking: the best pose from SDF output is stored with the molecule name as a title and without SD properties of a docking program  
 
 **1.3.1**  
 - Uni-pKa container: add `-n`/`--nforms` and `--occupancy` arguments to retrieve several most populated microspecies instead of a single major one; the occupancy threshold has a higher priority than the number of forms  

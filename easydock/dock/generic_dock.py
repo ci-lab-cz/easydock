@@ -12,7 +12,7 @@ import yaml
 from rdkit import Chem
 
 from easydock.auxiliary import expand_path, resolve_path
-from easydock.dock.preparation_for_docking import ligand_preparation, pdbqt2molblock
+from easydock.dock.preparation_for_docking import ligand_preparation, pdbqt2molblock, pdb2molblock
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +156,12 @@ def _parse_score(raw_block, out_format, parse_score_cfg):
 
 def _build_mol_block(raw_block, out_format, mol, mol_id):
     if out_format == 'sdf':
-        return raw_block.split('$$$$')[0]
+        # replace the title with mol_id and drop SD properties of the program output
+        first = raw_block.split('$$$$')[0]
+        if '\n' not in first or 'M  END' not in first:
+            return None
+        rest = first.split('\n', 1)[1]
+        return f'{mol_id}\n' + rest.split('M  END')[0] + 'M  END\n'
     if out_format == 'pdbqt':
         parts = re.split(r'^MODEL\b', raw_block, maxsplit=1, flags=re.MULTILINE)
         first_model = parts[1] if len(parts) > 1 else raw_block
@@ -166,8 +171,8 @@ def _build_mol_block(raw_block, out_format, mol, mol_id):
             logger.exception('Failed to convert pdbqt pose to mol_block for %s', mol_id)
             return None
     if out_format == 'pdb':
-        parts = re.split(r'^MODEL\b', raw_block, maxsplit=1, flags=re.MULTILINE)
-        return (parts[1] if len(parts) > 1 else raw_block).strip()
+        first_model = re.split(r'^ENDMDL.*$', raw_block.strip(), maxsplit=1, flags=re.MULTILINE)[0]
+        return pdb2molblock(first_model, mol, mol_id)
     return None
 
 

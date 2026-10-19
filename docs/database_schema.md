@@ -36,7 +36,7 @@ The central table. One row per enumerated stereoisomer of each input molecule. T
 | `source_mol_block` | TEXT | NULL | Cleaned mol block (salts stripped, 2D/3D structure)<br>prepared for docking. Set for 3D inputs.                                     |
 | `source_mol_block_protonated` | TEXT | NULL | Mol block after protonation, inheriting 3D<br>coordinates from `source_mol_block`.<br>Set when protonation is applied to<br>a 3D input. |
 | `docking_score` | REAL | NULL | Best docking score in kcal/mol. NULL until<br>docking completes for this molecule.                                                  |
-| `raw_block` | TEXT | NULL | All docking poses in their native format<br>(PDBQT or SDF, controlled by the `raw_format`<br>variable). NULL until docking completes.  |
+| `raw_block` | TEXT | NULL | All docking poses in their native format<br>(PDBQT, SDF or PDB, controlled by the `raw_format`<br>variable). NULL until docking completes.  |
 | `mol_block` | TEXT | NULL | Best docking pose as an MDL mol block.<br>NULL until docking completes.                                                             |
 | `dock_time` | REAL | NULL | Wall-clock docking time for this molecule in<br>seconds.                                                                               |
 | `time` | TEXT | NULL | ISO timestamp of the last write to this row<br>(`datetime(current_timestamp, 'localtime')`).<br>Updated on every `UPDATE`.          |
@@ -62,7 +62,7 @@ Each stage selects its work by checking which columns are still NULL:
 
 - Rows with `smi IS NULL AND source_mol_block IS NULL AND stereo_id = 0` represent molecules that failed stereoisomer generation and are silently skipped by all downstream stages.
 - `mol_block` stores only the best pose; all poses are in `raw_block`. Use `raw_block` when re-ranking or re-scoring poses.
-- The `raw_block` format (PDBQT vs SDF) is determined by the `raw_format` variable in the [`variables`](#variables) table.
+- The `raw_block` format (PDBQT, SDF or PDB) is determined by the `raw_format` variable in the [`variables`](#variables) table.
 
 ---
 
@@ -101,7 +101,7 @@ A generic key-value store for module-level metadata. Allows any module to persis
 
 | Module | Name | Type | Values | Meaning |
 |---|---|---|---|---|
-| `database` | `raw_format` | str | `'pdbqt'`, `'sdf'` | Format of pose data stored in `mols.raw_block`.<br>Defaults to `'pdbqt'`; set to `'sdf'` for<br>server-based docking programs that return SDF. |
+| `database` | `raw_format` | str | `'pdbqt'`, `'sdf'`, `'pdb'` | Format of pose data stored in `mols.raw_block`.<br>Defaults to `'pdbqt'`. For generic and server-based<br>docking it is taken from `ligand_out_format` in the config;<br>for server-based docking, if not set, from the server `info` response. |
 | `run_dock` | `input_structures_total` | int | positive integer | Total number of input structures counted at startup —<br>used for progress reporting. |
 | `easydock_bust` | `bust_protein` | str | PDB text | Protein PDB block with explicit hydrogens added,<br>used by PoseBusters. |
 | `easydock_plif` | `plif_protein` | str | PDB text | Protein PDB block with explicit hydrogens added,<br>used by ProLIF. |

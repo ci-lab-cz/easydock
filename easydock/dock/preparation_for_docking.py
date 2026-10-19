@@ -428,3 +428,26 @@ def pdbqt2molblock(pdbqt_block, template_mol, mol_id=''):
                         f"{traceback.format_exc()}")
 
     return mol_block
+
+
+def pdb2molblock(pdb_block, template_mol, mol_id=''):
+    """
+    The function takes PDB block with a single pose and converts it to MDL MOL format. Hydrogens are removed and
+    bond orders are assigned from a template molecule
+    :param pdb_block: a single string with a single PDB block (a single pose)
+    :param template_mol: Mol of a reference structure to assign bond orders
+    :param mol_id: name of a molecule which will be added as a title in the output MOL block
+    :return: a single string with a MOL block, if conversion failed returns None
+    """
+    try:
+        pdb_mol = Chem.MolFromPDBBlock(pdb_block, removeHs=True, sanitize=False)
+        mol = AllChem.AssignBondOrdersFromTemplate(Chem.RemoveHs(template_mol), pdb_mol)
+        Chem.SanitizeMol(mol)
+        Chem.AssignStereochemistryFrom3D(mol)
+        if mol_id:
+            mol.SetProp("_Name", mol_id)
+        return Chem.MolToMolBlock(mol)
+    except Exception:
+        logging.warning(f"{mol_id}, conversion PDB to MOL was failed.\n"
+                        f"{traceback.format_exc()}")
+        return None

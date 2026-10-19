@@ -3,6 +3,7 @@ import os
 import json
 import gzip
 import pickle
+import re
 import sqlite3
 import tempfile
 import traceback
@@ -18,7 +19,7 @@ import yaml
 from easydock import read_input
 from easydock.dock.preparation_for_docking import mol_is_3d
 from easydock.auxiliary import take, mol_name_split, timeout, expand_path, count_input_structures
-from easydock.dock.preparation_for_docking import pdbqt2molblock
+from easydock.dock.preparation_for_docking import pdbqt2molblock, pdb2molblock
 from easydock.protonation import (
     protonate_chemaxon,
     read_protonate_chemaxon,
@@ -35,7 +36,7 @@ from rdkit.Chem.EnumerateStereoisomers import EnumerateStereoisomers, StereoEnum
 from rdkit.Chem.SaltRemover import SaltRemover
 
 
-VALID_RAW_FORMATS = ('pdbqt', 'sdf')
+VALID_RAW_FORMATS = ('pdbqt', 'sdf', 'pdb')
 DEFAULT_RAW_FORMAT = 'pdbqt'
 _POSE_SEP = ':'
 
@@ -44,9 +45,9 @@ def get_poses_from_raw_block(raw_block, docking_format, mol, mol_id, poses):
     """
     Extract specific poses from a raw_block string.
 
-    :param raw_block: raw block string (pdbqt or sdf format)
-    :param docking_format: 'pdbqt' or 'sdf'
-    :param mol: RDKit Mol object used as atom-order template (pdbqt only)
+    :param raw_block: raw block string (pdbqt, sdf or pdb format)
+    :param docking_format: 'pdbqt', 'sdf' or 'pdb'
+    :param mol: RDKit Mol object used as a template to assign bond orders (pdbqt and pdb only)
     :param mol_id: molecule name without pose suffix
     :param poses: 1-based list of pose indices to extract
     :return: list of (pose_index, mol_block_string) tuples; mol_block_string has no trailing $$$$
@@ -72,6 +73,19 @@ def get_poses_from_raw_block(raw_block, docking_format, mol, mol_id, poses):
                 continue
             name_line, rest = block.split('\n', 1)
             results.append((i, f'{mol_id}{_POSE_SEP}{i}\n{rest}'))
+    elif docking_format == 'pdb':
+        raw_block_list = [q for q in re.split(r'^ENDMDL.*$', raw_block.strip(), flags=re.MULTILINE) if q.strip()]
+        for i in poses:
+            try:
+                block = raw_block_list[i - 1]
+            except IndexError:
+                logging.warning(f'Pose {i} not found in raw block of {mol_id}. Skipping.')
+                continue
+            pose_mol_block = pdb2molblock(block, mol, mol_id + f'{_POSE_SEP}{i}')
+            if pose_mol_block:
+                results.append((i, pose_mol_block))
+    else:
+        logging.error(f'Unsupported raw format {docking_format!r}. Additional poses of {mol_id} cannot be extracted.')
     return results
 
 
@@ -199,6 +213,31 @@ def validate_config(config_fname):
     return {'raw_format': raw_format}
 
 
+def _get_raw_format(config_fname, program):
+    """
+    Determine the format of raw_block for generic and server docking from `ligand_out_format`.
+    For server docking, if it is not set in the config, the server is queried for its default.
+    :param config_fname: path to YAML config file
+    :param program: name of a docking program (--program argument)
+    :return: raw format or None if it cannot be determined from ligand_out_format
+    :raises ValueError: if the value is invalid
+    """
+    if program not in ('generic', 'server'):
+        return None
+    with open(config_fname) as f:
+        config = yaml.safe_load(f) or {}
+    raw_format = config.get('ligand_out_format')
+    if not raw_format and program == 'server':
+        from easydock.dock.server_dock import server_info
+        raw_format = server_info(config_fname).get('ligand_out_format')
+    if raw_format and raw_format not in VALID_RAW_FORMATS:
+        raise ValueError(
+            f"Invalid ligand_out_format '{raw_format}' in config. "
+            f"Must be one of: {VALID_RAW_FORMATS}"
+        )
+    return raw_format
+
+
 def create_db(db_fname, args, unique_smi=False):
     """
     Create empty database structure, the setup table, and save all input args.
@@ -244,9 +283,9 @@ def populate_setup_db(db_fname, args):
     """Save config file and all referenced text files to the setup table."""
     from easydock.session import save_session_config
     validated_args = validate_config(args.config)
+    raw_format = _get_raw_format(args.config, getattr(args, 'program', None)) or validated_args['raw_format']
     with sqlite3.connect(db_fname, timeout=90) as conn:
         save_session_config(conn, args.config)
-        raw_format = validated_args['raw_format']
         set_variable(conn, 'database', 'raw_format', raw_format)
 
 

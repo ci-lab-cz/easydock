@@ -333,10 +333,6 @@ def main():
             if args.program == 'server':
                 info = server_info(args.config)
                 batch_size = info.get('batch_size', 1)
-                raw_format = info.get('ligand_out_format')
-                if raw_format:
-                    with sqlite3.connect(args.output, timeout=90) as conn:
-                        set_variable(conn, 'database', 'raw_format', raw_format)
 
             with sqlite3.connect(args.output, timeout=90) as conn:
                 mols = MolQueue(args.output, batch_size=batch_size)
