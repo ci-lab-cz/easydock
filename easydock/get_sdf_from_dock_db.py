@@ -36,6 +36,11 @@ def main():
     parser.add_argument('--bust', action='store_true', default=False,
                         help='return only poses that passed the PoseBusters aggregated check. '
                              'Results must be pre-computed with easydock_bust.')
+    parser.add_argument('--order_docking_score', default=None, type=str, choices=['asc', 'desc'],
+                        help='order output records by docking score in ascending (asc) or descending (desc) order. '
+                             'Records without a docking score are placed last. If omitted, the order is not changed '
+                             '(the order of ids is kept if they were supplied). If specified together with --ids, '
+                             'ordering by docking score has a priority.')
     parser.add_argument('--debug', action='store_true', default=False,
                         help='print the final SQL query before execution.')
 
@@ -88,8 +93,13 @@ def main():
         if 'raw_block' not in args.fields:
             args.fields.append('raw_block')
 
-    if args.fields:
-        sql = f"SELECT {main_field}, {','.join(args.fields)} FROM mols WHERE mol_block IS NOT NULL"
+    # docking_score is added as a hidden last column if it should be used for ordering but was not requested,
+    # because ORDER BY of compound queries (UNION with tautomers) may refer only to output columns
+    hidden_score = args.order_docking_score is not None and 'docking_score' not in args.fields
+    select_fields = args.fields + ['docking_score'] if hidden_score else args.fields
+
+    if select_fields:
+        sql = f"SELECT {main_field}, {','.join(select_fields)} FROM mols WHERE mol_block IS NOT NULL"
     else:
         sql = f"SELECT {main_field} FROM mols WHERE mol_block IS NOT NULL"
     if args.ids:
@@ -106,8 +116,8 @@ def main():
 
     if tautomers_exist:
         sql += " UNION "
-        if args.fields:
-            sql += f" SELECT {main_field}, {','.join(args.fields)} FROM tautomers WHERE mol_block is NOT NULL AND duplicate IS NULL"
+        if select_fields:
+            sql += f" SELECT {main_field}, {','.join(select_fields)} FROM tautomers WHERE mol_block is NOT NULL AND duplicate IS NULL"
         else:
             sql += f" SELECT {main_field} FROM tautomers WHERE mol_block is NOT NULL AND duplicate IS NULL"
         if args.ids:
@@ -120,7 +130,9 @@ def main():
     if args.first_entry:
         sql += " GROUP BY id HAVING MIN(rowid)"
 
-    if args.ids:
+    if args.order_docking_score:
+        sql += f" ORDER BY docking_score {args.order_docking_score.upper()} NULLS LAST"
+    elif args.ids:
         # https://dba.stackexchange.com/questions/302006/sqlite-return-rows-in-select-in-order
         case_str = ' '.join(f'WHEN "{mol_id}" THEN {i}' for i, mol_id in enumerate(ids, 1))
         sql += f" ORDER BY CASE mols.id {case_str} END"
@@ -137,6 +149,8 @@ def main():
         if ext == 'smi':
             f.write(main_field + '\t' + '\t'.join(args.fields) + '\n')
         for item in res:  # (mol_block, ...)
+            if hidden_score:
+                item = item[:-1]
             if ext == 'sdf':
                 mol_block = item[0]
                 mol_id = mol_block.split('\n', 1)[0]

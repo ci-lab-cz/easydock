@@ -67,6 +67,17 @@ get_sdf_from_easydock -i output.db -o output.sdf \
     --add_sql 'docking_score < -10'
 ```
 
+### Ordering by Docking Score
+
+Order output records by docking score in ascending (`asc`, best scores first for most docking programs) or descending (`desc`) order. Ordering is done on the database side. Records without a docking score are placed last. If omitted, the order of records is not changed.
+
+```bash
+get_sdf_from_easydock -i output.db -o output.sdf --order_docking_score asc
+```
+
+!!! note
+    If `--order_docking_score` is used together with `-d`/`--ids`, the output is ordered by docking score rather than by the order of supplied ids.
+
 ### Additional Fields
 
 Extract additional database fields:

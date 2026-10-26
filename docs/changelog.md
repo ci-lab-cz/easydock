@@ -1,4 +1,5 @@
 **unreleased (accessible from master)**  
+- `get_sdf_from_easydock`: add `--order_docking_score` argument (`asc` or `desc`) to order output records by docking score  
 - Uni-pKa container: add `--png` argument to plot the distribution of individual microspecies together with their 2D structures, one image per molecule; curves and structures are linked by colour. Images are always plotted for the whole pH range 0-14.  
 - fix the `raw_format` database variable for generic docking: it is now taken from `ligand_out_format` [#74](https://github.com/ci-lab-cz/easydock/issues/74)  
 - server-based docking: `ligand_out_format` set in the client config is now respected when storing the `raw_format` database variable  
