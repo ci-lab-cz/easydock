@@ -31,6 +31,20 @@ The main conventions:
 | `score_field` | `sdf` | Name of the SD tag, e.g. `RTMScore`. Supports integer, float, and <br>scientific notation. |
 | `score_regex` | `pdbqt` / `pdb` | Regex with one capture group returning the score. Applied to the first <br>MODEL block only. Example: `'REMARK VINA RESULT:\s+(-?[\d.]+)'` |
 
+### Storage of docking poses
+
+The whole output of a program (all poses) is stored unchanged in the `raw_block` field of the database. The value of `ligand_out_format` is saved in the database as the `raw_format` variable (see [Database schema](database_schema.md#variables)), which tells other tools how to split `raw_block` into individual poses. Therefore, `ligand_out_format` must match the actual format of the program output.
+
+The top pose (the first one) is converted to a mol block and stored in the `mol_block` field:
+
+| `ligand_out_format` | Conversion of the top pose |
+|---|---|
+| `pdbqt` | Converted with Meeko, bond orders are assigned from the input molecule |
+| `pdb` | Bond orders are assigned from the input molecule, hydrogens are removed |
+| `sdf` | The first record is used as is, its title is replaced with the molecule name and SD properties are removed |
+
+Other poses can be retrieved from `raw_block`, e.g. `get_sdf_from_easydock -i output.db -o output.sdf --poses 1 2 3`.
+
 ---
 
 ## Example 1 — QVina binary file
