@@ -63,7 +63,7 @@ Sent **before** `init` to query the server's default operating parameters. The c
 
 | Field | Type | Description |
 |---|---|---|
-| `ligand_in_format` | string | Ligand input format accepted by the server: `"smiles"`, `"mol"`, or `"pdbqt"`. |
+| `ligand_in_format` | string | Ligand input format accepted by the server: `"smiles"`, `"mol"`, `"mol3d"`, or `"pdbqt"`. |
 | `ligand_out_format` | string | Pose output format returned by the server: `"sdf"` or `"pdbqt"`. |
 | `score_mode` | string | Score direction: `"min"` (lower is better, Vina) or `"max"` (higher is better, RTMScore). |
 | `batch_size` | int | Preferred number of molecules per dock request. |
@@ -127,6 +127,31 @@ Sent **once** after the server starts. Command name: `"init"`.
 | `thread` | int | `8000` | Number of OpenCL threads |
 | `seed` | int | `0` | Random seed |
 
+### rDock Server-specific init payload fields
+
+The receptor is given either as a protonated PDB, which the server prepares itself (Open Babel MOL2 with corrections, system definition file, cavity by `rbcavity`) into a temporary folder of the worker, or as a ready `.prm` file.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `protein` | string | one of `protein`/`receptor` | Protein PDB with hydrogens and standard atom names |
+| `reflig` | string | one of `reflig`/`center` | Reference ligand SDF (3D) defining the cavity |
+| `center` | [x, y, z] | | Center of a sphere defining the cavity (instead of `reflig`) |
+| `radius` | float | `6.0` / `10.0` | Cavity mapping radius around the reference ligand / the center |
+| `small_sphere`, `min_volume`, `max_cavities`, `gridstep` | | `1.0` (`1.5` for a center), `100`, `1`, `0.5` | rDock cavity mapper parameters |
+| `large_sphere` | float | `4.0` | Large probe radius; only with `center` (the reference ligand mapper has no such parameter) |
+| `receptor_flex` | float | rigid | Receptor OH/NH3+ groups within this distance of the cavity are flexible |
+| `keep_waters` | bool | `false` | Keep water molecules of the PDB in the receptor |
+| `pharma` | mapping | | Pharmacophore restraints (rDock `SECTION PHARMA`), only with `protein`. Keys: `constraints_file` (mandatory points, required), `optional_file` (optional points), `nopt` (`0`: how many optional points a pose has to meet), `weight` (`1.0`: weight of the penalty in `SCORE`), `write_errors` (`false`: rbdock writes rejected ligands to `docked_errors.sd` in the request folder, useful with `keep_tmpdir`). Each file is a path to an rDock restraints file or a list of `[x, y, z, tolerance, type]` with the types `Any`, `Don`, `Acc`, `Aro`, `Hyd`, `Hal`, `Har`, `Ani`, `Cat` |
+| `receptor` | string | | A ready system definition `.prm` (its `.as` cavity file must lie beside it); `protein`, `receptor_flex` and `pharma` are then not used |
+| `protocol` | string | `"dock.prm"` | Docking protocol: a name from rDock's `data/scripts` (`dock.prm`, `dock_solv.prm`, ...) or a file path |
+| `n_runs` | int | `50` | Docking runs per ligand (`rbdock -n`) |
+| `n_poses` | int | `5` | Poses kept per ligand |
+| `seed` | int or null | `0` | Random seed; `null` lets `rbdock` choose |
+| `sort_field` | string | `"SCORE"` | SD field that ranks the poses of a ligand |
+| `score_field` | string | `"SCORE.INTER"` | SD field of the best pose returned as `docking_score` |
+| `extra_args` | string or list | | Further `rbdock` options (note: `rbdock` silently ignores everything after an unknown option) |
+| `tmpdir`, `keep_tmpdir` | string, bool | system default, `false` | Where temporary files are written and whether they are kept |
+
 **Expected response:**
 
 ```json
@@ -162,7 +187,8 @@ Sent for each batch of molecules. Command name: `"dock"`.
 | `ligand_in_format` | Value |
 |---|---|
 | `"smiles"` | SMILES string |
-| `"mol"` | MDL mol block string |
+| `"mol"` | MDL mol block string as read from the input (2D or without coordinates for SMILES input) |
+| `"mol3d"` | MDL mol block with explicit hydrogens and 3D coordinates embedded by EasyDock (`mol_embedding_3d`, the same preparation as for Vina). With `--ring_sample` every ring conformer is sent as a separate instance. 3D input structures are kept as they are. |
 | `"pdbqt"` | PDBQT-format string |
 
 ---

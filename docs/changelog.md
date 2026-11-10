@@ -1,4 +1,6 @@
 **unreleased (accessible from master)**  
+- add rDock server integration (`containers/rdock`): the container prepares the receptor (Open Babel MOL2 with corrections for rDock, cavity by `rbcavity`) from a protonated PDB and a reference ligand or a center, runs `rbdock` per request and returns SDF poses ranked by `SCORE` with `SCORE.INTER` as the docking score; pharmacophore restraints are supported (`pharma` in `init_server`, as files or inline lists)  
+- server-based docking: new ligand input format `mol3d` (3D mol blocks with hydrogens embedded by EasyDock, `--ring_sample` supported)  
 - `get_sdf_from_easydock`: add `--order_docking_score` argument (`asc` or `desc`) to order output records by docking score  
 - Uni-pKa container: add `--png` argument to plot the distribution of individual microspecies together with their 2D structures, one image per molecule; curves and structures are linked by colour. Images are always plotted for the whole pH range 0-14.  
 - fix the `raw_format` database variable for generic docking: it is now taken from `ligand_out_format` [#74](https://github.com/ci-lab-cz/easydock/issues/74)  

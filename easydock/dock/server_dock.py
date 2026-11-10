@@ -158,6 +158,15 @@ def _prepare_ligand_payload(mol, config, ring_sample=False):
     if payload_type == "mol":
         return [Chem.MolToMolBlock(mol)]
 
+    if payload_type == "mol3d":
+        # 3D mol blocks with explicit hydrogens, embedded the same way as for Vina (ring_sample gives one block per
+        # conformer, sent as separate instances); 3D input structures are kept as they are
+        from easydock.dock.preparation_for_docking import mol_embedding_3d
+        mol_3d = mol_embedding_3d(mol, ring_sample=ring_sample)
+        if mol_3d is None or mol_3d.GetNumConformers() == 0:
+            raise ValueError("3D embedding failed")
+        return [Chem.MolToMolBlock(mol_3d, confId=conf.GetId()) for conf in mol_3d.GetConformers()]
+
     raise ValueError(f"Unsupported ligand_in_format: {payload_type}")
 
 

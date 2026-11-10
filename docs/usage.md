@@ -452,6 +452,46 @@ init_server:
     - `qvina` — QuickVina2
     - `qvinaw` — QuickVina-W
 
+#### rDock Server
+
+rDock is a classical, CPU-only docking program with its own scoring function and a cavity defined by a reference ligand or a point. The server runs inside the container built from `containers/rdock` (see [Installation](installation.md#pre-built-docking-containers)), prepares the receptor itself at start-up and runs one `rbdock` per request. Ligands are sent as 3D structures embedded by EasyDock (`--ring_sample` is supported).
+
+```yaml
+script_file: /path/to/rdock.sif
+
+init_server:
+  protein: /path/to/protein_H.pdb        # protonated protein with standard PDB atom names
+  reflig: /path/to/reference_ligand.sdf  # defines the cavity
+  protocol: dock.prm                     # or dock_solv.prm (adds a desolvation term)
+  n_runs: 50                             # independent docking runs per ligand
+  n_poses: 5                             # poses stored per ligand
+  seed: 0
+```
+
+- `protein`: a PDB **with hydrogens** and standard atom names (e.g. from PDBFixer or reduce). rDock takes polar hydrogens as donors and assigns group charges by residue and atom names, so a protein without hydrogens is rejected. Waters are removed (`keep_waters: true` keeps them).
+- `reflig`: a 3D reference ligand; the cavity is mapped within `radius` (default 6 Å) around it. Alternatively `center: [x, y, z]` with `radius` (default 10 Å) maps a sphere.
+- `receptor`: instead of `protein`, a ready rDock system definition file (`.prm`) whose cavity file (`.as`) lies beside it. Such a folder can be prepared once with the container, which also allows to inspect or edit the receptor: `apptainer run rdock.sif prepare -p protein_H.pdb -l ligand.sdf -o receptor_dir` (run `apptainer run rdock.sif prepare --help` for the options). Note that only the `.prm` text is stored in the database, not the `.as` and MOL2 files beside it, so resuming a run from the database alone works with `protein` but needs the receptor folder in place with `receptor`.
+- `receptor_flex`: makes receptor OH/NH3+ groups within this distance (Å) of the cavity flexible (e.g. `3.0`); the receptor is rigid by default.
+- `pharma`: pharmacophore restraints (rDock `SECTION PHARMA`), only together with `protein`. Each pose pays a penalty `weight` × (distance − tolerance)² for every restraint point that no matching ligand feature reaches, added to `SCORE`, so the restraints steer the pose selection while `docking_score` (`SCORE.INTER`) stays free of the penalty. `constraints_file` holds the mandatory points, `optional_file` the optional ones of which `nopt` have to be met (rDock's "any N of M"). Either is a path to an rDock restraints file (one `x y z tolerance type` per line) or an inline list of `[x, y, z, tolerance, type]`; the restraint files are stored in the database like the protein, so a run can be resumed without them. Types: `Any` (heavy atom), `Don` (the donor hydrogen, so give the hydrogen position), `Acc`, `Aro` (ring centre), `Hyd`, `Hal`, `Har` (lipophilic: all, aliphatic, aromatic), `Ani`, `Cat`. A ligand that lacks the features of the mandatory points is not docked and is reported as failed with rDock's reason. With a ready `.prm`, add the section to the file yourself.
+
+    ```yaml
+    init_server:
+      protein: /path/to/protein_H.pdb
+      reflig: /path/to/reference_ligand.sdf
+      pharma:
+        constraints_file: [[-3.352, -32.159, 24.237, 2.0, Aro]]   # an aromatic ring within 2 Å of this centre
+        optional_file: /path/to/optional.const                   # or an inline list as above
+        nopt: 1
+        weight: 1.0
+    ```
+- `sort_field` / `score_field`: poses of a ligand are ranked by `sort_field` (default `SCORE`, rDock's total score) and `docking_score` is `score_field` of the best pose (default `SCORE.INTER`), as recommended by rDock's authors.
+
+!!! note "rDock scores"
+    `SCORE.INTER` has no unit (it is not kcal/mol), lower is better, and it is comparable only between ligands docked into the same receptor. Because poses are ranked by the total `SCORE`, the first pose stored in `raw_block` is not necessarily the one with the lowest `SCORE.INTER`.
+
+!!! note "Batch size"
+    By default one molecule is docked per `rbdock` run (`batch_size: 1`), which makes the poses of a molecule reproducible for a fixed `seed`. A larger `batch_size` (via `info_server`) reduces the overhead of loading the receptor, but `rbdock` seeds its random generator once per run, so the poses of a molecule then depend on the batch it was docked in.
+
 ### Generic Docking
 
 `--program generic` runs any external docking binary or Python script driven purely by a YAML config — no code changes required. Useful for docking programs that EasyDock does not ship a dedicated module for.

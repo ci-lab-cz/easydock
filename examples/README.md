@@ -108,3 +108,18 @@ From `output.db`:
 ```bash
 easydock -o output.db --program server --config config_surfdock.yml
 ```
+
+
+## rDock (--program server, CPU-only)
+
+The server prepares the receptor at start-up from `protein/5ufx_protein.pdb` (it must contain hydrogens) and the reference ligand, see `config_rdock.yml`. One `rbdock` run docks one molecule, so `-c` is the number of molecules docked in parallel.
+
+From scratch:
+```bash
+easydock -i 25.smi -o rdock.db --protonation containers/unipka.sif --program server --config config_rdock.yml -c 16
+```
+
+From `output.db`:
+```bash
+easydock -o output.db --program server --config config_rdock.yml -c 16
+```

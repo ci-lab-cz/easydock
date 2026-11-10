@@ -1,0 +1,33 @@
+# rDock through the server protocol (containers/rdock). CPU only, one rbdock run per molecule.
+# The receptor is prepared by the server at start-up from a protonated protein PDB and the reference ligand
+# (Open Babel MOL2 with corrections, cavity by rbcavity). Alternatively give a ready system definition:
+#   receptor: /path/to/receptor.prm   (its receptor.as cavity must lie beside it; see `apptainer run rdock.sif prepare`)
+script_file: containers/rdock.sif
+
+init_server:
+  protein: protein/5ufx_protein.pdb   # must contain hydrogens with standard PDB atom names
+  reflig: protein/5ufx_ligand.sdf     # defines the cavity (mapping radius 6 A around it)
+  # center: [-2.68, -31.36, 24.28]    # instead of reflig: the cavity is mapped in a sphere around this point
+  # radius: 10.0                      # mapping radius (default 10 A around a center, 6 A around a reference ligand)
+  # small_sphere: 1.5                 # small probe radius (default 1.5 with a center, 1.0 with a reference ligand)
+  # large_sphere: 4.0                 # large probe radius, only with a center
+  # min_volume: 100                   # smallest cavity kept, A^3
+  # max_cavities: 1                   # number of cavities kept
+  # gridstep: 0.5                     # cavity mapping grid step, A
+  protocol: dock.prm                  # or dock_solv.prm (desolvation term); a file path is accepted too
+  n_runs: 50                          # independent docking runs per ligand (rbdock -n)
+  n_poses: 5                          # poses kept per ligand
+  seed: 0                             # fixed seed: the same config gives the same poses
+  # receptor_flex: 3.0                # make receptor OH/NH3+ groups within 3 A of the cavity flexible
+  # pharma:                           # pharmacophore restraints: a pose is penalised for every point it misses
+  #   constraints_file: [[-3.352, -32.159, 24.237, 2.0, Aro]]   # mandatory [x, y, z, tolerance, type] points
+  #                                                             # (here the central ring of the crystal ligand) or
+  #                                                             # a path to an rDock restraints file
+  #   optional_file: [[1.486, -36.051, 27.158, 1.5, Acc], [-4.559, -25.783, 25.902, 1.5, Acc]]  # phenol oxygens
+  #   nopt: 1                         # how many of the optional points have to be met
+  # sort_field: SCORE                 # poses are ranked by this SD field (default SCORE, rDock's total score)
+  # score_field: SCORE.INTER          # docking_score is this field of the best pose (default SCORE.INTER, no unit)
+
+# info_server:
+#   batch_size: 5                     # molecules per rbdock run (default 1; a larger batch is faster, but a ligand's
+#                                     # poses then depend on the batch, because rbdock seeds its generator per run)

@@ -91,6 +91,20 @@ docker build -t carsidock .
 
 Other server-based containers (**SurfDock** and **Vina-GPU**) are created in the same way from the corresponding receipt files. Vina-GPU server will include both CPU and GPU Vina family programs (Vina, QVina2 and QVina-W).
 
+**rDock:**
+
+The build compiles rDock from source at a pinned commit of [CBDD/rDock](https://github.com/CBDD/rDock) and runs its test suite, which takes several minutes. The container also provides receptor preparation (`prepare`) and the `rbdock`/`rbcavity` programs.
+
+```bash
+cd containers/rdock
+
+# Apptainer
+apptainer build rdock.sif rdock_server.def
+
+# Docker
+docker build -t rdock .
+```
+
 ## Optional Protonation Tools
 
 ### MolGpKa (Recommended)
